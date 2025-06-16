@@ -12,7 +12,7 @@ import {
   where,
   setDoc,
 } from "firebase/firestore";
-import { db } from "@/lib/clients/firebase";
+import { auth, db } from "@/lib/clients/firebase";
 import {
   Thread,
   ThreadMessage,
@@ -67,29 +67,14 @@ class ThreadService {
   }
 
   // Get threads with options (limit to 20 max)
-  async getThreads({
-    userId,
-  }: {
-    userId?: string;
-  } = {}): Promise<Thread[]> {
+  async getThreads({ userId }: { userId: string }): Promise<Thread[]> {
     try {
-      console.log("Fetching threads:", { userId });
-
-      let q = query(
+      const q = query(
         collection(db, colThreads),
+        where("userId", "==", userId),
         orderBy("updatedAt", "desc"),
         limit(20)
       );
-
-      // Add user filter if provided
-      if (userId) {
-        q = query(
-          collection(db, colThreads),
-          where("userId", "==", userId),
-          orderBy("updatedAt", "desc"),
-          limit(20)
-        );
-      }
 
       const querySnapshot = await getDocs(q);
       const threads: Thread[] = querySnapshot.docs.map(
@@ -112,17 +97,24 @@ class ThreadService {
   }): Promise<Thread | undefined> {
     try {
       console.log("Fetching thread: ", threadId);
+      const uid = auth.currentUser?.uid;
       const docRef = doc(db, colThreads, threadId);
       const docSnap = await getDoc(docRef);
 
       if (!docSnap.exists()) {
-        console.warn("Thread not found:", { threadId });
         return;
       }
 
-      const data = docSnap.data();
+      const data = docSnap.data() as Thread;
+
+      if (data.userId !== uid) {
+        console.warn("Unauthorized access to thread:", { threadId });
+        window.location.href = "/";
+        return;
+      }
+
       console.log("Thread retrieved successfully:", { threadId });
-      return data as Thread;
+      return data;
     } catch (error) {
       console.error("Failed to get thread:", { threadId }, error);
       throw error;

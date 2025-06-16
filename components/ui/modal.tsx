@@ -20,6 +20,31 @@ export interface IModal {
   className?: string;
 }
 
+const getSizeClass = (size: string) => {
+  switch (size) {
+    case "sm":
+      return "max-w-sm";
+    case "md":
+      return "max-w-md";
+    case "lg":
+      return "max-w-lg";
+    case "xl":
+      return "max-w-xl";
+    case "2xl":
+      return "max-w-2xl";
+    case "3xl":
+      return "max-w-3xl";
+    case "4xl":
+      return "max-w-4xl";
+    case "5xl":
+      return "max-w-5xl";
+    case "6xl":
+      return "max-w-6xl";
+    default:
+      return "max-w-lg";
+  }
+};
+
 export default function Modal({
   isOpen,
   closeModal,
@@ -60,7 +85,9 @@ export default function Modal({
                 leaveTo="opacity-0 scale-95"
               >
                 <DialogPanel
-                  className={`w-full max-w-${size} transform overflow-hidden text-left align-middle shadow-xl transition-all ${className} `}
+                  className={`w-full ${getSizeClass(
+                    size
+                  )} transform overflow-hidden text-left align-middle shadow-xl transition-all ${className} `}
                 >
                   {children}
                 </DialogPanel>

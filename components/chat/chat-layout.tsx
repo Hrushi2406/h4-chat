@@ -35,11 +35,14 @@ import {
   Loader2,
 } from "lucide-react";
 import Link from "next/link";
-import { useRouter, useParams } from "next/navigation";
+import { useRouter, useParams, usePathname } from "next/navigation";
 import { useThreads } from "@/lib/hooks/thread/use-threads";
 import { useThreadActions } from "@/lib/hooks/thread/use-thread-actions";
 import { useState, useMemo } from "react";
 import { Thread } from "@/lib/types/thread";
+import { signInAnonymously } from "firebase/auth";
+import { auth } from "@/lib/clients/firebase";
+import { useAuth } from "@/lib/hooks/auth/use-auth";
 
 export default function ChatLayout({
   children,
@@ -66,6 +69,12 @@ export default function ChatLayout({
                   <Plus className="h-4 w-4" />
                   New Thread
                 </Button>
+                <Button asChild variant="secondary" size="sm">
+                  <Link href="/settings">
+                    <Settings className="h-4 w-4" />
+                    Settings
+                  </Link>
+                </Button>
               </div>
             </div>
           </header>
@@ -78,10 +87,13 @@ export default function ChatLayout({
 }
 
 const ThreadSidebar = () => {
+  const { uid } = useAuth();
   const { data: threads = [], isLoading } = useThreads();
   const router = useRouter();
   const params = useParams();
-  const currentThreadId = params?.threadId as string;
+  const pathname = usePathname();
+  const currentThreadId = pathname.split("/").pop() as string;
+
   const { deleteThread } = useThreadActions();
 
   // Delete dialog state

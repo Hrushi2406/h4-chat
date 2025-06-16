@@ -14,6 +14,7 @@ import {
   generateDefaultErrorMessage,
   generateDefaultUserMessage,
 } from "@/lib/types/thread";
+import { useAuth } from "@/lib/hooks/auth/use-auth";
 
 interface ChatProps {
   threadId: string;
@@ -31,6 +32,8 @@ export function Chat({ threadId, isNew = false }: ChatProps) {
   const [suggestions, setSuggestions] = useState<string[]>([]);
 
   const router = useRouter();
+
+  const { uid } = useAuth();
 
   const { createThread, addMessageToThread } = useThreadActions();
 
@@ -129,7 +132,7 @@ export function Chat({ threadId, isNew = false }: ChatProps) {
       await createThread.mutateAsync({
         threadId: threadId,
         title: input.length > 50 ? `${input.substring(0, 50)}...` : input,
-        userId: "user-1234",
+        userId: uid,
         initialMessage: msg,
       });
 
@@ -142,7 +145,7 @@ export function Chat({ threadId, isNew = false }: ChatProps) {
 
   return (
     <div className="flex h-full flex-col">
-      {messages.length === 0 && isNew && (
+      {messages.length === 0 && isNewThread && (
         <HomeSuggestions
           onSuggestionClick={async (suggestion) => {
             handleInputChange({

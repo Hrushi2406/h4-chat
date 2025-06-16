@@ -24,7 +24,6 @@ export default function RootLayout({
       <body className={`${inter.variable} font-sans antialiased`}>
         <ClientProvider>
           <ChatLayout>{children}</ChatLayout>
-          {children}
         </ClientProvider>
       </body>
     </html>
