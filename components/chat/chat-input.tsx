@@ -207,13 +207,13 @@ export const ChatInput = ({
                     <Button
                       type="button"
                       size="sm"
-                      variant="secondary"
+                      variant="outline"
                       onClick={open}
                       className="text-muted-foreground font-normal rounded-full border"
                       aria-label="Upload file"
                       tabIndex={0}
                     >
-                      <Paperclip className="h-6 w-6 text-muted-foreground" />
+                      <Paperclip className="h-6 w-6 text-muted-foreground " />
                     </Button>
                     <Button
                       type="button"

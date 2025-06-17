@@ -11,7 +11,8 @@ import { TextShimmer } from "@/components/ui/text-shimmer";
 import clsx from "clsx";
 import { getToolDisplayName } from "@/lib/types/tool-mappings";
 import { ThreadMessage } from "@/lib/types/thread";
-import { FilesIcon, FileText } from "lucide-react";
+import { Divide, FilesIcon, FileText } from "lucide-react";
+import CodeBlock from "./code-block";
 
 interface MessageListProps {
   messages: Message[];
@@ -135,13 +136,26 @@ export const MessageList = ({
                           return (
                             <div key={index}>
                               <div
-                                className="text-sm md:text-base prose prose-sm md:prose-base max-w-none leading-loose"
+                                className="text-sm md:text-base prose prose-sm md:prose-base max-w-none leading-loose "
                                 key={index}
                               >
                                 <ReactMarkdown
                                   remarkPlugins={[remarkGfm, remarkToc]}
                                   rehypePlugins={[rehypeRaw]}
                                   components={{
+                                    code: ({ children, className }) => (
+                                      <CodeBlock
+                                        value={children as string}
+                                        language={
+                                          className?.split("-")[1] || "js"
+                                        }
+                                      />
+                                    ),
+                                    pre: ({ children }) => (
+                                      <div className="bg-secondary p-2 rounded-lg">
+                                        {children}
+                                      </div>
+                                    ),
                                     a: ({ href, children }) => (
                                       <a
                                         href={href}
