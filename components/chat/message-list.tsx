@@ -10,10 +10,10 @@ import { motion } from "framer-motion";
 import { TextShimmer } from "@/components/ui/text-shimmer";
 import clsx from "clsx";
 import { getToolDisplayName } from "@/lib/types/tool-mappings";
-import { ThreadMessage, ImageAttachment } from "@/lib/types/thread";
+import { ThreadMessage } from "@/lib/types/thread";
 
 interface MessageListProps {
-  messages: ThreadMessage[];
+  messages: Message[];
   status?: "submitted" | "streaming" | "ready" | "error";
 }
 
@@ -165,21 +165,6 @@ export const MessageList = ({
                     </>
                   ) : (
                     <div>
-                      {/* Display images if present */}
-                      {message.images && message.images.length > 0 && (
-                        <div className="flex flex-wrap gap-2 mb-2">
-                          {message.images.map((image: ImageAttachment) => (
-                            <div key={image.id} className="relative">
-                              <img
-                                src={image.url}
-                                alt={image.fileName}
-                                className="max-w-xs max-h-64 object-cover rounded-lg border"
-                              />
-                            </div>
-                          ))}
-                        </div>
-                      )}
-
                       {/* Display text content */}
                       <p className="text-sm md:text-base whitespace-pre-wrap leading-loose">
                         {message.content}
