@@ -19,6 +19,7 @@ import {
   generateDefaultThread,
 } from "@/lib/types/thread";
 import { v4 } from "uuid";
+import { Attachment } from "ai";
 
 const colThreads = "threads";
 

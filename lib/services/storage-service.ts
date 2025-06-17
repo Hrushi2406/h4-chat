@@ -30,7 +30,7 @@ class StorageService {
     const fileId = uuidv4();
     const fileName = `${fileId}_${file.name}`;
     const path = threadId
-      ? `users/${userId}/threads/${threadId}/files/${fileName}`
+      ? `users/${userId}/threads/${threadId}/${fileName}`
       : `users/${userId}/files/${fileName}`;
 
     const storageRef = ref(storage, path);

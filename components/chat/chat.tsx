@@ -15,6 +15,7 @@ import {
   generateDefaultUserMessage,
 } from "@/lib/types/thread";
 import { useAuth } from "@/lib/hooks/auth/use-auth";
+import { Attachment, ChatRequestOptions } from "ai";
 
 interface ChatProps {
   threadId: string;
@@ -26,6 +27,7 @@ export function Chat({ threadId, isNew = false }: ChatProps) {
     getDefaultModel()
   );
 
+  const [attachments, setAttachments] = useState<Array<Attachment>>([]);
   const [isNewThread, setIsNewThread] = useState(isNew);
   const [isCreatingThread, setIsCreatingThread] = useState(false);
 
@@ -105,6 +107,7 @@ export function Chat({ threadId, isNew = false }: ChatProps) {
       threadId: threadId,
       messageData: {
         ...message,
+
         updatedAt: new Date().toISOString(),
       },
     });
@@ -118,11 +121,17 @@ export function Chat({ threadId, isNew = false }: ChatProps) {
     setSelectedModel(model);
   };
 
-  const handleChatSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
+  const handleChatSubmit = async (
+    e: React.FormEvent<HTMLFormElement>,
+    options: ChatRequestOptions
+  ) => {
     e.preventDefault();
 
-    const msg = generateDefaultUserMessage(input);
-    handleSubmit(e);
+    const msg = generateDefaultUserMessage(input, attachments);
+
+    handleSubmit(e, options);
+
+    setAttachments([]);
 
     if (isNewThread) {
       // Create new thread for the first message
@@ -171,6 +180,8 @@ export function Chat({ threadId, isNew = false }: ChatProps) {
         onStop={handleStop}
         selectedModel={selectedModel}
         onModelChange={handleModelChange}
+        attachments={attachments}
+        setAttachments={setAttachments}
       />
     </div>
   );

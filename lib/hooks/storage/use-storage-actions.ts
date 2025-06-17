@@ -3,17 +3,22 @@ import storageService from "@/lib/services/storage-service";
 import { toast } from "sonner";
 
 interface UploadImageParams {
-  file: File;
+  files: File[];
   userId: string;
   threadId?: string;
 }
 
 export const useStorageActions = () => {
-  const uploadImage = useMutation({
-    mutationFn: ({ file, userId, threadId }: UploadImageParams) => {
-      // Validate image file before upload
-      storageService.validateImageFile(file);
-      return storageService.uploadFile({ file, userId, threadId });
+  const uploadImages = useMutation({
+    mutationFn: async ({ files, userId, threadId }: UploadImageParams) => {
+      // Validate and upload files in parallel
+      const promises = files.map(async (file) => {
+        storageService.validateImageFile(file);
+        return storageService.uploadFile({ file, userId, threadId });
+      });
+
+      const results = await Promise.all(promises);
+      return results;
     },
     onSuccess: (data) => {
       toast.success("Image uploaded successfully");
@@ -34,7 +39,7 @@ export const useStorageActions = () => {
   });
 
   return {
-    uploadImage,
+    uploadImages,
     deleteFile,
   };
 };

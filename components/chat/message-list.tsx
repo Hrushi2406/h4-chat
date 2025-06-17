@@ -70,12 +70,10 @@ export const MessageList = ({
                 <div
                   className={clsx(
                     "md:max-w-[75%] leading-7",
-                    message.role === "user" && [
-                      "bg-secondary text-secondary-foreground  px-3 md:px-4 py-1 md:py-1.5",
-                      message.content.length <= 50
-                        ? "rounded-full"
-                        : "rounded-2xl",
-                    ],
+                    message.role === "user" &&
+                      !message.experimental_attachments && [
+                        userMessageStyle(message),
+                      ],
                     message.role === "assistant" && [
                       "text-foreground rounded-lg py-3",
                       isLastAssistantMessage && heightClass,
@@ -164,11 +162,50 @@ export const MessageList = ({
                       })}
                     </>
                   ) : (
-                    <div>
+                    <div className="">
                       {/* Display text content */}
-                      <p className="text-sm md:text-base whitespace-pre-wrap leading-loose">
-                        {message.content}
-                      </p>
+                      {message.experimental_attachments && (
+                        <div
+                          className={`mb-3 flex justify-end ${
+                            message.experimental_attachments.length > 1
+                              ? "flex-wrap gap-1"
+                              : ""
+                          }`}
+                        >
+                          {message.experimental_attachments.map(
+                            (attachment) => (
+                              <div
+                                key={attachment.url}
+                                className={`rounded-lg overflow-hidden border border-border ${
+                                  message.experimental_attachments!.length > 1
+                                    ? "max-w-[48%] max-h-[100px] aspect-square bg-muted"
+                                    : "min-w-[100px] max-w-[200px]"
+                                }`}
+                              >
+                                <img
+                                  src={attachment.url}
+                                  alt={attachment.name}
+                                  className="h-full w-full object-cover"
+                                  loading="lazy"
+                                />
+                              </div>
+                            )
+                          )}
+                        </div>
+                      )}
+                      <div
+                        className={
+                          message.experimental_attachments &&
+                          clsx(
+                            "max-w-max ml-auto text-right self-end justify-end",
+                            userMessageStyle(message)
+                          )
+                        }
+                      >
+                        <p className="text-sm md:text-base whitespace-pre-wrap leading-loose">
+                          {message.content}
+                        </p>
+                      </div>
                     </div>
                   )}
                 </div>
@@ -220,3 +257,9 @@ export const MessageList = ({
 };
 
 const heightClass = `min-h-[calc(100vh-19rem)] md:min-h-[calc(100vh-20rem)]`;
+
+const userMessageStyle = (message: Message) =>
+  clsx(
+    "bg-secondary text-secondary-foreground px-3 md:px-4 py-1 md:py-1.5",
+    message.content.length <= 50 ? "rounded-full" : "rounded-2xl"
+  );

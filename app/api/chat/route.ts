@@ -1,6 +1,6 @@
 import { google } from "@ai-sdk/google";
 import { openai } from "@ai-sdk/openai";
-import { streamText } from "ai";
+import { smoothStream, streamText } from "ai";
 import { Geo, geolocation } from "@vercel/functions";
 import { getModelById } from "@/lib/available-models";
 
@@ -23,6 +23,7 @@ export async function POST(req: Request) {
     system: systemPrompt,
     messages: messages.slice(-10),
     maxSteps: 5,
+    experimental_transform: smoothStream({ chunking: "line" }),
     onError: (error) => {
       console.log("error: ", error);
     },

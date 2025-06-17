@@ -1,4 +1,5 @@
 import { Message } from "@ai-sdk/react";
+import { Attachment } from "ai";
 import { v4 } from "uuid";
 
 // Extend Vercel AI Message type for our thread messages
@@ -41,13 +42,17 @@ export const generateDefaultThread = (userId?: string): Thread => {
   };
 };
 
-export const generateDefaultUserMessage = (input: string): ThreadMessage => {
+export const generateDefaultUserMessage = (
+  input: string,
+  attachments?: Attachment[]
+): ThreadMessage => {
   return {
     id: v4(),
     role: "user",
     content: input,
     createdAt: new Date(),
     updatedAt: new Date().toISOString(),
+    experimental_attachments: attachments,
   };
 };
 export const generateDefaultErrorMessage = (msg: string): ThreadMessage => {
