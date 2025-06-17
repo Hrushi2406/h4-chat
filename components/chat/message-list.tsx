@@ -9,9 +9,11 @@ import { useRef, useEffect } from "react";
 import { motion } from "framer-motion";
 import { TextShimmer } from "@/components/ui/text-shimmer";
 import clsx from "clsx";
+import { getToolDisplayName } from "@/lib/types/tool-mappings";
+import { ThreadMessage, ImageAttachment } from "@/lib/types/thread";
 
 interface MessageListProps {
-  messages: Message[];
+  messages: ThreadMessage[];
   status?: "submitted" | "streaming" | "ready" | "error";
 }
 
@@ -83,6 +85,53 @@ export const MessageList = ({
                   {message.role === "assistant" ? (
                     <>
                       {message.parts?.map((part, index) => {
+                        if (part.type === "tool-invocation") {
+                          const toolStatus = part.toolInvocation.state;
+                          const toolName = part.toolInvocation.toolName;
+
+                          const isCalling =
+                            toolStatus === "partial-call" ||
+                            toolStatus === "call";
+                          const { displayName, Icon } = getToolDisplayName(
+                            toolName,
+                            toolStatus
+                          );
+
+                          return (
+                            <div
+                              className={`inline-flex items-center gap-2 mr-2 text-sm rounded-full my-2 transition-all duration-300 ease-in-out ${
+                                isCalling
+                                  ? "px-0 py-0"
+                                  : "px-3 py-1.5 bg-blue-50 dark:bg-blue-950/50 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800"
+                              }`}
+                              key={index}
+                            >
+                              {isCalling ? (
+                                <div
+                                  key={`${toolName}-${toolStatus}-calling`}
+                                  className="flex gap-2 items-center animate-in fade-in "
+                                >
+                                  <Icon className="w-4 h-4 text-blue-500 animate-bounce" />
+                                  <TextShimmer
+                                    className="text-sm md:text-base [--base-color:theme(colors.blue.600)] [--base-gradient-color:theme(colors.blue.200)] dark:[--base-color:theme(colors.blue.700)] dark:[--base-gradient-color:theme(colors.blue.400)]"
+                                    duration={1.5}
+                                    spread={1.5}
+                                  >
+                                    {displayName}
+                                  </TextShimmer>
+                                </div>
+                              ) : (
+                                <div
+                                  key={`${toolName}-${toolStatus}`}
+                                  className="flex items-center gap-2 text-sm md:text-sm"
+                                >
+                                  <Icon className="w-4 h-4" />
+                                  {displayName}
+                                </div>
+                              )}
+                            </div>
+                          );
+                        }
                         if (part.type === "text") {
                           return (
                             <div key={index}>
@@ -115,9 +164,27 @@ export const MessageList = ({
                       })}
                     </>
                   ) : (
-                    <p className="text-sm md:text-base whitespace-pre-wrap leading-loose">
-                      {message.content}
-                    </p>
+                    <div>
+                      {/* Display images if present */}
+                      {message.images && message.images.length > 0 && (
+                        <div className="flex flex-wrap gap-2 mb-2">
+                          {message.images.map((image: ImageAttachment) => (
+                            <div key={image.id} className="relative">
+                              <img
+                                src={image.url}
+                                alt={image.fileName}
+                                className="max-w-xs max-h-64 object-cover rounded-lg border"
+                              />
+                            </div>
+                          ))}
+                        </div>
+                      )}
+
+                      {/* Display text content */}
+                      <p className="text-sm md:text-base whitespace-pre-wrap leading-loose">
+                        {message.content}
+                      </p>
+                    </div>
                   )}
                 </div>
               </div>
