@@ -31,14 +31,14 @@ export const availableModels: AIModel[] = [
     maxTokens: 1000000,
   },
   {
-    id: "gemini-2.5-flash-exp",
+    id: "gemini-2.5-flash-preview-05-20",
     name: "Gemini 2.5 Flash",
     description: "Google's latest high-speed model with improved capabilities",
     provider: "google",
     maxTokens: 1000000,
   },
   {
-    id: "gemini-2.5-pro-exp-03-25",
+    id: "gemini-2.5-pro-preview-06-05",
     name: "Gemini 2.5 Pro",
     description: "Google's most capable model for complex reasoning",
     provider: "google",

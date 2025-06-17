@@ -30,6 +30,7 @@ export function Chat({ threadId, isNew = false }: ChatProps) {
   const [attachments, setAttachments] = useState<Array<Attachment>>([]);
   const [isNewThread, setIsNewThread] = useState(isNew);
   const [isCreatingThread, setIsCreatingThread] = useState(false);
+  const [searchEnabled, setSearchEnabled] = useState<boolean>(false);
 
   const [suggestions, setSuggestions] = useState<string[]>([]);
 
@@ -56,6 +57,7 @@ export function Chat({ threadId, isNew = false }: ChatProps) {
     api: "/api/chat",
     body: {
       modelId: selectedModel.id,
+      searchEnabled: searchEnabled,
     },
     onError: (error) => {
       const msg = generateDefaultErrorMessage(
@@ -182,6 +184,8 @@ export function Chat({ threadId, isNew = false }: ChatProps) {
         onModelChange={handleModelChange}
         attachments={attachments}
         setAttachments={setAttachments}
+        searchEnabled={searchEnabled}
+        setSearchEnabled={setSearchEnabled}
       />
     </div>
   );

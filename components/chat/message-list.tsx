@@ -11,6 +11,7 @@ import { TextShimmer } from "@/components/ui/text-shimmer";
 import clsx from "clsx";
 import { getToolDisplayName } from "@/lib/types/tool-mappings";
 import { ThreadMessage } from "@/lib/types/thread";
+import { FilesIcon, FileText } from "lucide-react";
 
 interface MessageListProps {
   messages: Message[];
@@ -173,23 +174,53 @@ export const MessageList = ({
                           }`}
                         >
                           {message.experimental_attachments.map(
-                            (attachment) => (
-                              <div
-                                key={attachment.url}
-                                className={`rounded-lg overflow-hidden border border-border ${
-                                  message.experimental_attachments!.length > 1
-                                    ? "max-w-[48%] max-h-[100px] aspect-square bg-muted"
-                                    : "min-w-[100px] max-w-[200px]"
-                                }`}
-                              >
-                                <img
-                                  src={attachment.url}
-                                  alt={attachment.name}
-                                  className="h-full w-full object-cover"
-                                  loading="lazy"
-                                />
-                              </div>
-                            )
+                            (attachment) => {
+                              const isPdf =
+                                attachment.name
+                                  ?.toLowerCase()
+                                  .endsWith(".pdf") ||
+                                attachment.contentType === "application/pdf";
+
+                              return (
+                                <div
+                                  key={attachment.url}
+                                  className={`rounded-lg overflow-hidden border border-border ${
+                                    message.experimental_attachments!.length > 1
+                                      ? "max-w-[48%] max-h-[100px] aspect-square bg-muted"
+                                      : "min-w-[100px] max-w-[200px]"
+                                  }`}
+                                >
+                                  {isPdf ? (
+                                    <a
+                                      href={attachment.url}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="block h-full w-full min-h-[120px]"
+                                    >
+                                      <div className="flex flex-col items-center justify-center h-full w-full gap-2 p-2 bg-muted">
+                                        <FileText className="h-8 w-8 text-muted-foreground " />
+                                        <span className="text-xs text-primary hover:text-primary/80 transition-colors mt-1 text-center  max-w-full">
+                                          {attachment.name || "PDF Document"}
+                                        </span>
+                                      </div>
+                                    </a>
+                                  ) : (
+                                    <a
+                                      href={attachment.url}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                    >
+                                      <img
+                                        src={attachment.url}
+                                        alt={attachment.name || "Attachment"}
+                                        className="h-full w-full object-cover"
+                                        loading="lazy"
+                                      />
+                                    </a>
+                                  )}
+                                </div>
+                              );
+                            }
                           )}
                         </div>
                       )}

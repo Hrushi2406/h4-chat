@@ -70,11 +70,14 @@ class StorageService {
       "image/png",
       "image/gif",
       "image/webp",
+      "application/pdf",
     ];
     const maxSize = 10 * 1024 * 1024; // 10MB
 
     if (!allowedTypes.includes(file.type)) {
-      throw new Error("Only JPEG, PNG, GIF, and WebP images are allowed");
+      throw new Error(
+        "Only JPEG, PNG, GIF, WebP images and PDF files are allowed"
+      );
     }
 
     if (file.size > maxSize) {
