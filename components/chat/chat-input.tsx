@@ -13,10 +13,12 @@ import {
   ArrowUp,
   CloudUpload,
   Diamond,
+  FileText,
   Hexagon,
   Image,
   Loader2,
   Minus,
+  Paperclip,
   Pentagon,
   Plus,
   Square,
@@ -140,6 +142,7 @@ export const ChatInput = ({
   const { getRootProps, getInputProps, isDragActive, open } = useDropzone({
     accept: {
       "image/*": [".jpeg", ".jpg", ".png", ".webp"],
+      "application/pdf": [".pdf"],
     },
     onDrop: handleImageUpload,
     noClick: true,
@@ -159,13 +162,13 @@ export const ChatInput = ({
           >
             {isDragActive && (
               <div className="absolute grid place-items-center  inset-0 bg-black/40 backdrop-blur-md rounded-3xl">
-                <p className="text-white text-sm">Drop images here...</p>
+                <p className="text-white text-sm">Drop files here...</p>
               </div>
             )}
             <input {...getInputProps()} />
             <form onSubmit={handleFormSubmit}>
               <div className="p-2">
-                {/* Image Previews */}
+                {/* File Previews */}
                 {selectedFiles.length > 0 && (
                   <FilePreviews
                     selectedFiles={selectedFiles}
@@ -182,7 +185,7 @@ export const ChatInput = ({
                     onKeyDown={handleKeyDown}
                     placeholder={
                       isDragActive
-                        ? "Drop images here..."
+                        ? "Drop files here..."
                         : "Type your message here..."
                     }
                     className="w-full min-h-[48px] max-h-[200px] resize-none rounded-2xl border-0 bg-transparent text-base leading-relaxed transition-all duration-200 focus:ring-0 focus:border-0 focus:outline-none focus-visible:ring-0 shadow-none"
@@ -191,9 +194,9 @@ export const ChatInput = ({
                 </div>
 
                 {/* Bottom Row: Model Selector + Button */}
-                <div className="flex items-center justify-between gap-3">
+                <div className="flex items-center justify-between gap-r">
                   {/* Model Selector */}
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-0">
                     <div className="flex-shrink-0 ">
                       <ModelSelector
                         selectedModel={selectedModel}
@@ -201,17 +204,17 @@ export const ChatInput = ({
                       />
                     </div>
 
-                    {/* Image Upload Button */}
+                    {/* Attachments Upload Button */}
                     <Button
                       type="button"
-                      size="icon"
-                      variant="ghost"
+                      size="sm"
+                      variant="secondary"
                       onClick={open}
                       className=""
-                      aria-label="Upload image"
+                      aria-label="Upload file"
                       tabIndex={0}
                     >
-                      <Image className="h-5 w-5 text-muted-foreground" />
+                      <Paperclip className="h-5 w-5 text-muted-foreground" />
                     </Button>
                   </div>
 
@@ -270,14 +273,24 @@ const FilePreviews = ({
         <div key={index} className="relative group">
           <div className="w-16 h-16 rounded-lg overflow-hidden border border-border">
             <div className="relative w-full h-full">
-              <img
-                src={URL.createObjectURL(file)}
-                alt={`Preview ${index}`}
-                className="w-full h-full object-cover"
-                onLoad={() => {
-                  return () => URL.revokeObjectURL(URL.createObjectURL(file));
-                }}
-              />
+              {file.type.startsWith("image/") ? (
+                <img
+                  src={URL.createObjectURL(file)}
+                  alt={`Preview ${index}`}
+                  className="w-full h-full object-cover"
+                  onLoad={() => {
+                    return () => URL.revokeObjectURL(URL.createObjectURL(file));
+                  }}
+                />
+              ) : file.type === "application/pdf" ? (
+                <div className="w-full h-full flex items-center justify-center bg-muted/20">
+                  <FileText className="h-8 w-8 text-primary" />
+                </div>
+              ) : (
+                <div className="w-full h-full flex items-center justify-center bg-muted/20">
+                  <Paperclip className="h-8 w-8 text-primary" />
+                </div>
+              )}
 
               {isUploading && (
                 <div className="absolute inset-0 bg-background/20 backdrop-blur-sm flex items-center justify-center animate-pulse">
@@ -295,7 +308,7 @@ const FilePreviews = ({
               e.stopPropagation();
               handleRemoveFile(index);
             }}
-            aria-label="Remove image"
+            aria-label="Remove file"
             disabled={isUploading}
           >
             <X className="h-3 w-3 text-muted-foreground" />
