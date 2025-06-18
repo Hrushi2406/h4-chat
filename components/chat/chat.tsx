@@ -53,6 +53,7 @@ export function Chat({ threadId, isNew = false }: ChatProps) {
     handleInputChange,
     handleSubmit,
     append,
+
     isLoading,
     status,
     stop,

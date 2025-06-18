@@ -23,6 +23,27 @@ export const availableModels: AIModel[] = [
     maxTokens: 128000,
   },
   {
+    id: "gpt-4o",
+    name: "GPT-4o",
+    description: "OpenAI's most advanced multimodal model",
+    provider: "openai",
+    maxTokens: 128000,
+  },
+  {
+    id: "o4-mini-2025-04-16",
+    name: "o4 mini",
+    description: "Faster, more affordable reasoning model",
+    provider: "openai",
+    maxTokens: 128000,
+  },
+  {
+    id: "o3-mini-2025-01-31",
+    name: "o3 mini",
+    description: "Compact and efficient reasoning model",
+    provider: "openai",
+    maxTokens: 128000,
+  },
+  {
     id: "gemini-2.0-flash-exp",
     name: "Gemini 2.0 Flash",
     description: "Google's latest fast model for quick responses",

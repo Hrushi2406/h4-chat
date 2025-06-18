@@ -89,6 +89,18 @@ export const MessageList = ({
                   {message.role === "assistant" ? (
                     <>
                       {message.parts?.map((part, index) => {
+                        console.log("part: ", part);
+                        console.log("message: ", message.reasoning);
+
+                        if (part.type === "reasoning") {
+                          return (
+                            <div key={index}>
+                              <p>Reasoning:</p>
+                              <p>{part.reasoning}</p>
+                            </div>
+                          );
+                        }
+
                         if (part.type === "tool-invocation") {
                           const toolStatus = part.toolInvocation.state;
                           const toolName = part.toolInvocation.toolName;

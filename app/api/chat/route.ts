@@ -32,6 +32,7 @@ export async function POST(req: Request) {
     onError: (error) => {
       console.log("error: ", error);
     },
+
     tools: {
       webSearch: {
         description: `Search the web for current information, facts, recent events, or detailed explanations.
@@ -56,6 +57,8 @@ export async function POST(req: Request) {
   });
 
   return result.toDataStreamResponse({
+    sendReasoning: true,
+
     getErrorMessage: (error) => {
       if (error instanceof Error) {
         return error.message;
