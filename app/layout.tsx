@@ -2,7 +2,6 @@ import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
 import { ClientProvider } from "./client-provider";
-import ChatLayout from "@/components/chat/chat-layout";
 
 const inter = Inter({
   subsets: ["latin"],
@@ -10,8 +9,11 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
-  title: "Component Showcase",
-  description: "A comprehensive collection of available shadcn/ui components",
+  title: "Saaki AI",
+  description: "Fast & personalized AI chat assistant for your conversations",
+  // icons: {
+  //   icon: "/favicon.ico",
+  // },
 };
 
 export default function RootLayout({
@@ -22,9 +24,7 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className={`${inter.variable} font-sans antialiased`}>
-        <ClientProvider>
-          <ChatLayout>{children}</ChatLayout>
-        </ClientProvider>
+        <ClientProvider>{children}</ClientProvider>
       </body>
     </html>
   );

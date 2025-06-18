@@ -2,6 +2,8 @@ import { useEffect, useState } from "react";
 import { onAuthStateChanged } from "firebase/auth";
 import { auth } from "@/lib/clients/firebase";
 import { useAuthActions } from "./use-auth-actions";
+import { useQuery } from "@tanstack/react-query";
+import userService from "@/lib/services/user-service";
 
 export const useAuth = () => {
   const { signInAnon } = useAuthActions();
@@ -10,7 +12,6 @@ export const useAuth = () => {
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (user) => {
-      console.log("uid: ", user?.uid);
       if (user) {
         setUid(user.uid);
       } else {
@@ -26,7 +27,6 @@ export const useAuth = () => {
 
   useEffect(() => {
     const isAnon = (localStorage.getItem("isAnon") ?? "true") === "true";
-    console.log("isAnon: ", isAnon);
     setIsAnon(isAnon);
   }, [isAnon, uid]);
 

@@ -3,6 +3,7 @@ import threadService from "@/lib/services/thread-service";
 import { ThreadMessage, Thread } from "@/lib/types/thread";
 import { threadKeys } from "./use-threads";
 import { handleError } from "@/lib/utils";
+import { toast } from "sonner";
 
 export const useThreadActions = () => {
   const qc = useQueryClient();
@@ -67,10 +68,29 @@ export const useThreadActions = () => {
     onError: (error) => handleError(error, "Failed to add message to thread"),
   });
 
+  const shareThread = useMutation({
+    mutationFn: threadService.shareThread,
+    onSuccess: async (shareId, { threadId }) => {
+      qc.setQueryData(
+        threadKeys.detail(threadId),
+        (oldData: Thread | undefined) => {
+          if (!oldData) return oldData;
+          return { ...oldData, shareId: shareId };
+        }
+      );
+      // Copy share URL to clipboard
+      const shareUrl = `${window.location.origin}/share/${shareId}`;
+      await navigator.clipboard.writeText(shareUrl);
+      toast.success("Share link copied to clipboard");
+    },
+    onError: (error) => handleError(error, "Failed to share thread"),
+  });
+
   return {
     createThread,
     updateThread,
     deleteThread,
     addMessageToThread,
+    shareThread,
   };
 };

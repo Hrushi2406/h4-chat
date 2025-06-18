@@ -6,6 +6,8 @@ export interface IUser {
   isAnonymous: boolean;
   createdAt: string;
   updatedAt: string;
+  occupation: string;
+  userPreferences: string;
 }
 
 export const generateDefaultUser = (uid: string, isAnon: boolean): IUser => ({
@@ -14,6 +16,8 @@ export const generateDefaultUser = (uid: string, isAnon: boolean): IUser => ({
   name: "",
   avatar: "",
   isAnonymous: isAnon,
+  occupation: "",
+  userPreferences: "",
   createdAt: new Date().toISOString(),
   updatedAt: new Date().toISOString(),
 });

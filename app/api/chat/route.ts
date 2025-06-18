@@ -10,6 +10,7 @@ export async function POST(req: Request) {
     messages,
     modelId = "gemini-2.0-flash-exp",
     searchEnabled = false,
+    userInfo,
   } = await req.json();
 
   const geo = geolocation(req);
@@ -21,7 +22,7 @@ export async function POST(req: Request) {
 
   console.log("using model: ", model.id);
 
-  const systemPrompt = getSystemPrompt(geo, searchEnabled);
+  const systemPrompt = getSystemPrompt(geo, searchEnabled, userInfo);
 
   const result = streamText({
     model: model.provider === "google" ? google(modelId) : openai(modelId),
@@ -72,8 +73,14 @@ About the origin of user's request:
 - country: ${geo.country}
 `;
 
-const getSystemPrompt = (geo: Geo, searchEnabled: boolean) => {
+const getSystemPrompt = (
+  geo: Geo,
+  searchEnabled: boolean,
+  userInfo: Partial<IUser>
+) => {
   const requestHints = getRequestPromptFromHints(geo);
+
+  const { name, occupation, userPreferences } = userInfo;
 
   return `You are a helpful AI assistant that provides clear, concise, and well-formatted responses in markdown.
 
@@ -85,6 +92,10 @@ const getSystemPrompt = (geo: Geo, searchEnabled: boolean) => {
       `Use the webSearch tool for any information that requires current data. You MUST use this tool when answering questions about recent events, facts, or information that might not be in your training data.`
     }
 
+    ${name && `User's name is ${name}`}
+    ${occupation && `User's occupation is ${occupation}`}
+    ${userPreferences && `User's preferences are ${userPreferences}`}
+
 
     Example suggestion format:
     "Would you like to explore [related topic] or learn more about [specific aspect]?"
@@ -95,6 +106,7 @@ const getSystemPrompt = (geo: Geo, searchEnabled: boolean) => {
 
 // Google Custom Search API integration
 import axios from "axios";
+import { IUser } from "@/lib/types/user";
 
 interface SearchResult {
   title: string;

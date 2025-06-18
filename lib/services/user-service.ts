@@ -1,6 +1,6 @@
-import { doc, getDoc, setDoc } from "firebase/firestore";
+import { doc, getDoc, setDoc, updateDoc } from "firebase/firestore";
 import { db } from "../clients/firebase";
-import { generateDefaultUser } from "../types/user";
+import { generateDefaultUser, IUser } from "../types/user";
 import threadService from "./thread-service";
 import { User } from "firebase/auth";
 
@@ -9,7 +9,7 @@ class UserService {
     const userRef = doc(db, `users/${email}`);
     const snap = await getDoc(userRef);
 
-    return snap.data();
+    return snap.data() as IUser;
   }
 
   async createUserAnon(uid: string) {
@@ -33,6 +33,17 @@ class UserService {
   //   async migrateUserFromAnon(uid: string, email: string) {
   //     const threads = await threadService.getThreads({ userId: uid });
   //   }
+
+  async updateUser({ uid, update }: { uid: string; update: Partial<IUser> }) {
+    const userRef = doc(db, `users/${uid}`);
+    const userDoc = await getDoc(userRef);
+    const userData = userDoc.data() as IUser;
+    const updated = {
+      ...userData,
+      ...update,
+    };
+    await updateDoc(userRef, updated);
+  }
 }
 
 const userService = new UserService();

@@ -17,11 +17,15 @@ import CodeBlock from "./code-block";
 interface MessageListProps {
   messages: Message[];
   status?: "submitted" | "streaming" | "ready" | "error";
+  suggestions: string[];
+  onSuggestionClick: (suggestion: string) => void;
 }
 
 export const MessageList = ({
   messages,
   status = "ready",
+  suggestions,
+  onSuggestionClick,
 }: MessageListProps) => {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const previousMessageCountRef = useRef(messages.length);
@@ -171,6 +175,36 @@ export const MessageList = ({
                                   {part.text}
                                 </ReactMarkdown>
                               </div>
+                              {isLastAssistantMessage &&
+                                suggestions.length > 0 && (
+                                  <div className="mt-4">
+                                    <div
+                                      className="flex flex-wrap gap-2"
+                                      key={`suggestions-${suggestions.length}`}
+                                    >
+                                      {suggestions.map(
+                                        (suggestion, suggestionIndex) => (
+                                          <motion.button
+                                            key={`${suggestionIndex}-${suggestion}`}
+                                            initial={{ opacity: 0 }}
+                                            animate={{ opacity: 1 }}
+                                            transition={{
+                                              duration: 0.2,
+                                              delay: suggestionIndex * 0.06,
+                                              ease: "easeOut",
+                                            }}
+                                            onClick={() =>
+                                              onSuggestionClick?.(suggestion)
+                                            }
+                                            className="px-3 py-1.5 md:px-3 md:py-1.5 text-xs md:text-sm bg-muted hover:bg-muted/80 text-muted-foreground hover:text-foreground rounded-full transition-all duration-200 hover:scale-105 focus:outline-none focus:ring-2 focus:ring-primary/20 cursor-pointer slide-in-from-bottom "
+                                          >
+                                            {suggestion}
+                                          </motion.button>
+                                        )
+                                      )}
+                                    </div>
+                                  </div>
+                                )}
                             </div>
                           );
                         }

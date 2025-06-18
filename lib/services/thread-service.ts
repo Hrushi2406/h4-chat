@@ -211,6 +211,35 @@ class ThreadService {
       throw error;
     }
   }
+
+  async getSharedThread({ shareId }: { shareId: string }): Promise<Thread> {
+    try {
+      const q = query(
+        collection(db, colThreads),
+        where("shareId", "==", shareId)
+      );
+      const querySnapshot = await getDocs(q);
+      const threads = querySnapshot.docs.map((doc) => doc.data() as Thread);
+
+      if (threads.length === 0) throw new Error("Thread not found");
+      return threads[0];
+    } catch (error) {
+      console.error("Failed to get shared thread: ", { shareId }, error);
+      throw error;
+    }
+  }
+
+  async shareThread({ threadId }: { threadId: string }): Promise<string> {
+    try {
+      const shareId = v4();
+      const docRef = doc(db, colThreads, threadId);
+      await updateDoc(docRef, { shareId });
+      return shareId;
+    } catch (error) {
+      console.error("Failed to share thread: ", { threadId }, error);
+      throw error;
+    }
+  }
 }
 
 const threadService = new ThreadService();

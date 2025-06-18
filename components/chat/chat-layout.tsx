@@ -4,6 +4,9 @@ import * as React from "react";
 import {
   Sidebar,
   SidebarContent,
+  SidebarGroup,
+  SidebarGroupLabel,
+  SidebarGroupContent,
   SidebarHeader,
   SidebarInset,
   SidebarMenu,
@@ -33,52 +36,35 @@ import {
   Check,
   X,
   Loader2,
+  Share,
 } from "lucide-react";
 import Link from "next/link";
 import { useRouter, useParams, usePathname } from "next/navigation";
 import { useThreads } from "@/lib/hooks/thread/use-threads";
 import { useThreadActions } from "@/lib/hooks/thread/use-thread-actions";
 import { useState, useMemo } from "react";
-import { Thread } from "@/lib/types/thread";
-import { signInAnonymously } from "firebase/auth";
-import { auth } from "@/lib/clients/firebase";
+import {
+  Thread,
+  ThreadTimePeriod,
+  groupThreadsByTimePeriod,
+  getTimePeriodLabel,
+} from "@/lib/types/thread";
 import { useAuth } from "@/lib/hooks/auth/use-auth";
+import Navbar from "../ui/navbar";
 
 export default function ChatLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
-  const router = useRouter();
-
-  const handleNewThread = () => {
-    router.push("/");
-  };
+  const pathname = usePathname();
 
   return (
     <SidebarProvider>
       <div className="flex h-screen w-full">
         <ThreadSidebar />
         <SidebarInset className="flex-1">
-          <header className="flex h-16 shrink-0 items-center gap-2 px-4 border-b">
-            <SidebarTrigger className="-ml-1" />
-            <div className="flex items-center justify-between flex-1">
-              <h1 className="text-lg font-semibold">Saaki AI</h1>
-              <div className="flex items-center gap-2">
-                <Button variant="secondary" size="sm" onClick={handleNewThread}>
-                  <Plus className="h-4 w-4" />
-                  New Thread
-                </Button>
-                <Button asChild variant="secondary" size="sm">
-                  <Link href="/settings">
-                    <Settings className="h-4 w-4" />
-                    Settings
-                  </Link>
-                </Button>
-              </div>
-            </div>
-          </header>
-
+          <Navbar />
           <div className="flex-1 overflow-hidden">{children}</div>
         </SidebarInset>
       </div>
@@ -135,12 +121,20 @@ const ThreadSidebar = () => {
     setThreadToDelete(null);
   };
 
+  const groupedThreads = useMemo(() => {
+    return groupThreadsByTimePeriod(threads);
+  }, [threads]);
+
   return (
     <>
       <Sidebar variant="inset">
         <SidebarHeader>
           <div className="flex items-center gap-2">
-            <MessageSquare className="h-5 w-5" />
+            <img
+              src="/saaki-chat-transparent.png"
+              alt="Saaki AI"
+              className="h-7 w-7 object-contain"
+            />
             <h2 className="font-semibold">Threads</h2>
           </div>
           <div className="py-2">
@@ -164,6 +158,7 @@ const ThreadSidebar = () => {
           ) : (
             <ThreadsList
               threads={threads}
+              groupedThreads={groupedThreads}
               currentThreadId={currentThreadId}
               onThreadClick={handleThreadClick}
               onDeleteThread={handleDeleteThread}
@@ -184,8 +179,9 @@ const ThreadSidebar = () => {
 };
 
 const LoadingState = () => (
-  <div className="flex items-center justify-center py-6">
-    <Loader2 className="h-6 w-6 animate-spin" />
+  <div className="flex flex-col items-center justify-center py-6 text-center">
+    <Loader2 className="h-6 w-6 text-muted-foreground mb-2 animate-spin" />
+    <p className="text-sm text-muted-foreground">Loading threads...</p>
   </div>
 );
 
@@ -197,6 +193,7 @@ const EmptyState = () => (
 );
 
 interface ThreadsListProps {
+  groupedThreads: Record<ThreadTimePeriod, Thread[]>;
   threads: Thread[];
   currentThreadId: string;
   onThreadClick: (threadId: string) => void;
@@ -204,24 +201,43 @@ interface ThreadsListProps {
 }
 
 const ThreadsList = ({
-  threads,
+  groupedThreads,
   currentThreadId,
   onThreadClick,
   onDeleteThread,
 }: ThreadsListProps) => {
+  const timePeriods: ThreadTimePeriod[] = [
+    "today",
+    "yesterday",
+    "last7days",
+    "older",
+  ];
+
   return (
     <>
-      {threads.map((thread) => {
+      {timePeriods.map((period) => {
+        const threadsInPeriod = groupedThreads[period];
+        if (!threadsInPeriod.length) return null;
+
         return (
-          <SidebarMenu>
-            <ThreadItem
-              key={thread.id}
-              thread={thread}
-              isActive={currentThreadId === thread.id}
-              onThreadClick={onThreadClick}
-              onDeleteThread={onDeleteThread}
-            />
-          </SidebarMenu>
+          <SidebarGroup key={period} className="px-0 py-1">
+            <SidebarGroupLabel className="text-xs text-muted-foreground">
+              {getTimePeriodLabel(period)}
+            </SidebarGroupLabel>
+            <SidebarGroupContent>
+              <SidebarMenu>
+                {threadsInPeriod.map((thread) => (
+                  <ThreadItem
+                    key={thread.id}
+                    thread={thread}
+                    isActive={currentThreadId === thread.id}
+                    onThreadClick={onThreadClick}
+                    onDeleteThread={onDeleteThread}
+                  />
+                ))}
+              </SidebarMenu>
+            </SidebarGroupContent>
+          </SidebarGroup>
         );
       })}
     </>

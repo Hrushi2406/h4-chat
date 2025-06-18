@@ -5,6 +5,7 @@ import { Toaster } from "sonner";
 import { queryClient } from "@/lib/clients/query-client";
 import { useAuth } from "@/lib/hooks/auth/use-auth";
 import AuthDialog from "@/components/auth/auth-dialog";
+import { TextShimmer } from "@/components/ui/text-shimmer";
 
 interface ClientProviderProps {
   children: React.ReactNode;
@@ -24,8 +25,15 @@ const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
   if (!uid)
     return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary"></div>
+      <div className="flex flex-col items-center justify-center min-h-screen gap-4">
+        <img
+          src="/saaki-chat-transparent.png"
+          alt="Saaki AI"
+          className="h-16 w-16 object-contain animate-bounce"
+        />
+        <TextShimmer className="text-2xl font-semibold leading-loose  [--base-color:theme(colors.blue.400)] [--base-gradient-color:theme(colors.blue.600)] dark:[--base-color:theme(colors.blue.700)] dark:[--base-gradient-color:theme(colors.blue.400)]">
+          Saaki Chat
+        </TextShimmer>
       </div>
     );
 

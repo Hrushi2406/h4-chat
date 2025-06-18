@@ -16,6 +16,8 @@ import {
 } from "@/lib/types/thread";
 import { useAuth } from "@/lib/hooks/auth/use-auth";
 import { Attachment, ChatRequestOptions } from "ai";
+import { useUser } from "@/lib/hooks/user/use-user";
+import chatService from "@/lib/services/chat-service";
 
 interface ChatProps {
   threadId: string;
@@ -37,6 +39,7 @@ export function Chat({ threadId, isNew = false }: ChatProps) {
   const router = useRouter();
 
   const { uid } = useAuth();
+  const { data: user } = useUser();
 
   const { createThread, addMessageToThread } = useThreadActions();
 
@@ -58,6 +61,11 @@ export function Chat({ threadId, isNew = false }: ChatProps) {
     body: {
       modelId: selectedModel.id,
       searchEnabled: searchEnabled,
+      userInfo: {
+        name: user?.name,
+        occupation: user?.occupation,
+        userPreferences: user?.userPreferences,
+      },
     },
     onError: (error) => {
       const msg = generateDefaultErrorMessage(
@@ -75,6 +83,12 @@ export function Chat({ threadId, isNew = false }: ChatProps) {
 
       // Save assistant message to thread when response is complete
       if (threadId) {
+        chatService.generateSuggestions(
+          messages,
+          isLoading,
+          status,
+          setSuggestions
+        );
         saveMessageToThread(message);
       }
     },
@@ -170,7 +184,12 @@ export function Chat({ threadId, isNew = false }: ChatProps) {
 
       {/* Chat Content Area */}
       <div className="flex-1 overflow-y-auto">
-        <MessageList messages={messages} status={status} />
+        <MessageList
+          messages={messages}
+          status={status}
+          suggestions={suggestions}
+          onSuggestionClick={handleSuggestionClick}
+        />
       </div>
 
       {/* Chat Input */}
@@ -196,85 +215,51 @@ const HomeSuggestions = ({
 }: {
   onSuggestionClick: (suggestion: string) => Promise<void>;
 }) => {
-  const exampleQuestions = [
-    {
-      title: "MCP Support",
-      questions: [
-        "Configure a new MCP server",
-        "Server security best practices",
-        "Optimize server performance",
-        "Fix connection timeouts",
-        "Diagnose high CPU usage",
-        "Troubleshoot server crashes",
-      ],
-    },
-    {
-      title: "Tools & Features",
-      questions: [
-        "MCP monitoring tools",
-        "Automate server backups",
-        "Command line interface guide",
-        "Recommended visualization tools",
-        "Implement CI/CD pipelines",
-        "Version control best practices",
-      ],
-    },
-    {
-      title: "General Technology",
-      questions: [
-        "Machine learning basics",
-        "Quantum computing explained",
-        "AI vs ML differences",
-        "Latest tech trends",
-        "Cloud computing introduction",
-        "Edge computing benefits",
-      ],
-    },
+  const { data: user } = useUser();
+  const userName = user?.name || "there";
+
+  const suggestions = [
+    "Create a landing page for my SaaS",
+    "Latest news in AI",
+    "What is the meaning of life?",
+    "Help me optimize my website SEO",
+    "Product Hunt launch guide",
+    "Create an email campaign",
+    "Generate tweet for build in public",
+    "Explain AI concepts in simple terms",
+    "How do I get more users?",
   ];
 
   return (
     <div className="flex flex-col items-center justify-center h-full max-w-4xl mx-auto p-6 text-center">
       <div className="space-y-6 w-full">
         <div className="space-y-2">
-          <h1 className="text-3xl font-bold tracking-tight">
-            Welcome to Saarthi AI
+          <h1 className="text-3xl font-medium tracking-tight">
+            What's on your mind{`, ${userName}` || ""}?
           </h1>
-          <p className="text-muted-foreground">
-            An assistant to get your jobs done using MCP and AI
-          </p>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 w-full">
-          {exampleQuestions.map((category, index) => (
-            <div
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 w-full">
+          {suggestions.map((suggestion, index) => (
+            <button
               key={index}
-              className="border rounded-lg p-4 bg-card shadow-sm hover:shadow-md transition-shadow"
+              className="cursor-pointer text-sm px-3 py-2 rounded-md bg-secondary/80 text-gray-700 hover:bg-secondary/80 w-full text-left transition-colors"
+              tabIndex={0}
+              aria-label={suggestion}
+              onClick={() => onSuggestionClick(suggestion)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  e.preventDefault();
+                  onSuggestionClick(suggestion);
+                }
+              }}
             >
-              <h3 className="font-medium text-lg mb-3">{category.title}</h3>
-              <div className="space-y-2">
-                {category.questions.map((question, qIndex) => (
-                  <button
-                    key={qIndex}
-                    className="text-sm px-3 py-2 rounded-md bg-muted/50 hover:bg-muted w-full text-left transition-colors"
-                    tabIndex={0}
-                    aria-label={question}
-                    onClick={() => onSuggestionClick(question)}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter" || e.key === " ") {
-                        e.preventDefault();
-                        onSuggestionClick(question);
-                      }
-                    }}
-                  >
-                    {question}
-                  </button>
-                ))}
-              </div>
-            </div>
+              {suggestion}
+            </button>
           ))}
         </div>
 
-        <div className="mt-6 text-sm text-muted-foreground">
+        <div className="mt-6 text-xs text-muted-foreground">
           <p>Type your question below or select from the suggestions above</p>
         </div>
       </div>

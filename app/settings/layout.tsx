@@ -19,7 +19,7 @@ const SettingsLayout = ({ children }: { children: React.ReactNode }) => {
 
   if (isAnon) {
     return (
-      <div className="bg-secondary flex items-center justify-center h-full">
+      <div className="h-screen bg-secondary flex items-center justify-center">
         <AuthContainer />
       </div>
     );
@@ -27,7 +27,9 @@ const SettingsLayout = ({ children }: { children: React.ReactNode }) => {
 
   return (
     <SidebarInset>
-      <div className="flex flex-col gap-4">{children}</div>
+      <div className="flex flex-col gap-4 bg-secondary min-h-screen">
+        {children}
+      </div>
     </SidebarInset>
   );
 };
