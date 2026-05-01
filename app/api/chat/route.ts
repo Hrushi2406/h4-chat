@@ -1,6 +1,4 @@
-import { google } from "@ai-sdk/google";
-import { openai } from "@ai-sdk/openai";
-import { smoothStream, streamText } from "ai";
+import { convertToModelMessages, stepCountIs, streamText } from "ai";
 import { Geo, geolocation } from "@vercel/functions";
 import { z } from "zod";
 import { getModelById } from "@/lib/available-models";
@@ -8,7 +6,7 @@ import { getModelById } from "@/lib/available-models";
 export async function POST(req: Request) {
   const {
     messages,
-    modelId = "gemini-2.0-flash-exp",
+    modelId = "openai/gpt-5.4-mini",
     searchEnabled = false,
     userInfo,
   } = await req.json();
@@ -25,10 +23,10 @@ export async function POST(req: Request) {
   const systemPrompt = getSystemPrompt(geo, searchEnabled, userInfo);
 
   const result = streamText({
-    model: model.provider === "google" ? google(modelId) : openai(modelId),
+    model: model.id,
     system: systemPrompt,
-    messages: messages.slice(-10),
-    maxSteps: 5,
+    messages: await convertToModelMessages(messages.slice(-10)),
+    stopWhen: stepCountIs(5),
     onError: (error) => {
       console.log("error: ", error);
     },
@@ -45,7 +43,7 @@ export async function POST(req: Request) {
         - Questions about current stock prices, weather, or time-sensitive data
         
         The tool provides both instant answers and web search results with sources.`,
-        parameters: z.object({
+        inputSchema: z.object({
           query: z.string(),
         }),
         execute: async ({ query }) => {
@@ -56,15 +54,8 @@ export async function POST(req: Request) {
     },
   });
 
-  return result.toDataStreamResponse({
+  return result.toUIMessageStreamResponse({
     sendReasoning: true,
-
-    getErrorMessage: (error) => {
-      if (error instanceof Error) {
-        return error.message;
-      }
-      return "An unknown error occurred";
-    },
   });
 }
 

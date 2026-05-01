@@ -1,6 +1,6 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import threadService from "@/lib/services/thread-service";
-import { ThreadMessage, Thread } from "@/lib/types/thread";
+import { getMessageContent, ThreadMessage, Thread } from "@/lib/types/thread";
 import { threadKeys } from "./use-threads";
 import { handleError } from "@/lib/utils";
 import { toast } from "sonner";
@@ -59,7 +59,7 @@ export const useThreadActions = () => {
               },
             ],
             messageCount: oldData.messageCount + 1,
-            lastMessagePreview: messageData.content.substring(0, 100),
+            lastMessagePreview: getMessageContent(messageData).substring(0, 100),
             updatedAt: new Date().toISOString(),
           };
         }

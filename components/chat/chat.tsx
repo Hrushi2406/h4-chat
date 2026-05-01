@@ -1,21 +1,22 @@
 "use client";
 
-import { Message, useChat } from "@ai-sdk/react";
+import { useChat } from "@ai-sdk/react";
 import { MessageList } from "@/components/chat/message-list";
 import { ChatInput } from "@/components/chat/chat-input";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { getDefaultModel, type AIModel } from "@/lib/available-models";
-import { v4 } from "uuid";
-import { apiClient } from "@/lib/clients/axios-client";
 import { useThreadActions } from "@/lib/hooks/thread/use-thread-actions";
 import { useThread } from "@/lib/hooks/thread/use-threads";
-import { useRouter } from "next/navigation";
 import {
+  Attachment,
+  attachmentsToFileParts,
   generateDefaultErrorMessage,
   generateDefaultUserMessage,
+  normalizeThreadMessage,
+  ThreadMessage,
 } from "@/lib/types/thread";
 import { useAuth } from "@/lib/hooks/auth/use-auth";
-import { Attachment, ChatRequestOptions } from "ai";
+import { ChatRequestOptions, DefaultChatTransport } from "ai";
 import { useUser } from "@/lib/hooks/user/use-user";
 import chatService from "@/lib/services/chat-service";
 
@@ -35,8 +36,8 @@ export function Chat({ threadId, isNew = false }: ChatProps) {
   const [searchEnabled, setSearchEnabled] = useState<boolean>(false);
 
   const [suggestions, setSuggestions] = useState<string[]>([]);
-
-  const router = useRouter();
+  const [input, setInput] = useState("");
+  const threadWriteQueueRef = useRef<Promise<void>>(Promise.resolve());
 
   const { uid } = useAuth();
   const { data: user } = useUser();
@@ -49,25 +50,13 @@ export function Chat({ threadId, isNew = false }: ChatProps) {
   const {
     messages,
     setMessages,
-    input,
-    handleInputChange,
-    handleSubmit,
-    append,
-
-    isLoading,
+    sendMessage,
     status,
     stop,
-  } = useChat({
-    api: "/api/chat",
-    body: {
-      modelId: selectedModel.id,
-      searchEnabled: searchEnabled,
-      userInfo: {
-        name: user?.name,
-        occupation: user?.occupation,
-        userPreferences: user?.userPreferences,
-      },
-    },
+  } = useChat<ThreadMessage>({
+    transport: new DefaultChatTransport({
+      api: "/api/chat",
+    }),
     onError: (error) => {
       const msg = generateDefaultErrorMessage(
         error.message ||
@@ -78,49 +67,69 @@ export function Chat({ threadId, isNew = false }: ChatProps) {
     onToolCall: ({ toolCall }) => {
       console.log("Tool call: ", toolCall);
     },
-    onFinish: (message, options) => {
-      console.log("Finish: ", options);
+    onFinish: ({ message, messages: finishedMessages }) => {
       console.log("threadId: ", threadId);
 
       // Save assistant message to thread when response is complete
       if (threadId) {
         chatService.generateSuggestions(
-          messages,
-          isLoading,
-          status,
+          finishedMessages,
+          false,
+          "ready",
           setSuggestions
         );
-        saveMessageToThread(message);
+        enqueueThreadWrite(() =>
+          saveMessageToThread(normalizeThreadMessage(message))
+        ).catch((error) => {
+          console.error("Failed to save assistant message:", error);
+        });
       }
     },
   });
 
+  const isLoading = status === "submitted" || status === "streaming";
+
   // Load existing thread messages when thread data is available
   useEffect(() => {
     if (threadId && threadData && messages.length === 0) {
-      setMessages(threadData.messages);
+      setMessages(threadData.messages.map(normalizeThreadMessage));
     }
   }, [threadId, threadData, messages.length]);
 
   const handleInputChangeWithClearSuggestions = (
     e: React.ChangeEvent<HTMLTextAreaElement>
   ) => {
-    handleInputChange(e);
+    setInput(e.target.value);
   };
 
   const handleSuggestionClick = async (suggestion: string) => {
     setSuggestions([]);
 
     const msg = generateDefaultUserMessage(suggestion);
-    append(msg);
-    saveMessageToThread(msg);
+    enqueueThreadWrite(() => persistUserMessageBeforeSend(suggestion, msg)).catch(
+      (error) => {
+        console.error("Failed to save user message:", error);
+      }
+    );
+    sendMessage({ text: suggestion }, getChatRequestOptions()).catch((error) => {
+      console.error("Failed to send message:", error);
+    });
   };
 
-  const saveMessageToThread = (message: Message) => {
+  const enqueueThreadWrite = (write: () => Promise<void>) => {
+    const queuedWrite = threadWriteQueueRef.current
+      .catch(() => undefined)
+      .then(write);
+
+    threadWriteQueueRef.current = queuedWrite.catch(() => undefined);
+    return queuedWrite;
+  };
+
+  const saveMessageToThread = async (message: ThreadMessage) => {
     console.log("threadId: ", threadId);
 
     if (!threadId) return;
-    addMessageToThread.mutate({
+    await addMessageToThread.mutateAsync({
       threadId: threadId,
       messageData: {
         ...message,
@@ -128,6 +137,34 @@ export function Chat({ threadId, isNew = false }: ChatProps) {
         updatedAt: new Date().toISOString(),
       },
     });
+  };
+
+  const persistUserMessageBeforeSend = async (
+    title: string,
+    message: ThreadMessage
+  ) => {
+    if (!threadId) return;
+
+    if (isNewThread) {
+      setIsCreatingThread(true);
+      window.history.replaceState({}, "", `/chat/${threadId}`);
+
+      try {
+        await createThread.mutateAsync({
+          threadId: threadId,
+          title: title.length > 50 ? `${title.substring(0, 50)}...` : title,
+          userId: uid,
+          initialMessage: message,
+        });
+
+        setIsNewThread(false);
+      } finally {
+        setIsCreatingThread(false);
+      }
+      return;
+    }
+
+    await saveMessageToThread(message);
   };
 
   const handleStop = () => {
@@ -139,46 +176,57 @@ export function Chat({ threadId, isNew = false }: ChatProps) {
   };
 
   const handleChatSubmit = async (
-    e: React.FormEvent<HTMLFormElement>,
-    options: ChatRequestOptions
+    e: React.FormEvent<HTMLFormElement>
   ) => {
     e.preventDefault();
 
-    const msg = generateDefaultUserMessage(input, attachments);
+    const submittedInput = input.trim();
+    if (!submittedInput) return;
 
-    handleSubmit(e, options);
+    const submittedAttachments = attachments;
+    const msg = generateDefaultUserMessage(submittedInput, submittedAttachments);
 
+    setSuggestions([]);
+    setInput("");
     setAttachments([]);
 
-    if (isNewThread) {
-      // Create new thread for the first message
-      setIsCreatingThread(true);
-      window.history.replaceState({}, "", `/chat/${threadId}`);
+    enqueueThreadWrite(() =>
+      persistUserMessageBeforeSend(submittedInput, msg)
+    ).catch((error) => {
+      console.error("Failed to save user message:", error);
+    });
 
-      await createThread.mutateAsync({
-        threadId: threadId,
-        title: input.length > 50 ? `${input.substring(0, 50)}...` : input,
-        userId: uid,
-        initialMessage: msg,
-      });
-
-      setIsNewThread(false);
-      setIsCreatingThread(false);
-    } else {
-      saveMessageToThread(msg);
-    }
+    sendMessage(
+      {
+        text: submittedInput,
+        files: attachmentsToFileParts(submittedAttachments),
+      },
+      getChatRequestOptions()
+    ).catch((error) => {
+      console.error("Failed to send message:", error);
+    });
   };
+
+  function getChatRequestOptions(): ChatRequestOptions {
+    return {
+      body: {
+        modelId: selectedModel.id,
+        searchEnabled: searchEnabled,
+        userInfo: {
+          name: user?.name,
+          occupation: user?.occupation,
+          userPreferences: user?.userPreferences,
+        },
+      },
+    };
+  }
 
   return (
     <div className="flex h-full flex-col">
       {messages.length === 0 && isNewThread && (
         <HomeSuggestions
           onSuggestionClick={async (suggestion) => {
-            handleInputChange({
-              target: {
-                value: suggestion,
-              },
-            } as React.ChangeEvent<HTMLTextAreaElement>);
+            await handleSuggestionClick(suggestion);
           }}
         />
       )}

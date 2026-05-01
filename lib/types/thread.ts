@@ -1,10 +1,19 @@
-import { Message } from "@ai-sdk/react";
-import { Attachment } from "ai";
+import type { FileUIPart, UIMessage } from "ai";
 import { v4 } from "uuid";
 
+export interface Attachment {
+  id?: string;
+  name?: string;
+  url: string;
+  contentType?: string;
+}
+
 // Extend Vercel AI Message type for our thread messages
-export interface ThreadMessage extends Message {
+export interface ThreadMessage extends UIMessage {
+  content: string;
+  createdAt?: Date;
   updatedAt: string;
+  experimental_attachments?: Attachment[];
   metadata?: {
     model?: string;
     tokenCount?: number;
@@ -50,6 +59,10 @@ export const generateDefaultUserMessage = (
     id: v4(),
     role: "user",
     content: input,
+    parts: [
+      { type: "text", text: input },
+      ...attachmentsToFileParts(attachments ?? []),
+    ],
     createdAt: new Date(),
     updatedAt: new Date().toISOString(),
     experimental_attachments: attachments ?? [],
@@ -60,8 +73,85 @@ export const generateDefaultErrorMessage = (msg: string): ThreadMessage => {
     id: v4(),
     role: "assistant",
     content: msg,
+    parts: [{ type: "text", text: msg }],
     createdAt: new Date(),
     updatedAt: new Date().toISOString(),
+  };
+};
+
+export const attachmentsToFileParts = (
+  attachments: Attachment[]
+): FileUIPart[] =>
+  attachments.map((attachment) => ({
+    type: "file",
+    mediaType: attachment.contentType ?? "application/octet-stream",
+    filename: attachment.name,
+    url: attachment.url,
+  }));
+
+export const getMessageContent = (message: UIMessage | ThreadMessage) => {
+  if ("content" in message && typeof message.content === "string") {
+    return message.content;
+  }
+
+  return message.parts
+    .filter((part) => part.type === "text")
+    .map((part) => part.text)
+    .join("");
+};
+
+export const getMessageAttachments = (
+  message: UIMessage | ThreadMessage
+): Attachment[] => {
+  if (
+    "experimental_attachments" in message &&
+    Array.isArray(message.experimental_attachments)
+  ) {
+    return message.experimental_attachments;
+  }
+
+  return message.parts
+    .filter((part): part is FileUIPart => part.type === "file")
+    .map((part) => ({
+      name: part.filename,
+      url: part.url,
+      contentType: part.mediaType,
+    }));
+};
+
+export const normalizeThreadMessage = (
+  message: UIMessage | Partial<ThreadMessage>
+): ThreadMessage => {
+  const storedMessage = message as Partial<ThreadMessage>;
+  const content =
+    "content" in message && typeof message.content === "string"
+      ? message.content
+      : "parts" in message && Array.isArray(message.parts)
+      ? getMessageContent(message as UIMessage)
+      : "";
+  const attachments =
+    "experimental_attachments" in message &&
+    Array.isArray(message.experimental_attachments)
+      ? message.experimental_attachments
+      : "parts" in message && Array.isArray(message.parts)
+      ? getMessageAttachments(message as UIMessage)
+      : [];
+
+  return {
+    id: message.id ?? v4(),
+    role: message.role ?? "assistant",
+    content,
+    parts:
+      "parts" in message && Array.isArray(message.parts)
+        ? message.parts
+        : [
+            { type: "text", text: content },
+            ...attachmentsToFileParts(attachments),
+          ],
+    createdAt: storedMessage.createdAt,
+    updatedAt: storedMessage.updatedAt ?? new Date().toISOString(),
+    experimental_attachments: attachments,
+    metadata: storedMessage.metadata,
   };
 };
 

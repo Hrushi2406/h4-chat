@@ -1,10 +1,10 @@
-import { Message } from "ai";
 import { apiClient } from "../clients/axios-client";
 import { GenerateSuggestionsResponse } from "@/app/api/generate-suggestions/schema";
+import { getMessageContent, ThreadMessage } from "@/lib/types/thread";
 
 class ChatService {
   async generateSuggestions(
-    messages: Message[],
+    messages: ThreadMessage[],
     isLoading: boolean,
     status: string,
     setSuggestions: (suggestions: string[]) => void
@@ -22,7 +22,7 @@ class ChatService {
             messages: messages.map((msg) => ({
               id: msg.id,
               role: msg.role,
-              content: msg.content,
+              content: getMessageContent(msg),
             })),
           }
         );

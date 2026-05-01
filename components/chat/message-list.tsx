@@ -1,6 +1,5 @@
 "use client";
 
-import { Message } from "ai";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import remarkToc from "remark-toc";
@@ -10,12 +9,16 @@ import { motion } from "framer-motion";
 import { TextShimmer } from "@/components/ui/text-shimmer";
 import clsx from "clsx";
 import { getToolDisplayName } from "@/lib/types/tool-mappings";
-import { ThreadMessage } from "@/lib/types/thread";
-import { Divide, FilesIcon, FileText } from "lucide-react";
+import {
+  getMessageAttachments,
+  getMessageContent,
+  ThreadMessage,
+} from "@/lib/types/thread";
+import { FileText } from "lucide-react";
 import CodeBlock from "./code-block";
 
 interface MessageListProps {
-  messages: Message[];
+  messages: ThreadMessage[];
   status?: "submitted" | "streaming" | "ready" | "error";
   suggestions: string[];
   onSuggestionClick: (suggestion: string) => void;
@@ -62,6 +65,8 @@ export const MessageList = ({
     <div className="flex-1 overflow-y-auto p-4">
       <div className="space-y-3 md:space-y-4 max-w-4xl mx-auto">
         {messages.map((message, index) => {
+          const content = getMessageContent(message);
+          const attachments = getMessageAttachments(message);
           // Check if this is the last assistant message
           const isLastAssistantMessage =
             message.role === "assistant" && index === messages.length - 1;
@@ -77,7 +82,7 @@ export const MessageList = ({
                   className={clsx(
                     "md:max-w-[75%] leading-7",
                     message.role === "user" &&
-                      !message.experimental_attachments && [
+                      attachments.length === 0 && [
                         userMessageStyle(message),
                       ],
                     message.role === "assistant" && [
@@ -88,26 +93,29 @@ export const MessageList = ({
                 >
                   {message.role === "assistant" ? (
                     <>
-                      {message.parts?.map((part, index) => {
+                      {message.parts?.map((part: any, index) => {
                         console.log("part: ", part);
-                        console.log("message: ", message.reasoning);
 
                         if (part.type === "reasoning") {
                           return (
                             <div key={index}>
                               <p>Reasoning:</p>
-                              <p>{part.reasoning}</p>
+                              <p>{part.text}</p>
                             </div>
                           );
                         }
 
-                        if (part.type === "tool-invocation") {
-                          const toolStatus = part.toolInvocation.state;
-                          const toolName = part.toolInvocation.toolName;
+                        if (
+                          part.type === "dynamic-tool" ||
+                          part.type.startsWith("tool-")
+                        ) {
+                          const toolStatus = part.state;
+                          const toolName =
+                            part.toolName ?? part.type.replace(/^tool-/, "");
 
                           const isCalling =
-                            toolStatus === "partial-call" ||
-                            toolStatus === "call";
+                            toolStatus === "input-streaming" ||
+                            toolStatus === "input-available";
                           const { displayName, Icon } = getToolDisplayName(
                             toolName,
                             toolStatus
@@ -225,16 +233,16 @@ export const MessageList = ({
                   ) : (
                     <div className="">
                       {/* Display text content */}
-                      {message.experimental_attachments && (
+                      {attachments.length > 0 && (
                         <div
                           className={`mb-3 flex justify-end ${
-                            message.experimental_attachments.length > 1
+                            attachments.length > 1
                               ? "flex-wrap gap-1"
                               : ""
                           }`}
                         >
-                          {message.experimental_attachments.map(
-                            (attachment) => {
+                          {attachments.map(
+                            (attachment, attachmentIndex) => {
                               const isPdf =
                                 attachment.name
                                   ?.toLowerCase()
@@ -243,9 +251,9 @@ export const MessageList = ({
 
                               return (
                                 <div
-                                  key={attachment.url}
+                                  key={`${attachment.url}-${attachmentIndex}`}
                                   className={`rounded-lg overflow-hidden border border-border ${
-                                    message.experimental_attachments!.length > 1
+                                    attachments.length > 1
                                       ? "max-w-[48%] max-h-[100px] aspect-square bg-muted"
                                       : "min-w-[100px] max-w-[200px]"
                                   }`}
@@ -286,15 +294,16 @@ export const MessageList = ({
                       )}
                       <div
                         className={
-                          message.experimental_attachments &&
-                          clsx(
-                            "max-w-max ml-auto text-right self-end justify-end",
-                            userMessageStyle(message)
-                          )
+                          attachments.length > 0
+                            ? clsx(
+                                "max-w-max ml-auto text-right self-end justify-end",
+                                userMessageStyle(message)
+                              )
+                            : undefined
                         }
                       >
                         <p className="text-sm md:text-base whitespace-pre-wrap leading-loose">
-                          {message.content}
+                          {content}
                         </p>
                       </div>
                     </div>
@@ -349,8 +358,10 @@ export const MessageList = ({
 
 const heightClass = `min-h-[calc(100vh-19rem)] md:min-h-[calc(100vh-20rem)]`;
 
-const userMessageStyle = (message: Message) =>
-  clsx(
+const userMessageStyle = (message: ThreadMessage) => {
+  const content = getMessageContent(message);
+  return clsx(
     "bg-secondary text-secondary-foreground px-3 md:px-4 py-1 md:py-1.5",
-    message.content.length <= 50 ? "rounded-full" : "rounded-2xl"
+    content.length <= 50 ? "rounded-full" : "rounded-2xl"
   );
+};

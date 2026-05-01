@@ -1,12 +1,20 @@
-import { openai } from "@ai-sdk/openai";
-import { generateObject } from "ai";
+import { gateway, generateObject } from "ai";
 import { z } from "zod";
+import { getDefaultModel } from "@/lib/available-models";
 import {
   generateSuggestionsRequestSchema,
   generateSuggestionsResponseSchema,
   type GenerateSuggestionsResponse,
 } from "./schema";
-import { google } from "@ai-sdk/google";
+
+const suggestionSchema = z.object({
+  suggestions: z
+    .array(z.string().min(1).max(80))
+    .min(1)
+    .max(6)
+    .describe("Short follow-up suggestions for the user."),
+  context: z.string().describe("Brief reason these suggestions fit."),
+});
 
 export async function POST(req: Request) {
   try {
@@ -23,8 +31,7 @@ export async function POST(req: Request) {
       );
     }
 
-    // Generate random number of suggestions between 3-6
-    const maxSuggestions = Math.floor(Math.random() * 4) + 3; // 3, 4, 5, or 6
+    const maxSuggestions = validatedInput.maxSuggestions ?? 3;
 
     // Get the last message for heavy influence
     const lastMessage = messages[messages.length - 1];
@@ -36,43 +43,44 @@ export async function POST(req: Request) {
       .join("\n");
 
     // Create a specialized prompt for generating contextual suggestions
-    const systemPrompt = `You are an AI assistant that generates helpful follow-up suggestions for conversations.
+    const systemPrompt = `You generate helpful follow-up suggestions for a chat UI.
 
 Based on the conversation history, generate ${maxSuggestions} concise, actionable suggestions that:
 1. Are heavily influenced by the LAST message (most recent)
 2. Consider the broader conversation context
 3. Offer logical next steps, clarifications, or related topics
 4. Are phrased as questions or action items the user might want to explore
-5. Each suggestion should be EXACTLY 3-4 words maximum - be very concise
+5. Each suggestion should be 3-6 words maximum
 6. Avoid generic suggestions - be specific to the conversation
 7. Use simple, direct language
 8. If the last message contains a question asking "would you like to..." or similar invitation:
    - If no options are provided, make the first suggestion "Yes, I would"
    - If options are provided (e.g. "would you like to A or B"), include those options as suggestions
+9. Return only the structured object matching the schema
 
 Current conversation context:
 ${conversationContext}
 
 LAST MESSAGE (heavy influence): ${lastMessage.role}: ${lastMessage.content}
 
-Generate suggestions that feel natural and relevant to what the user might want to ask or explore next. Keep them extremely short and punchy. Also include answer to last message questions`;
+Generate suggestions that feel natural and relevant to what the user might want to ask or explore next.`;
 
     // Generate suggestions using structured output
     const result = await generateObject({
-      model: openai("gpt-4.1-nano"), // Using gpt-4.1-mini as requested
-      // model: togetherai("meta-llama/Llama-4-Scout-17B-16E-Instruct"),
-      // model: google("gemini-2.0-flash-lite"),
+      model: gateway.languageModel(getDefaultModel().id),
       prompt: systemPrompt,
-      schema: z.object({
-        suggestions: z.array(z.string()).length(maxSuggestions),
-        context: z.string().optional(),
-      }),
-      temperature: 0.7, // Add some creativity
+      schema: suggestionSchema,
+      schemaName: "FollowUpSuggestions",
+      schemaDescription: "Contextual follow-up suggestions for a chat app.",
+      maxOutputTokens: 300,
     });
 
     const response: GenerateSuggestionsResponse = {
-      suggestions: result.object.suggestions,
-      context: result.object.context,
+      suggestions: result.object.suggestions
+        .map((suggestion) => suggestion.trim())
+        .filter(Boolean)
+        .slice(0, maxSuggestions),
+      context: result.object.context || undefined,
     };
 
     // Validate response
@@ -84,7 +92,7 @@ Generate suggestions that feel natural and relevant to what the user might want 
 
     if (error instanceof z.ZodError) {
       return Response.json(
-        { error: "Invalid input format", details: error.errors },
+        { error: "Invalid input format", details: error.issues },
         { status: 400 }
       );
     }

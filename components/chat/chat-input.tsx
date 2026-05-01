@@ -43,18 +43,13 @@ import { useStorageActions } from "@/lib/hooks/storage/use-storage-actions";
 import { useAuth } from "@/lib/hooks/auth/use-auth";
 import { usePathname } from "next/navigation";
 import { ModelSelector } from "./model-selector";
-import { Attachment, ChatRequestOptions } from "ai";
-import { UseChatHelpers } from "@ai-sdk/react";
+import { Attachment } from "@/lib/types/thread";
 
 interface ChatInputProps {
   input: string;
   isLoading: boolean;
   handleInputChange: (e: React.ChangeEvent<HTMLTextAreaElement>) => void;
-  // handleSubmit: UseChatHelpers["handleSubmit"];
-  handleSubmit: (
-    e: FormEvent<HTMLFormElement>,
-    options: ChatRequestOptions
-  ) => void;
+  handleSubmit: (e: FormEvent<HTMLFormElement>) => void;
   onStop: () => void;
   selectedModel: AIModel;
   onModelChange: (model: AIModel) => void;
@@ -138,9 +133,7 @@ export const ChatInput = ({
 
   const handleFormSubmit = (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    handleSubmit(e, {
-      experimental_attachments: attachments,
-    });
+    handleSubmit(e);
     setSelectedFiles([]);
   };
 

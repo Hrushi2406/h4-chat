@@ -17,11 +17,37 @@ import {
   Thread,
   ThreadMessage,
   generateDefaultThread,
+  getMessageContent,
 } from "@/lib/types/thread";
 import { v4 } from "uuid";
-import { Attachment } from "ai";
 
 const colThreads = "threads";
+
+const removeUndefinedValues = <T>(value: T): T => {
+  if (value === undefined) {
+    return undefined as T;
+  }
+
+  if (value === null || value instanceof Date) {
+    return value;
+  }
+
+  if (Array.isArray(value)) {
+    return value
+      .filter((item) => item !== undefined)
+      .map((item) => removeUndefinedValues(item)) as T;
+  }
+
+  if (typeof value === "object") {
+    return Object.fromEntries(
+      Object.entries(value)
+        .filter(([, item]) => item !== undefined)
+        .map(([key, item]) => [key, removeUndefinedValues(item)])
+    ) as T;
+  }
+
+  return value;
+};
 
 class ThreadService {
   // Create a new thread
@@ -55,9 +81,14 @@ class ThreadService {
       };
       threadData.messages = [messageWithTimestamp];
       threadData.messageCount = 1;
-      threadData.lastMessagePreview = initialMessage.content.substring(0, 100);
+      threadData.lastMessagePreview = getMessageContent(
+        initialMessage
+      ).substring(0, 100);
 
-      await setDoc(doc(db, colThreads, threadData.id), threadData);
+      await setDoc(
+        doc(db, colThreads, threadData.id),
+        removeUndefinedValues(threadData)
+      );
 
       console.log("Thread created successfully:", { threadId: threadData.id });
       return threadData;
@@ -139,7 +170,7 @@ class ThreadService {
         title: title,
       };
 
-      await updateDoc(docRef, updateFields);
+      await updateDoc(docRef, removeUndefinedValues(updateFields));
       console.log("Thread updated successfully:", { threadId });
     } catch (error) {
       console.error("Failed to update thread:", { threadId }, error);
@@ -195,12 +226,15 @@ class ThreadService {
 
       const updatedMessages = [...currentMessages, messageWithTimestamp];
 
-      await updateDoc(docRef, {
-        messages: updatedMessages,
-        messageCount: updatedMessages.length,
-        lastMessagePreview: messageData.content.substring(0, 100),
-        updatedAt: new Date().toISOString(),
-      });
+      await updateDoc(
+        docRef,
+        removeUndefinedValues({
+          messages: updatedMessages,
+          messageCount: updatedMessages.length,
+          lastMessagePreview: getMessageContent(messageData).substring(0, 100),
+          updatedAt: new Date().toISOString(),
+        })
+      );
 
       console.log("Message added successfully:", {
         threadId,
@@ -233,7 +267,7 @@ class ThreadService {
     try {
       const shareId = v4();
       const docRef = doc(db, colThreads, threadId);
-      await updateDoc(docRef, { shareId });
+      await updateDoc(docRef, removeUndefinedValues({ shareId }));
       return shareId;
     } catch (error) {
       console.error("Failed to share thread: ", { threadId }, error);
