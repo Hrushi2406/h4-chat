@@ -9,7 +9,7 @@ import { toast } from "sonner";
 import { MessageList } from "@/components/chat/message-list";
 import Navbar from "@/components/ui/navbar";
 import { Button } from "@/components/ui/button";
-import { Settings, Plus } from "lucide-react";
+import { Settings2, Plus } from "lucide-react";
 import Link from "next/link";
 
 interface SharedChatPageProps {
@@ -51,14 +51,24 @@ export default function SharedChatPage({ params }: SharedChatPageProps) {
         <div className="flex items-center justify-between flex-1">
           <h1 className="text-lg font-semibold">Saaki AI</h1>
           <div className="flex items-center gap-2">
-            <Button variant="secondary" size="sm" onClick={handleNewThread}>
+            <Button
+              variant="secondary"
+              size="sm"
+              className="rounded-full border shadow-none"
+              onClick={handleNewThread}
+            >
               <Plus className="h-4 w-4" />
               New Thread
             </Button>
 
-            <Button asChild variant="secondary" size="sm">
+            <Button
+              asChild
+              variant="secondary"
+              size="sm"
+              className="rounded-full border shadow-none"
+            >
               <Link href="/settings">
-                <Settings className="h-4 w-4" />
+                <Settings2 className="h-4 w-4" />
                 Settings
               </Link>
             </Button>

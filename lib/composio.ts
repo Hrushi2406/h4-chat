@@ -28,11 +28,22 @@ export const createComposioClient = () =>
     provider: new VercelProvider(),
   });
 
-export const createComposioSession = async (userId: string) => {
+type CreateComposioSessionOptions = {
+  callbackUrl?: string;
+};
+
+export const createComposioSession = async (
+  userId: string,
+  options: CreateComposioSessionOptions = {}
+) => {
   const composio = createComposioClient();
 
   return composio.create(getComposioUserId(userId), {
     toolkits: [...COMPOSIO_TOOLKITS],
+    manageConnections: {
+      enable: true,
+      ...(options.callbackUrl ? { callbackUrl: options.callbackUrl } : {}),
+    },
     multiAccount: {
       enable: true,
       maxAccountsPerToolkit: 3,

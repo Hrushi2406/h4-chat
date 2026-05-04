@@ -8,17 +8,21 @@ export interface Attachment {
   contentType?: string;
 }
 
+export interface ThreadMessageMetadata {
+  model?: string;
+  tokenCount?: number;
+  processingTime?: number;
+  inputTokens?: number;
+  outputTokens?: number;
+  totalTokens?: number;
+}
+
 // Extend Vercel AI Message type for our thread messages
-export interface ThreadMessage extends UIMessage {
+export interface ThreadMessage extends UIMessage<ThreadMessageMetadata> {
   content: string;
   createdAt?: Date;
   updatedAt: string;
   experimental_attachments?: Attachment[];
-  metadata?: {
-    model?: string;
-    tokenCount?: number;
-    processingTime?: number;
-  };
 }
 
 // Thread interface for Firestore

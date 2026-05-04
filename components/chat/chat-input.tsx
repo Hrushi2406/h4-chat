@@ -3,50 +3,36 @@
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import {
   ArrowUp,
   CloudUpload,
-  Diamond,
   FileText,
   Globe,
-  Hexagon,
-  Image,
-  Loader2,
-  Minus,
   Paperclip,
-  Pentagon,
-  Plus,
   Square,
-  Star,
-  Sun,
-  Triangle,
   X,
 } from "lucide-react";
 import { FormEvent, KeyboardEvent, useCallback, useState } from "react";
 import { motion } from "framer-motion";
-import {
-  availableModels,
-  getDefaultModel,
-  type AIModel,
-} from "@/lib/available-models";
-import { getBrandLogo } from "@/lib/brand-logos";
+import { type AIModel } from "@/lib/available-models";
 import clsx from "clsx";
-import { blurBackground, cn } from "@/lib/utils";
+import { cn } from "@/lib/utils";
 import { useDropzone } from "react-dropzone";
 import { useStorageActions } from "@/lib/hooks/storage/use-storage-actions";
 import { useAuth } from "@/lib/hooks/auth/use-auth";
 import { usePathname } from "next/navigation";
 import { ModelSelector } from "./model-selector";
-import { Attachment } from "@/lib/types/thread";
+import { Attachment, type ThreadMessageMetadata } from "@/lib/types/thread";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+
+const CONTEXT_WINDOW_TOKENS = 200_000;
 
 interface ChatInputProps {
   input: string;
+  tokenUsage?: ThreadMessageMetadata;
   isLoading: boolean;
   handleInputChange: (e: React.ChangeEvent<HTMLTextAreaElement>) => void;
   handleSubmit: (e: FormEvent<HTMLFormElement>) => void;
@@ -61,6 +47,7 @@ interface ChatInputProps {
 
 export const ChatInput = ({
   input,
+  tokenUsage,
   isLoading,
   handleInputChange,
   handleSubmit,
@@ -191,12 +178,8 @@ export const ChatInput = ({
                   />
                 </div>
 
-                {/* Bottom Row: Model Selector + Button */}
                 <div className="flex items-center justify-between gap-r">
-                  {/* Model Selector */}
-
-                  {/* Attachments Upload Button */}
-                  <div className="flex-2 flex items-center gap-2 px-2 py-0.5 justify-end border- bg-secondar rounded-full max-w-max">
+                  <div className="flex-2 flex items-center gap-2 px-2 py-0.5 justify-end rounded-full max-w-max">
                     <Button
                       type="button"
                       size="sm"
@@ -224,9 +207,9 @@ export const ChatInput = ({
                       <Globe className={cn("h-5 w-5")} />
                       Search
                     </Button>
+                    <ContextWindowIndicator tokenUsage={tokenUsage} />
                   </div>
 
-                  {/* Search Toggle Button */}
                   <div className="flex-1 flex justify-end flex-shrink-0 ">
                     <ModelSelector
                       selectedModel={selectedModel}
@@ -234,7 +217,6 @@ export const ChatInput = ({
                     />
                   </div>
 
-                  {/* Send/Stop Button */}
                   <div className="flex-shrink-0 ml-1 fex-1 flex justify-end">
                     <motion.div
                       whileHover={{ scale: 1.05 }}
@@ -269,6 +251,98 @@ export const ChatInput = ({
         </div>
       </div>
     </div>
+  );
+};
+
+const formatTokenCount = (tokenCount: number) => {
+  if (tokenCount >= 1_000) {
+    return `${Math.round(tokenCount / 1_000)}K`;
+  }
+
+  return tokenCount.toString();
+};
+
+const ContextWindowIndicator = ({
+  tokenUsage,
+}: {
+  tokenUsage?: ThreadMessageMetadata;
+}) => {
+  const inputTokens = tokenUsage?.inputTokens ?? 0;
+  const outputTokens = tokenUsage?.outputTokens ?? 0;
+  const tokenCount = tokenUsage?.totalTokens ?? inputTokens + outputTokens;
+  const clampedTokenCount = Math.min(tokenCount, CONTEXT_WINDOW_TOKENS);
+  const percent = clampedTokenCount / CONTEXT_WINDOW_TOKENS;
+  const radius = 8;
+  const circumference = 2 * Math.PI * radius;
+  const strokeDashoffset = circumference * (1 - percent);
+  const isNearLimit = percent >= 0.8;
+  const isFull = tokenCount >= CONTEXT_WINDOW_TOKENS;
+
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <div
+          className={cn(
+            "flex h-8 items-center gap-1.5 rounded-full border bg-background px-2 text-[11px] font-medium text-muted-foreground shadow-xs",
+            isNearLimit && "border-amber-200 text-amber-700"
+          )}
+          role="progressbar"
+          tabIndex={0}
+          aria-valuemin={0}
+          aria-valuemax={CONTEXT_WINDOW_TOKENS}
+          aria-valuenow={clampedTokenCount}
+          aria-label={`${formatTokenCount(
+            clampedTokenCount
+          )} of 200K chat tokens used`}
+        >
+          <svg
+            className="h-5 w-5 -rotate-90"
+            viewBox="0 0 20 20"
+            aria-hidden="true"
+          >
+            <circle
+              cx="10"
+              cy="10"
+              r={radius}
+              fill="none"
+              stroke="currentColor"
+              strokeOpacity="0.18"
+              strokeWidth="2"
+            />
+            <circle
+              cx="10"
+              cy="10"
+              r={radius}
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeDasharray={circumference}
+              strokeDashoffset={strokeDashoffset}
+              className={cn(
+                "text-primary transition-[stroke-dashoffset]",
+                isNearLimit && "text-amber-500"
+              )}
+            />
+          </svg>
+          <span className="tabular-nums">
+            {formatTokenCount(clampedTokenCount)}/200K
+          </span>
+        </div>
+      </TooltipTrigger>
+      <TooltipContent side="top" className="space-y-1 text-center">
+        <div className="font-medium">
+          {formatTokenCount(clampedTokenCount)}/200K
+        </div>
+        <div>
+          {isFull
+            ? "Chat token usage is at 200K"
+            : `${formatTokenCount(inputTokens)} input + ${formatTokenCount(
+                outputTokens
+              )} output tokens`}
+        </div>
+      </TooltipContent>
+    </Tooltip>
   );
 };
 

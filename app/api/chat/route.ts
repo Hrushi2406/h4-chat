@@ -13,10 +13,11 @@ import { verifyFirebaseIdToken } from "@/lib/firebase-auth-server";
 export async function POST(req: Request) {
   const {
     messages,
-    modelId = "openai/gpt-5.4-mini",
+    modelId = "deepseek/deepseek-v4-flash",
     searchEnabled = false,
     userInfo,
     authToken,
+    threadId,
   } = await req.json();
 
   const geo = geolocation(req);
@@ -29,7 +30,10 @@ export async function POST(req: Request) {
   console.log("using model: ", model.id);
 
   const verifiedUserId = await verifyFirebaseIdToken(authToken);
-  const composioTools = await getComposioTools(verifiedUserId);
+  const composioTools = await getComposioTools(
+    verifiedUserId,
+    getChatCallbackUrl(req, threadId)
+  );
   const systemPrompt = getSystemPrompt(
     geo,
     searchEnabled,
@@ -72,6 +76,20 @@ export async function POST(req: Request) {
 
   return result.toUIMessageStreamResponse({
     sendReasoning: true,
+    messageMetadata: ({ part }) => {
+      if (part.type !== "finish") {
+        return undefined;
+      }
+
+      const inputTokens = part.totalUsage.inputTokens ?? 0;
+      const outputTokens = part.totalUsage.outputTokens ?? 0;
+
+      return {
+        inputTokens,
+        outputTokens,
+        totalTokens: part.totalUsage.totalTokens ?? inputTokens + outputTokens,
+      };
+    },
   });
 }
 
@@ -104,7 +122,7 @@ const getSystemPrompt = (
     }
     - ${
       composioEnabled &&
-      `You can use connected-app tools through Composio for email, calendar, drive, Notion, and Linear tasks. If a required app is not connected, use the Composio connection-management tool to ask the user to authorize it, then continue once they confirm. Ask before taking irreversible actions such as sending email, deleting files, or creating/updating external records unless the user already gave explicit instructions.`
+      `You can use connected-app tools through Composio for email, calendar, drive, Notion, and Linear tasks. Search for the required app functionality before using app tools. If a required app is not connected, use the Composio connection-management tool to ask the user to authorize it, provide the Connect Link in chat, then continue once they confirm. Ask before taking irreversible actions such as sending email, deleting files, or creating/updating external records unless the user already gave explicit instructions.`
     }
 
     ${name && `User's name is ${name}`}
@@ -119,18 +137,27 @@ const getSystemPrompt = (
     `;
 };
 
-async function getComposioTools(userId?: string): Promise<ToolSet | undefined> {
+async function getComposioTools(
+  userId?: string,
+  callbackUrl?: string
+): Promise<ToolSet | undefined> {
   if (!userId || !isComposioConfigured()) {
     return undefined;
   }
 
   try {
-    const session = await createComposioSession(userId);
+    const session = await createComposioSession(userId, { callbackUrl });
     return session.tools();
   } catch (error) {
     console.error("Failed to load Composio tools:", error);
     return undefined;
   }
+}
+
+function getChatCallbackUrl(req: Request, threadId?: string) {
+  const origin = new URL(req.url).origin;
+
+  return threadId ? `${origin}/chat/${threadId}` : origin;
 }
 
 // Google Custom Search API integration

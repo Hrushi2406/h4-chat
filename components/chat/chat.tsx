@@ -3,7 +3,7 @@
 import { useChat } from "@ai-sdk/react";
 import { MessageList } from "@/components/chat/message-list";
 import { ChatInput } from "@/components/chat/chat-input";
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { getDefaultModel, type AIModel } from "@/lib/available-models";
 import { useThreadActions } from "@/lib/hooks/thread/use-thread-actions";
 import { useThread } from "@/lib/hooks/thread/use-threads";
@@ -14,6 +14,7 @@ import {
   generateDefaultUserMessage,
   normalizeThreadMessage,
   ThreadMessage,
+  ThreadMessageMetadata,
 } from "@/lib/types/thread";
 import { useAuth } from "@/lib/hooks/auth/use-auth";
 import { ChatRequestOptions, DefaultChatTransport } from "ai";
@@ -89,6 +90,29 @@ export function Chat({ threadId, isNew = false }: ChatProps) {
   });
 
   const isLoading = status === "submitted" || status === "streaming";
+  const totalTokenUsage = useMemo<ThreadMessageMetadata | undefined>(() => {
+    const usage = messages.reduce(
+      (total, message) => {
+        const metadata = message.metadata;
+        const inputTokens = metadata?.inputTokens ?? 0;
+        const outputTokens = metadata?.outputTokens ?? 0;
+        const totalTokens = metadata?.totalTokens ?? inputTokens + outputTokens;
+
+        return {
+          inputTokens: total.inputTokens + inputTokens,
+          outputTokens: total.outputTokens + outputTokens,
+          totalTokens: total.totalTokens + totalTokens,
+        };
+      },
+      { inputTokens: 0, outputTokens: 0, totalTokens: 0 }
+    );
+
+    if (usage.totalTokens === 0) {
+      return undefined;
+    }
+
+    return usage;
+  }, [messages]);
 
   // Load existing thread messages when thread data is available
   useEffect(() => {
@@ -216,6 +240,7 @@ export function Chat({ threadId, isNew = false }: ChatProps) {
         modelId: selectedModel.id,
         searchEnabled: searchEnabled,
         authToken: await auth.currentUser?.getIdToken(),
+        threadId,
         userInfo: {
           name: user?.name,
           occupation: user?.occupation,
@@ -248,6 +273,7 @@ export function Chat({ threadId, isNew = false }: ChatProps) {
       {/* Chat Input */}
       <ChatInput
         input={input}
+        tokenUsage={totalTokenUsage}
         isLoading={isLoading || isCreatingThread}
         handleInputChange={handleInputChangeWithClearSuggestions}
         handleSubmit={handleChatSubmit}

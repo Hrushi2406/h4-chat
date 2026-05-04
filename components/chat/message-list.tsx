@@ -13,9 +13,15 @@ import {
   getMessageAttachments,
   getMessageContent,
   ThreadMessage,
+  ThreadMessageMetadata,
 } from "@/lib/types/thread";
 import { FileText } from "lucide-react";
 import CodeBlock from "./code-block";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 
 interface MessageListProps {
   messages: ThreadMessage[];
@@ -94,8 +100,6 @@ export const MessageList = ({
                   {message.role === "assistant" ? (
                     <>
                       {message.parts?.map((part: any, index) => {
-                        console.log("part: ", part);
-
                         if (part.type === "reasoning") {
                           return (
                             <div key={index}>
@@ -116,44 +120,52 @@ export const MessageList = ({
                           const isCalling =
                             toolStatus === "input-streaming" ||
                             toolStatus === "input-available";
-                          const { displayName, Icon } = getToolDisplayName(
-                            toolName,
-                            toolStatus
-                          );
+                          const { displayName, Icon, tooltip } =
+                            getToolDisplayName(toolName, toolStatus, part);
 
                           return (
-                            <div
-                              className={`inline-flex items-center gap-2 mr-2 text-sm rounded-full my-2 transition-all duration-300 ease-in-out ${
-                                isCalling
-                                  ? "px-0 py-0"
-                                  : "px-3 py-1.5 bg-blue-50 dark:bg-blue-950/50 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800"
-                              }`}
-                              key={index}
-                            >
-                              {isCalling ? (
+                            <Tooltip key={index}>
+                              <TooltipTrigger asChild>
                                 <div
-                                  key={`${toolName}-${toolStatus}-calling`}
-                                  className="flex gap-2 items-center animate-in fade-in "
+                                  className={`inline-flex items-center gap-2 mr-2 text-sm rounded-full my-2 transition-all duration-300 ease-in-out ${
+                                    isCalling
+                                      ? "px-0 py-0"
+                                      : "px-3 py-1.5 bg-blue-50 dark:bg-blue-950/50 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800"
+                                  }`}
                                 >
-                                  <Icon className="w-4 h-4 text-blue-500 animate-bounce" />
-                                  <TextShimmer
-                                    className="text-sm md:text-base [--base-color:theme(colors.blue.600)] [--base-gradient-color:theme(colors.blue.200)] dark:[--base-color:theme(colors.blue.700)] dark:[--base-gradient-color:theme(colors.blue.400)]"
-                                    duration={1.5}
-                                    spread={1.5}
-                                  >
-                                    {displayName}
-                                  </TextShimmer>
+                                  {isCalling ? (
+                                    <div
+                                      key={`${toolName}-${toolStatus}-calling`}
+                                      className="flex gap-2 items-center animate-in fade-in "
+                                    >
+                                      <Icon className="w-4 h-4 text-blue-500 animate-bounce" />
+                                      <TextShimmer
+                                        className="text-sm md:text-base [--base-color:theme(colors.blue.600)] [--base-gradient-color:theme(colors.blue.200)] dark:[--base-color:theme(colors.blue.700)] dark:[--base-gradient-color:theme(colors.blue.400)]"
+                                        duration={1.5}
+                                        spread={1.5}
+                                      >
+                                        {displayName}
+                                      </TextShimmer>
+                                    </div>
+                                  ) : (
+                                    <div
+                                      key={`${toolName}-${toolStatus}`}
+                                      className="flex items-center gap-2 text-sm md:text-sm"
+                                    >
+                                      <Icon className="w-4 h-4" />
+                                      {displayName}
+                                    </div>
+                                  )}
                                 </div>
-                              ) : (
-                                <div
-                                  key={`${toolName}-${toolStatus}`}
-                                  className="flex items-center gap-2 text-sm md:text-sm"
-                                >
-                                  <Icon className="w-4 h-4" />
-                                  {displayName}
-                                </div>
-                              )}
-                            </div>
+                              </TooltipTrigger>
+                              <TooltipContent
+                                side="top"
+                                align="start"
+                                className="max-w-80 whitespace-pre-wrap text-left leading-relaxed"
+                              >
+                                {tooltip}
+                              </TooltipContent>
+                            </Tooltip>
                           );
                         }
                         if (part.type === "text") {
@@ -325,6 +337,7 @@ export const MessageList = ({
                   )}
                 </div>
               </div>
+              <MessageTokenUsage message={message} />
             </div>
           );
         })}
@@ -372,6 +385,54 @@ export const MessageList = ({
 };
 
 const heightClass = `min-h-[calc(100vh-19rem)] md:min-h-[calc(100vh-20rem)]`;
+
+const MessageTokenUsage = ({ message }: { message: ThreadMessage }) => {
+  const metadata = message.metadata;
+  const inputTokens = metadata?.inputTokens ?? 0;
+  const outputTokens = metadata?.outputTokens ?? 0;
+  const totalTokens = metadata?.totalTokens ?? inputTokens + outputTokens;
+
+  if (totalTokens === 0) {
+    return null;
+  }
+
+  return (
+    <div
+      className={clsx(
+        "mt-1 flex text-[11px] leading-none text-muted-foreground/70",
+        message.role === "user" ? "justify-end" : "justify-start"
+      )}
+    >
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <span className="rounded-full px-1.5 py-1 tabular-nums">
+            {formatTokenCount(totalTokens)} tokens
+          </span>
+        </TooltipTrigger>
+        <TooltipContent side="top">
+          {formatTokenUsage(metadata)}
+        </TooltipContent>
+      </Tooltip>
+    </div>
+  );
+};
+
+const formatTokenUsage = (metadata?: ThreadMessageMetadata) => {
+  const inputTokens = metadata?.inputTokens ?? 0;
+  const outputTokens = metadata?.outputTokens ?? 0;
+
+  return `${formatTokenCount(inputTokens)} input + ${formatTokenCount(
+    outputTokens
+  )} output tokens`;
+};
+
+const formatTokenCount = (tokenCount: number) => {
+  if (tokenCount >= 1_000) {
+    return `${Math.round(tokenCount / 1_000)}K`;
+  }
+
+  return tokenCount.toString();
+};
 
 const userMessageStyle = (message: ThreadMessage) => {
   const content = getMessageContent(message);
