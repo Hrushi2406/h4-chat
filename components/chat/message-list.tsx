@@ -4,7 +4,7 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import remarkToc from "remark-toc";
 import rehypeRaw from "rehype-raw";
-import { useRef, useEffect } from "react";
+import { useRef, useEffect, useState } from "react";
 import { motion } from "framer-motion";
 import { TextShimmer } from "@/components/ui/text-shimmer";
 import clsx from "clsx";
@@ -15,7 +15,7 @@ import {
   ThreadMessage,
   ThreadMessageMetadata,
 } from "@/lib/types/thread";
-import { FileText } from "lucide-react";
+import { FileText, ChevronDown, ChevronRight, Sparkles, ListTree } from "lucide-react";
 import CodeBlock from "./code-block";
 import {
   Tooltip,
@@ -99,15 +99,24 @@ export const MessageList = ({
                 >
                   {message.role === "assistant" ? (
                     <>
+                      {(() => {
+                        const reasoningPart = message.parts?.find(
+                          (p: any) => p.type === "reasoning"
+                        ) as any;
+                        if (!reasoningPart) return null;
+                        return (
+                          <ReasoningBlock
+                            text={reasoningPart.text}
+                            isStreaming={
+                              isLastAssistantMessage &&
+                              (status === "streaming" ||
+                                status === "submitted")
+                            }
+                          />
+                        );
+                      })()}
                       {message.parts?.map((part: any, index) => {
-                        if (part.type === "reasoning") {
-                          return (
-                            <div key={index}>
-                              <p>Reasoning:</p>
-                              <p>{part.text}</p>
-                            </div>
-                          );
-                        }
+                        if (part.type === "reasoning") return null;
 
                         if (
                           part.type === "dynamic-tool" ||
@@ -380,6 +389,54 @@ export const MessageList = ({
         {/* Invisible element to scroll to */}
         <div ref={messagesEndRef} className="h-1" />
       </div>
+    </div>
+  );
+};
+
+const ReasoningBlock = ({
+  text,
+  isStreaming,
+}: {
+  text: string;
+  isStreaming: boolean;
+}) => {
+  const [open, setOpen] = useState(false);
+
+  const doneLabel = open ? "Hide reasoning" : "View reasoning";
+
+  if (isStreaming) {
+    return (
+      <div className="mb-3">
+        <TextShimmer
+          className="text-sm md:text-base leading-loose [--base-color:theme(colors.blue.600)] [--base-gradient-color:theme(colors.blue.200)] dark:[--base-color:theme(colors.blue.700)] dark:[--base-gradient-color:theme(colors.blue.400)]"
+          duration={1.5}
+          spread={1.5}
+        >
+          Thinking...
+        </TextShimmer>
+      </div>
+    );
+  }
+
+  return (
+    <div className="mb-3 flex flex-col items-start gap-2">
+      <button
+        onClick={() => setOpen((o) => !o)}
+        className="inline-flex items-center gap-2 rounded-full border border-border/60 bg-muted/40 px-3 py-1.5 text-sm text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors whitespace-nowrap"
+      >
+        <ListTree className="w-4 h-4 shrink-0" />
+        <span>{doneLabel}</span>
+        {open ? (
+          <ChevronDown className="w-4 h-4" />
+        ) : (
+          <ChevronRight className="w-4 h-4" />
+        )}
+      </button>
+      {open && (
+        <div className="rounded-2xl border border-border/60 bg-muted/20 px-4 py-3 text-xs text-muted-foreground whitespace-pre-wrap leading-relaxed max-w-prose">
+          {text}
+        </div>
+      )}
     </div>
   );
 };
