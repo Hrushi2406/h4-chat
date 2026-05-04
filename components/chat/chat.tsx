@@ -19,6 +19,7 @@ import { useAuth } from "@/lib/hooks/auth/use-auth";
 import { ChatRequestOptions, DefaultChatTransport } from "ai";
 import { useUser } from "@/lib/hooks/user/use-user";
 import chatService from "@/lib/services/chat-service";
+import { auth } from "@/lib/clients/firebase";
 
 interface ChatProps {
   threadId: string;
@@ -111,9 +112,11 @@ export function Chat({ threadId, isNew = false }: ChatProps) {
         console.error("Failed to save user message:", error);
       }
     );
-    sendMessage({ text: suggestion }, getChatRequestOptions()).catch((error) => {
-      console.error("Failed to send message:", error);
-    });
+    sendMessage({ text: suggestion }, await getChatRequestOptions()).catch(
+      (error) => {
+        console.error("Failed to send message:", error);
+      }
+    );
   };
 
   const enqueueThreadWrite = (write: () => Promise<void>) => {
@@ -201,17 +204,18 @@ export function Chat({ threadId, isNew = false }: ChatProps) {
         text: submittedInput,
         files: attachmentsToFileParts(submittedAttachments),
       },
-      getChatRequestOptions()
+      await getChatRequestOptions()
     ).catch((error) => {
       console.error("Failed to send message:", error);
     });
   };
 
-  function getChatRequestOptions(): ChatRequestOptions {
+  async function getChatRequestOptions(): Promise<ChatRequestOptions> {
     return {
       body: {
         modelId: selectedModel.id,
         searchEnabled: searchEnabled,
+        authToken: await auth.currentUser?.getIdToken(),
         userInfo: {
           name: user?.name,
           occupation: user?.occupation,

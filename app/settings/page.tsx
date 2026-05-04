@@ -4,12 +4,15 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import {
-  Check,
+  CalendarDays,
   ChevronLeft,
-  Circle,
-  Diamond,
+  FileText,
+  HardDrive,
+  Inbox,
+  ListTodo,
   Loader2,
-  Pentagon,
+  PlugZap,
+  RefreshCw,
   Save,
 } from "lucide-react";
 import Link from "next/link";
@@ -20,8 +23,22 @@ import { useUser } from "@/lib/hooks/user/use-user";
 import { useUserActions } from "@/lib/hooks/user/use-user-actions";
 import { Textarea } from "@/components/ui/textarea";
 import { Progress } from "@/components/ui/progress";
+import { Badge } from "@/components/ui/badge";
+import { cn } from "@/lib/utils";
+import { toast } from "sonner";
+import { useAuth } from "@/lib/hooks/auth/use-auth";
+import { auth } from "@/lib/clients/firebase";
 
 export default function SettingsPage() {
+  const [activeTab, setActiveTab] = React.useState("account");
+
+  React.useEffect(() => {
+    const tab = new URLSearchParams(window.location.search).get("tab");
+    if (tab === "connections") {
+      setActiveTab("connections");
+    }
+  }, []);
+
   return (
     <div className="container py-6 max-w-4xl mx-auto">
       <div className="flex justify-between items-center mb-6">
@@ -38,10 +55,11 @@ export default function SettingsPage() {
         <div className="flex-1"></div>
       </div>
 
-      <Tabs defaultValue="account" className="w-full ">
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full ">
         <TabsList className="bg-white mb-1">
           <TabsTrigger value="account">Account</TabsTrigger>
           <TabsTrigger value="customization">Customization</TabsTrigger>
+          <TabsTrigger value="connections">Connections</TabsTrigger>
         </TabsList>
         <TabsContent value="account">
           <Card>
@@ -54,6 +72,13 @@ export default function SettingsPage() {
           <Card>
             <CardContent className="">
               <CustomizationSettings />
+            </CardContent>
+          </Card>
+        </TabsContent>
+        <TabsContent value="connections">
+          <Card>
+            <CardContent className="">
+              <ConnectionsSettings />
             </CardContent>
           </Card>
         </TabsContent>
@@ -236,6 +261,241 @@ const CustomizationSettings = () => {
           </Button>
         </div>
       </form>
+    </div>
+  );
+};
+
+type ConnectionToolkit = {
+  slug: string;
+  name: string;
+  providerName: string;
+  logo?: string;
+  isConnected: boolean;
+  connectedAccountId?: string;
+  status?: string;
+};
+
+const toolkitIcons: Record<string, React.ElementType> = {
+  gmail: Inbox,
+  googlecalendar: CalendarDays,
+  googledrive: HardDrive,
+  notion: FileText,
+  linear: ListTodo,
+};
+
+const ConnectionsSettings = () => {
+  const { uid } = useAuth();
+  const [toolkits, setToolkits] = React.useState<ConnectionToolkit[]>([]);
+  const [isLoading, setIsLoading] = React.useState(true);
+  const [pendingSlug, setPendingSlug] = React.useState<string>();
+  const [error, setError] = React.useState<string>();
+
+  const fetchConnections = React.useCallback(async () => {
+    if (!uid) return;
+
+    setIsLoading(true);
+    setError(undefined);
+
+    try {
+      const authToken = await auth.currentUser?.getIdToken();
+      const response = await fetch("/api/connections", {
+        cache: "no-store",
+        headers: authToken
+          ? {
+              Authorization: `Bearer ${authToken}`,
+            }
+          : undefined,
+      });
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || "Unable to load connections");
+      }
+
+      setToolkits(data.toolkits ?? []);
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Unable to load connections";
+      setError(message);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [uid]);
+
+  React.useEffect(() => {
+    fetchConnections();
+  }, [fetchConnections]);
+
+  const connect = async (toolkit: string) => {
+    if (!uid) return;
+
+    setPendingSlug(toolkit);
+
+    try {
+      const authToken = await auth.currentUser?.getIdToken();
+      const response = await fetch("/api/connections", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ authToken, toolkit }),
+      });
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || "Unable to start connection");
+      }
+
+      window.location.href = data.redirectUrl;
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Unable to start connection";
+      toast.error(message);
+      setPendingSlug(undefined);
+    }
+  };
+
+  const disconnect = async (toolkit: ConnectionToolkit) => {
+    if (!toolkit.connectedAccountId) return;
+
+    setPendingSlug(toolkit.slug);
+
+    try {
+      const authToken = await auth.currentUser?.getIdToken();
+      const response = await fetch("/api/connections/disconnect", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          authToken,
+          connectedAccountId: toolkit.connectedAccountId,
+        }),
+      });
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || "Unable to disconnect app");
+      }
+
+      toast.success(`${toolkit.name} disconnected`);
+      await fetchConnections();
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Unable to disconnect app";
+      toast.error(message);
+    } finally {
+      setPendingSlug(undefined);
+    }
+  };
+
+  return (
+    <div className="space-y-5">
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h2 className="text-xl font-semibold">App Connections</h2>
+          <p className="text-sm text-muted-foreground">
+            Connect apps so chat can handle daily work across your workspace.
+          </p>
+        </div>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={fetchConnections}
+          disabled={isLoading || !uid}
+        >
+          <RefreshCw
+            className={cn("w-4 h-4", isLoading && "animate-spin")}
+          />
+          Refresh
+        </Button>
+      </div>
+
+      {error && (
+        <div className="rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive">
+          {error === "Composio is not configured"
+            ? "Add COMPOSIO_API_KEY to your environment to enable app connections."
+            : error}
+        </div>
+      )}
+
+      <div className="grid gap-3 sm:grid-cols-2">
+        {isLoading
+          ? Array.from({ length: 5 }).map((_, index) => (
+              <div
+                key={index}
+                className="h-24 animate-pulse rounded-md border bg-muted/30"
+              />
+            ))
+          : toolkits.map((toolkit) => {
+              const Icon = toolkitIcons[toolkit.slug] ?? PlugZap;
+              const isPending = pendingSlug === toolkit.slug;
+
+              return (
+                <div
+                  key={toolkit.slug}
+                  className="flex items-center justify-between gap-3 rounded-md border p-3"
+                >
+                  <div className="flex min-w-0 items-center gap-3">
+                    <div className="grid h-10 w-10 shrink-0 place-items-center rounded-md border bg-background">
+                      {toolkit.logo ? (
+                        <img
+                          src={toolkit.logo}
+                          alt=""
+                          className="h-6 w-6 rounded-sm object-contain"
+                        />
+                      ) : (
+                        <Icon className="h-5 w-5 text-muted-foreground" />
+                      )}
+                    </div>
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2">
+                        <p className="truncate font-medium">{toolkit.name}</p>
+                        {toolkit.isConnected && (
+                          <Badge
+                            variant="outline"
+                            className="px-2 py-0 text-xs text-emerald-700"
+                          >
+                            Connected
+                          </Badge>
+                        )}
+                      </div>
+                      <p className="truncate text-xs text-muted-foreground">
+                        {toolkit.providerName}
+                        {toolkit.status ? ` / ${toolkit.status}` : ""}
+                      </p>
+                    </div>
+                  </div>
+
+                  {toolkit.isConnected ? (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => disconnect(toolkit)}
+                      disabled={Boolean(pendingSlug)}
+                    >
+                      {isPending ? (
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                      ) : (
+                        "Disconnect"
+                      )}
+                    </Button>
+                  ) : (
+                    <Button
+                      type="button"
+                      size="sm"
+                      onClick={() => connect(toolkit.slug)}
+                      disabled={Boolean(pendingSlug)}
+                    >
+                      {isPending ? (
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                      ) : (
+                        "Connect"
+                      )}
+                    </Button>
+                  )}
+                </div>
+              );
+            })}
+      </div>
     </div>
   );
 };

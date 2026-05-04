@@ -1,7 +1,14 @@
-import { convertToModelMessages, stepCountIs, streamText } from "ai";
+import {
+  convertToModelMessages,
+  stepCountIs,
+  streamText,
+  type ToolSet,
+} from "ai";
 import { Geo, geolocation } from "@vercel/functions";
 import { z } from "zod";
 import { getModelById } from "@/lib/available-models";
+import { createComposioSession, isComposioConfigured } from "@/lib/composio";
+import { verifyFirebaseIdToken } from "@/lib/firebase-auth-server";
 
 export async function POST(req: Request) {
   const {
@@ -9,6 +16,7 @@ export async function POST(req: Request) {
     modelId = "openai/gpt-5.4-mini",
     searchEnabled = false,
     userInfo,
+    authToken,
   } = await req.json();
 
   const geo = geolocation(req);
@@ -20,7 +28,14 @@ export async function POST(req: Request) {
 
   console.log("using model: ", model.id);
 
-  const systemPrompt = getSystemPrompt(geo, searchEnabled, userInfo);
+  const verifiedUserId = await verifyFirebaseIdToken(authToken);
+  const composioTools = await getComposioTools(verifiedUserId);
+  const systemPrompt = getSystemPrompt(
+    geo,
+    searchEnabled,
+    Boolean(composioTools),
+    userInfo
+  );
 
   const result = streamText({
     model: model.id,
@@ -32,6 +47,7 @@ export async function POST(req: Request) {
     },
 
     tools: {
+      ...composioTools,
       webSearch: {
         description: `Search the web for current information, facts, recent events, or detailed explanations.
     
@@ -70,6 +86,7 @@ About the origin of user's request:
 const getSystemPrompt = (
   geo: Geo,
   searchEnabled: boolean,
+  composioEnabled: boolean,
   userInfo: Partial<IUser>
 ) => {
   const requestHints = getRequestPromptFromHints(geo);
@@ -85,6 +102,10 @@ const getSystemPrompt = (
       searchEnabled &&
       `Use the webSearch tool for any information that requires current data. You MUST use this tool when answering questions about recent events, facts, or information that might not be in your training data.`
     }
+    - ${
+      composioEnabled &&
+      `You can use connected-app tools through Composio for email, calendar, drive, Notion, and Linear tasks. If a required app is not connected, use the Composio connection-management tool to ask the user to authorize it, then continue once they confirm. Ask before taking irreversible actions such as sending email, deleting files, or creating/updating external records unless the user already gave explicit instructions.`
+    }
 
     ${name && `User's name is ${name}`}
     ${occupation && `User's occupation is ${occupation}`}
@@ -97,6 +118,20 @@ const getSystemPrompt = (
     ${requestHints}
     `;
 };
+
+async function getComposioTools(userId?: string): Promise<ToolSet | undefined> {
+  if (!userId || !isComposioConfigured()) {
+    return undefined;
+  }
+
+  try {
+    const session = await createComposioSession(userId);
+    return session.tools();
+  } catch (error) {
+    console.error("Failed to load Composio tools:", error);
+    return undefined;
+  }
+}
 
 // Google Custom Search API integration
 import axios from "axios";

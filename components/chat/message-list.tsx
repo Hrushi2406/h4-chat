@@ -167,14 +167,29 @@ export const MessageList = ({
                                   remarkPlugins={[remarkGfm, remarkToc]}
                                   rehypePlugins={[rehypeRaw]}
                                   components={{
-                                    code: ({ children, className }) => (
-                                      <CodeBlock
-                                        value={children as string}
-                                        language={
-                                          className?.split("-")[1] || "js"
-                                        }
-                                      />
-                                    ),
+                                    code: ({ children, className }) => {
+                                      const match = /language-(\w+)/.exec(
+                                        className || ""
+                                      );
+
+                                      if (!match) {
+                                        return (
+                                          <code className={className}>
+                                            {children}
+                                          </code>
+                                        );
+                                      }
+
+                                      return (
+                                        <CodeBlock
+                                          value={String(children).replace(
+                                            /\n$/,
+                                            ""
+                                          )}
+                                          language={match[1]}
+                                        />
+                                      );
+                                    },
                                     pre: ({ children }) => (
                                       <div className="bg-secondary p-2 rounded-lg">
                                         {children}

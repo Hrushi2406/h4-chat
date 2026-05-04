@@ -10,6 +10,8 @@
   },
   "dependencies": {
     "@ai-sdk/react": "^3.0.174",
+    "@composio/core": "^0.8.1",
+    "@composio/vercel": "^0.8.1",
     "@headlessui/react": "^2.2.10",
     "@hookform/resolvers": "^5.2.2",
     "@radix-ui/react-accordion": "^1.2.12",
