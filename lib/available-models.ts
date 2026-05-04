@@ -28,6 +28,7 @@ export const availableModels: AIModel[] = [
     description: "Fast OpenAI model for everyday chat and coding",
     provider: "openai",
     maxTokens: 400000,
+    isDefault: true,
   },
   {
     id: "openai/gpt-5.4-nano",

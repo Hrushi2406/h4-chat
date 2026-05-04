@@ -13,7 +13,7 @@ import { verifyFirebaseIdToken } from "@/lib/firebase-auth-server";
 export async function POST(req: Request) {
   const {
     messages,
-    modelId = "deepseek/deepseek-v4-flash",
+    modelId = "openai/gpt-5.4-mini",
     searchEnabled = false,
     userInfo,
     authToken,
@@ -45,7 +45,7 @@ export async function POST(req: Request) {
     model: model.id,
     system: systemPrompt,
     messages: await convertToModelMessages(messages.slice(-10)),
-    stopWhen: stepCountIs(5),
+    stopWhen: stepCountIs(10),
     onError: (error) => {
       console.log("error: ", error);
     },
