@@ -13,7 +13,7 @@ import { verifyFirebaseIdToken } from "@/lib/firebase-auth-server";
 export async function POST(req: Request) {
   const {
     messages,
-    modelId = "openai/gpt-5.4-mini",
+    modelId = "deepseek/deepseek-v4-flash",
     searchEnabled = false,
     userInfo,
     authToken,
