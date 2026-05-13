@@ -185,7 +185,7 @@ export const MessageList = ({
                           return (
                             <div key={index}>
                               <div
-                                className="text-sm md:text-base prose prose-sm md:prose-base max-w-none leading-loose "
+                                className="text-sm md:text-base prose prose-sm prose-neutral md:prose-base max-w-none leading-loose prose-headings:text-foreground prose-p:text-[#364153] prose-strong:text-foreground prose-li:text-[#364153] prose-th:text-[#364153] prose-td:text-[#364153] prose-a:text-primary prose-code:text-foreground prose-pre:bg-secondary dark:prose-invert dark:prose-p:text-[#d1d5dc] dark:prose-li:text-[#d1d5dc] dark:prose-th:text-[#d1d5dc] dark:prose-td:text-[#d1d5dc]"
                                 key={index}
                               >
                                 <ReactMarkdown

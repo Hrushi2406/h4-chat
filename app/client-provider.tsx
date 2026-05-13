@@ -1,7 +1,8 @@
 "use client";
 
 import { QueryClientProvider, useQueryClient } from "@tanstack/react-query";
-import { Toaster } from "sonner";
+import { ThemeProvider } from "next-themes";
+import { Toaster } from "@/components/ui/sonner";
 import { queryClient } from "@/lib/clients/query-client";
 import { useAuth } from "@/lib/hooks/auth/use-auth";
 import AuthDialog from "@/components/auth/auth-dialog";
@@ -17,8 +18,10 @@ interface ClientProviderProps {
 export const ClientProvider = ({ children }: ClientProviderProps) => {
   return (
     <QueryClientProvider client={queryClient}>
-      <AuthProvider>{children}</AuthProvider>
-      <Toaster richColors />
+      <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
+        <AuthProvider>{children}</AuthProvider>
+        <Toaster richColors />
+      </ThemeProvider>
     </QueryClientProvider>
   );
 };

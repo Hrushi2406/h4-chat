@@ -4,6 +4,7 @@ import { SidebarTrigger } from "./sidebar";
 import { useThreadActions } from "@/lib/hooks/thread/use-thread-actions";
 import { usePathname, useRouter } from "next/navigation";
 import Link from "next/link";
+import { ThemeToggle } from "@/components/theme-toggle";
 
 export default function Navbar() {
   const { shareThread } = useThreadActions();
@@ -22,6 +23,7 @@ export default function Navbar() {
       <div className="flex items-center justify-between flex-1">
         <h1 className="text-lg font-semibold">Saaki AI</h1>
         <div className="flex items-center gap-2">
+          <ThemeToggle />
           <Button
             variant="secondary"
             size="sm"

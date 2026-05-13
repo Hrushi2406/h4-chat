@@ -29,9 +29,11 @@ export const useThreads = () => {
 };
 
 export const useThread = (threadId: string, isNew?: boolean) => {
+  const { uid } = useAuth();
+
   return useQuery({
     queryKey: threadKeys.detail(threadId),
-    queryFn: () => threadService.getThread({ threadId }),
-    enabled: !!threadId && !isNew,
+    queryFn: () => threadService.getThread({ threadId, userId: uid }),
+    enabled: !!threadId && !!uid && !isNew,
   });
 };

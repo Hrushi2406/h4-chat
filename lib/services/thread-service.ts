@@ -127,17 +127,20 @@ class ThreadService {
   // Get a single thread by ID
   async getThread({
     threadId,
+    userId,
   }: {
     threadId: string;
-  }): Promise<Thread | undefined> {
+    userId?: string;
+  }): Promise<Thread | null> {
     try {
       console.log("Fetching thread: ", threadId);
-      const uid = auth.currentUser?.uid;
+      const uid = userId ?? auth.currentUser?.uid;
       const docRef = doc(db, colThreads, threadId);
       const docSnap = await getDoc(docRef);
 
       if (!docSnap.exists()) {
-        return;
+        console.warn("Thread not found:", { threadId });
+        return null;
       }
 
       const data = docSnap.data() as Thread;
@@ -145,7 +148,7 @@ class ThreadService {
       if (data.userId !== uid) {
         console.warn("Unauthorized access to thread:", { threadId });
         window.location.href = "/";
-        return;
+        return null;
       }
 
       console.log("Thread retrieved successfully:", { threadId });

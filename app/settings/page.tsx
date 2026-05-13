@@ -60,7 +60,7 @@ export default function SettingsPage() {
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full ">
-        <TabsList className="bg-white mb-1">
+        <TabsList className="mb-1">
           <TabsTrigger value="account">Account</TabsTrigger>
           <TabsTrigger value="customization">Customization</TabsTrigger>
           <TabsTrigger value="connections">Connections</TabsTrigger>

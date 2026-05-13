@@ -199,7 +199,7 @@ export const ChatInput = ({
                       className={clsx(
                         "rounded-full px-3 text-muted-foreground brder transition-all hover:bg-auto",
                         searchEnabled &&
-                          "bg-blue-50 border-blue-200 text-blue-600 hover:bg-blue-100 hover:text-blue-600"
+                          "bg-blue-50 border-blue-200 text-blue-600 hover:bg-blue-100 hover:text-blue-600 dark:bg-blue-950/50 dark:border-blue-800 dark:text-blue-300 dark:hover:bg-blue-950 dark:hover:text-blue-200"
                       )}
                       aria-label="Toggle web search"
                       tabIndex={0}
@@ -237,7 +237,7 @@ export const ChatInput = ({
                         )}
                       >
                         {isLoading ? (
-                          <Square className="h-10 w-10 animate-[spin_2s_linear_infinite] fill-black" />
+                          <Square className="h-10 w-10 animate-[spin_2s_linear_infinite] fill-current" />
                         ) : (
                           <ArrowUp className="h-3 w-3" />
                         )}
@@ -254,8 +254,16 @@ export const ChatInput = ({
   );
 };
 
-const formatTokenCount = (tokenCount: number) => {
+const formatTokenCount = (
+  tokenCount: number,
+  { precision = false }: { precision?: boolean } = {}
+) => {
   if (tokenCount >= 1_000) {
+    if (precision) {
+      const value = tokenCount / 1_000;
+      return `${Number.isInteger(value) ? value : value.toFixed(1)}K`;
+    }
+
     return `${Math.round(tokenCount / 1_000)}K`;
   }
 
@@ -277,6 +285,9 @@ const ContextWindowIndicator = ({
   const strokeDashoffset = circumference * (1 - percent);
   const isNearLimit = percent >= 0.8;
   const isFull = tokenCount >= CONTEXT_WINDOW_TOKENS;
+  const displayedTokenCount = formatTokenCount(clampedTokenCount, {
+    precision: true,
+  });
 
   return (
     <Tooltip>
@@ -284,16 +295,15 @@ const ContextWindowIndicator = ({
         <div
           className={cn(
             "flex h-8 items-center gap-1.5 rounded-full border bg-background px-2 text-[11px] font-medium text-muted-foreground shadow-xs",
-            isNearLimit && "border-amber-200 text-amber-700"
+            isNearLimit &&
+              "border-amber-300 bg-amber-50 text-amber-700 dark:border-amber-500/70 dark:bg-amber-950/30 dark:text-amber-300"
           )}
           role="progressbar"
           tabIndex={0}
           aria-valuemin={0}
           aria-valuemax={CONTEXT_WINDOW_TOKENS}
           aria-valuenow={clampedTokenCount}
-          aria-label={`${formatTokenCount(
-            clampedTokenCount
-          )} of 200K chat tokens used`}
+          aria-label={`${displayedTokenCount} of 200K chat tokens used`}
         >
           <svg
             className="h-5 w-5 -rotate-90"
@@ -326,20 +336,22 @@ const ContextWindowIndicator = ({
             />
           </svg>
           <span className="tabular-nums">
-            {formatTokenCount(clampedTokenCount)}/200K
+            {displayedTokenCount}/200K
           </span>
         </div>
       </TooltipTrigger>
       <TooltipContent side="top" className="space-y-1 text-center">
         <div className="font-medium">
-          {formatTokenCount(clampedTokenCount)}/200K
+          {displayedTokenCount}/200K
         </div>
         <div>
           {isFull
             ? "Chat token usage is at 200K"
-            : `${formatTokenCount(inputTokens)} input + ${formatTokenCount(
-                outputTokens
-              )} output tokens`}
+            : `${formatTokenCount(inputTokens, {
+                precision: true,
+              })} input + ${formatTokenCount(outputTokens, {
+                precision: true,
+              })} output tokens`}
         </div>
       </TooltipContent>
     </Tooltip>
