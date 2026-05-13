@@ -98,7 +98,7 @@ export const getMessageContent = (message: UIMessage | ThreadMessage) => {
     return message.content;
   }
 
-  return message.parts
+  return getArrayLikeParts(message.parts)
     .filter((part) => part.type === "text")
     .map((part) => part.text)
     .join("");
@@ -114,7 +114,7 @@ export const getMessageAttachments = (
     return message.experimental_attachments;
   }
 
-  return message.parts
+  return getArrayLikeParts(message.parts)
     .filter((part): part is FileUIPart => part.type === "file")
     .map((part) => ({
       name: part.filename,
@@ -127,18 +127,19 @@ export const normalizeThreadMessage = (
   message: UIMessage | Partial<ThreadMessage>
 ): ThreadMessage => {
   const storedMessage = message as Partial<ThreadMessage>;
+  const parts = "parts" in message ? getArrayLikeParts(message.parts) : [];
   const content =
     "content" in message && typeof message.content === "string"
       ? message.content
-      : "parts" in message && Array.isArray(message.parts)
-      ? getMessageContent(message as UIMessage)
+      : parts.length > 0
+      ? getMessageContent({ ...message, parts } as UIMessage)
       : "";
   const attachments =
     "experimental_attachments" in message &&
-    Array.isArray(message.experimental_attachments)
-      ? message.experimental_attachments
-      : "parts" in message && Array.isArray(message.parts)
-      ? getMessageAttachments(message as UIMessage)
+    getArrayLike(message.experimental_attachments).length > 0
+      ? getArrayLike<Attachment>(message.experimental_attachments)
+      : parts.length > 0
+      ? getMessageAttachments({ ...message, parts } as UIMessage)
       : [];
 
   return {
@@ -146,17 +147,75 @@ export const normalizeThreadMessage = (
     role: message.role ?? "assistant",
     content,
     parts:
-      "parts" in message && Array.isArray(message.parts)
-        ? message.parts
-        : [
-            { type: "text", text: content },
-            ...attachmentsToFileParts(attachments),
-          ],
+      parts.length > 0
+        ? parts
+        : [{ type: "text", text: content }, ...attachmentsToFileParts(attachments)],
     createdAt: storedMessage.createdAt,
     updatedAt: storedMessage.updatedAt ?? new Date().toISOString(),
     experimental_attachments: attachments,
     metadata: storedMessage.metadata,
   };
+};
+
+export const serializeThreadMessageForFirestore = (
+  message: ThreadMessage
+): ThreadMessage => sanitizeFirestoreValue(normalizeThreadMessage(message), true);
+
+const sanitizeFirestoreValue = <T,>(value: T, insideArray = false): T => {
+  if (value === undefined) {
+    return undefined as T;
+  }
+
+  if (value === null || value instanceof Date) {
+    return value;
+  }
+
+  if (Array.isArray(value)) {
+    const sanitizedItems = value
+      .filter((item) => item !== undefined)
+      .map((item) => sanitizeFirestoreValue(item, true));
+
+    if (insideArray) {
+      return Object.fromEntries(
+        sanitizedItems.map((item, index) => [String(index), item])
+      ) as T;
+    }
+
+    return sanitizedItems as T;
+  }
+
+  if (typeof value === "object") {
+    return Object.fromEntries(
+      Object.entries(value as Record<string, unknown>)
+        .filter(([, item]) => item !== undefined)
+        .map(([key, item]) => [key, sanitizeFirestoreValue(item, insideArray)])
+    ) as T;
+  }
+
+  return value;
+};
+
+const getArrayLikeParts = (value: unknown): UIMessage["parts"] =>
+  getArrayLike<UIMessage["parts"][number]>(value);
+
+const getArrayLike = <T,>(value: unknown): T[] => {
+  if (Array.isArray(value)) {
+    return value as T[];
+  }
+
+  if (!value || typeof value !== "object") {
+    return [];
+  }
+
+  const entries = Object.entries(value as Record<string, T>);
+
+  if (!entries.every(([key]) => /^\d+$/.test(key))) {
+    return [];
+  }
+
+  return entries
+    .sort(([a], [b]) => Number(a) - Number(b))
+    .map(([, item]) => item);
 };
 
 // Time period types for thread grouping

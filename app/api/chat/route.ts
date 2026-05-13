@@ -9,6 +9,11 @@ import { z } from "zod";
 import { getModelById } from "@/lib/available-models";
 import { createComposioSession, isComposioConfigured } from "@/lib/composio";
 import { verifyFirebaseIdToken } from "@/lib/firebase-auth-server";
+import {
+  COMPOSIO_META_TOOLS,
+  COMPOSIO_TOOLKIT_EXAMPLES,
+  COMPOSIO_TOOL_NAME_PATTERN,
+} from "@/lib/types/composio-tool-slugs";
 
 export async function POST(req: Request) {
   const {
@@ -122,7 +127,11 @@ const getSystemPrompt = (
     }
     - ${
       composioEnabled &&
-      `You can use connected-app tools through Composio for email, calendar, drive, Notion, and Linear tasks. Search for the required app functionality before using app tools. If a required app is not connected, use the Composio connection-management tool to ask the user to authorize it, provide the Connect Link in chat, then continue once they confirm. Ask before taking irreversible actions such as sending email, deleting files, or creating/updating external records unless the user already gave explicit instructions.`
+      `You can use connected-app tools through Composio for email, calendar, drive, Notion, and Linear tasks.
+      Composio tool names are canonical uppercase slugs using the ${COMPOSIO_TOOL_NAME_PATTERN} pattern, for example ${COMPOSIO_TOOLKIT_EXAMPLES.join(", ")}. Do not invent Composio tool names.
+      For discovery, call ${COMPOSIO_META_TOOLS.SEARCH_TOOLS} first. Use returned tool slugs as-is. If you need exact input fields, call ${COMPOSIO_META_TOOLS.GET_TOOL_SCHEMAS} with tool_slugs from search results.
+      For authorization or connection status, call ${COMPOSIO_META_TOOLS.MANAGE_CONNECTIONS} with valid toolkit slugs such as gmail, googlecalendar, googledrive, notion, or linear, then provide the Connect Link in chat and continue once the user confirms.
+      Execute selected app actions with ${COMPOSIO_META_TOOLS.MULTI_EXECUTE_TOOL} when actions are independent. Ask before taking irreversible actions such as sending email, deleting files, or creating/updating external records unless the user already gave explicit instructions.`
     }
 
     ${name && `User's name is ${name}`}

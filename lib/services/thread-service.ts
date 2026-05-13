@@ -18,6 +18,7 @@ import {
   ThreadMessage,
   generateDefaultThread,
   getMessageContent,
+  serializeThreadMessageForFirestore,
 } from "@/lib/types/thread";
 import { v4 } from "uuid";
 
@@ -79,7 +80,9 @@ class ThreadService {
         ...initialMessage,
         updatedAt: new Date().toISOString(),
       };
-      threadData.messages = [messageWithTimestamp];
+      threadData.messages = [
+        serializeThreadMessageForFirestore(messageWithTimestamp),
+      ];
       threadData.messageCount = 1;
       threadData.lastMessagePreview = getMessageContent(
         initialMessage
@@ -224,7 +227,10 @@ class ThreadService {
         updatedAt: new Date().toISOString(),
       };
 
-      const updatedMessages = [...currentMessages, messageWithTimestamp];
+      const updatedMessages = [
+        ...currentMessages.map(serializeThreadMessageForFirestore),
+        serializeThreadMessageForFirestore(messageWithTimestamp),
+      ];
 
       await updateDoc(
         docRef,

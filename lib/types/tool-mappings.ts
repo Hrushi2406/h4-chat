@@ -9,14 +9,13 @@ import {
   PlugZap,
   Sun,
 } from "lucide-react";
+import { COMPOSIO_META_TOOLS } from "@/lib/types/composio-tool-slugs";
 
 type ToolDisplay = {
   displayName: string;
   Icon: any;
   tooltip: string;
 };
-
-type AppName = "Email" | "Calendar" | "Drive" | "Notion" | "Linear" | "Apps";
 
 export const toolDisplayNames: Record<
   string,
@@ -38,51 +37,51 @@ export type ToolName = keyof typeof toolDisplayNames;
 
 const composioToolDisplay: Array<{
   match: (context: string) => boolean;
-  appName: AppName;
+  appSlug: string;
   fallbackLoading: string;
   fallbackDone: string;
   Icon: any;
 }> = [
   {
     match: (context) => includesAny(context, ["GMAIL", "EMAIL", "MAIL"]),
-    appName: "Email",
-    fallbackLoading: "Working with email",
-    fallbackDone: "Used email",
+    appSlug: "gmail",
+    fallbackLoading: "Working with Gmail",
+    fallbackDone: "Used Gmail",
     Icon: Inbox,
   },
   {
     match: (context) => includesAny(context, ["GOOGLECALENDAR", "CALENDAR"]),
-    appName: "Calendar",
-    fallbackLoading: "Working with calendar",
-    fallbackDone: "Used calendar",
+    appSlug: "googlecalendar",
+    fallbackLoading: "Working with Googlecalendar",
+    fallbackDone: "Used Googlecalendar",
     Icon: CalendarDays,
   },
   {
     match: (context) => includesAny(context, ["GOOGLEDRIVE", "DRIVE"]),
-    appName: "Drive",
-    fallbackLoading: "Working with drive",
-    fallbackDone: "Used drive",
+    appSlug: "googledrive",
+    fallbackLoading: "Working with Googledrive",
+    fallbackDone: "Used Googledrive",
     Icon: HardDrive,
   },
   {
     match: (context) => includesAny(context, ["NOTION"]),
-    appName: "Notion",
+    appSlug: "notion",
     fallbackLoading: "Working with Notion",
     fallbackDone: "Used Notion",
     Icon: FileText,
   },
   {
     match: (context) => includesAny(context, ["LINEAR"]),
-    appName: "Linear",
+    appSlug: "linear",
     fallbackLoading: "Working with Linear",
     fallbackDone: "Used Linear",
     Icon: ListTodo,
   },
   {
     match: (context) => context.includes("COMPOSIO"),
-    appName: "Apps",
-    fallbackLoading: "Managing app connection",
-    fallbackDone: "Checked app connection",
+    appSlug: "composio",
+    fallbackLoading: "Using Composio",
+    fallbackDone: "Used Composio",
     Icon: PlugZap,
   },
 ];
@@ -94,20 +93,20 @@ export const getToolDisplayName = (
 ): ToolDisplay => {
   const normalizedToolName = toolName.toUpperCase();
   const toolContext = getToolContext(normalizedToolName, toolPart);
-  const appNames = getAppNames(toolContext);
+  const appSlugs = getComposioAppSlugs(normalizedToolName, toolContext);
   const context = [
     normalizedToolName,
     ...toolContext.toolSlugs,
     toolContext.searchText,
     toolContext.raw,
   ].join(" ");
-  const composioTool = getComposioDisplay(appNames, context);
+  const composioTool = getComposioDisplay(appSlugs, context);
 
   if (composioTool) {
     const label = getComposioLabel(
       normalizedToolName,
       toolContext,
-      appNames,
+      appSlugs,
       composioTool,
       isToolCalling(status)
     );
@@ -115,7 +114,7 @@ export const getToolDisplayName = (
     return {
       displayName: label,
       Icon: composioTool.Icon,
-      tooltip: getComposioTooltip(label, toolName, toolContext, appNames),
+      tooltip: getComposioTooltip(label, toolName, toolContext, appSlugs),
     };
   }
 
@@ -212,9 +211,10 @@ const includesAny = (context: string, tokens: string[]) =>
 const getToolContext = (toolName: string, toolPart?: unknown) => {
   const contextParts = [toolName];
   const toolSlugs: string[] = [];
+  const toolkitSlugs: string[] = [];
   const searchParts: string[] = [];
 
-  collectContext(toolPart, contextParts, toolSlugs, searchParts);
+  collectContext(toolPart, contextParts, toolSlugs, toolkitSlugs, searchParts);
 
   return {
     raw: contextParts
@@ -224,6 +224,7 @@ const getToolContext = (toolName: string, toolPart?: unknown) => {
       .trim()
       .toUpperCase(),
     toolSlugs: dedupe(toolSlugs).map(formatToolSlug),
+    toolkitSlugs: dedupe(toolkitSlugs).map(formatToolkitSlug),
     toolSlugContext: dedupe(toolSlugs).join(" ").toUpperCase(),
     searchText: searchParts.join(" ").toUpperCase(),
     searchTexts: dedupe(searchParts.map(cleanTooltipText)).filter(Boolean),
@@ -234,6 +235,7 @@ const collectContext = (
   value: unknown,
   contextParts: string[],
   toolSlugs: string[],
+  toolkitSlugs: string[],
   searchParts: string[],
   depth = 0
 ) => {
@@ -248,7 +250,14 @@ const collectContext = (
 
   if (Array.isArray(value)) {
     value.slice(0, 20).forEach((item) =>
-      collectContext(item, contextParts, toolSlugs, searchParts, depth + 1)
+      collectContext(
+        item,
+        contextParts,
+        toolSlugs,
+        toolkitSlugs,
+        searchParts,
+        depth + 1
+      )
     );
     return;
   }
@@ -264,11 +273,22 @@ const collectContext = (
       extractStrings(item).forEach((slug) => toolSlugs.push(slug));
     }
 
+    if (isToolkitSlugKey(key)) {
+      extractStrings(item).forEach((slug) => toolkitSlugs.push(slug));
+    }
+
     if (isSearchTextKey(key)) {
       extractStrings(item).forEach((text) => searchParts.push(text));
     }
 
-    collectContext(item, contextParts, toolSlugs, searchParts, depth + 1);
+    collectContext(
+      item,
+      contextParts,
+      toolSlugs,
+      toolkitSlugs,
+      searchParts,
+      depth + 1
+    );
   });
 };
 
@@ -279,6 +299,19 @@ const isToolSlugKey = (key: string) =>
     "toolslugs",
     "tool_slugs",
     "primarytoolslugs",
+    "primary_tool_slugs",
+    "relatedtoolslugs",
+    "related_tool_slugs",
+  ].includes(key.toLowerCase());
+
+const isToolkitSlugKey = (key: string) =>
+  [
+    "toolkit",
+    "toolkits",
+    "toolkitslug",
+    "toolkit_slug",
+    "toolkitslugs",
+    "toolkit_slugs",
   ].includes(key.toLowerCase());
 
 const isSearchTextKey = (key: string) =>
@@ -302,34 +335,52 @@ const extractStrings = (value: unknown): string[] => {
   return Object.values(value as Record<string, unknown>).flatMap(extractStrings);
 };
 
-const getAppNames = (context: ReturnType<typeof getToolContext>): AppName[] => {
-  const slugContext = context.toolSlugs.join(" ");
-  const searchContext = context.searchText;
-  const rawContext = context.raw;
-  const appNames: AppName[] = [];
-
-  composioToolDisplay
-    .filter(({ appName }) => appName !== "Apps")
-    .forEach((display) => {
-      if (
-        display.match(slugContext) ||
-        display.match(searchContext) ||
-        display.match(rawContext)
-      ) {
-        appNames.push(display.appName);
-      }
-    });
-
-  return dedupe(appNames);
-};
-
-const getComposioDisplay = (appNames: AppName[], context: string) => {
-  if (appNames.length === 1) {
-    return composioToolDisplay.find(({ appName }) => appName === appNames[0]);
+const getComposioAppSlugs = (
+  toolName: string,
+  context: ReturnType<typeof getToolContext>
+) => {
+  if (
+    toolName === COMPOSIO_META_TOOLS.REMOTE_BASH_TOOL ||
+    toolName === COMPOSIO_META_TOOLS.REMOTE_WORKBENCH
+  ) {
+    return ["sandbox"];
   }
 
-  if (appNames.length > 1) {
-    return composioToolDisplay.find(({ appName }) => appName === "Apps");
+  const slugs = [
+    ...context.toolkitSlugs,
+    ...context.toolSlugs.map(getToolkitSlugFromToolSlug).filter(isString),
+  ];
+
+  if (toolName.startsWith("COMPOSIO_") && slugs.length === 0) {
+    slugs.push("composio");
+  } else {
+    const toolkitFromToolName = getToolkitSlugFromToolSlug(toolName);
+    if (toolkitFromToolName) {
+      slugs.push(toolkitFromToolName);
+    }
+  }
+
+  return dedupe(slugs);
+};
+
+const getComposioDisplay = (appSlugs: string[], context: string) => {
+  const primaryAppSlug = getPrimaryAppSlug(appSlugs);
+
+  if (primaryAppSlug === "sandbox") {
+    return {
+      match: () => true,
+      appSlug: "sandbox",
+      fallbackLoading: "Using Sandbox",
+      fallbackDone: "Used Sandbox",
+      Icon: Hammer,
+    };
+  }
+
+  if (primaryAppSlug) {
+    return (
+      composioToolDisplay.find(({ appSlug }) => appSlug === primaryAppSlug) ??
+      composioToolDisplay.find(({ appSlug }) => appSlug === "composio")
+    );
   }
 
   return composioToolDisplay.find(({ match }) => match(context));
@@ -338,42 +389,53 @@ const getComposioDisplay = (appNames: AppName[], context: string) => {
 const getComposioLabel = (
   toolName: string,
   context: ReturnType<typeof getToolContext>,
-  appNames: AppName[],
+  appSlugs: string[],
   display: (typeof composioToolDisplay)[number],
   calling: boolean
 ) => {
+  const displaySlugs = getDisplayAppSlugs(appSlugs);
   const appLabel =
-    appNames.length === 1
-      ? appNames[0]
-      : appNames.length > 1
-        ? "Apps"
-        : display.appName;
+    displaySlugs.length === 1
+      ? formatAppSlug(displaySlugs[0])
+      : displaySlugs.length > 1
+        ? displaySlugs.map(formatAppSlug).join(", ")
+        : formatAppSlug(display.appSlug);
 
-  if (toolName === "COMPOSIO_SEARCH_TOOLS") {
+  if (toolName === COMPOSIO_META_TOOLS.SEARCH_TOOLS) {
     return `${calling ? "Finding" : "Found"} ${
-      appLabel === "Apps" ? "app tools" : `${appLabel} tools`
+      displaySlugs.length === 0 || displaySlugs.includes("composio")
+        ? "app tools"
+        : `${appLabel} tools`
     }`;
   }
 
-  if (toolName === "COMPOSIO_GET_TOOL_SCHEMAS") {
+  if (toolName === COMPOSIO_META_TOOLS.GET_TOOL_SCHEMAS) {
     return `${calling ? "Loading" : "Loaded"} ${
-      appLabel === "Apps" ? "tool details" : `${appLabel} tool details`
+      displaySlugs.length === 0 || displaySlugs.includes("composio")
+        ? "tool details"
+        : `${appLabel} tool details`
     }`;
   }
 
-  if (toolName === "COMPOSIO_MANAGE_CONNECTIONS") {
+  if (toolName === COMPOSIO_META_TOOLS.MANAGE_CONNECTIONS) {
     const action = getConnectionAction(context.raw);
-    return `${calling ? action.loading : action.done} ${
-      appLabel === "Apps" ? "apps" : appLabel
-    }`;
+    return `${calling ? action.loading : action.done} ${appLabel}`;
   }
 
-  if (toolName === "COMPOSIO_MULTI_EXECUTE_TOOL") {
+  if (toolName === COMPOSIO_META_TOOLS.MULTI_EXECUTE_TOOL) {
     const action = getComposioAction(
       context.toolSlugContext,
       context.searchText
     );
     return `${calling ? action?.loading ?? "Using" : action?.done ?? "Used"} ${appLabel}`;
+  }
+
+  if (toolName === COMPOSIO_META_TOOLS.REMOTE_BASH_TOOL) {
+    return calling ? "Running Sandbox command" : "Ran Sandbox command";
+  }
+
+  if (toolName === COMPOSIO_META_TOOLS.REMOTE_WORKBENCH) {
+    return calling ? "Processing Sandbox data" : "Processed Sandbox data";
   }
 
   const action = getComposioAction(
@@ -414,24 +476,84 @@ const getComposioTooltip = (
   label: string,
   toolName: string,
   context: ReturnType<typeof getToolContext>,
-  appNames: AppName[]
+  appSlugs: string[]
 ) => {
-  const appText = appNames.length > 0 ? appNames.join(", ") : "Composio apps";
+  const displaySlugs = getDisplayAppSlugs(appSlugs);
+  const appText = displaySlugs.length > 0 ? displaySlugs.join(", ") : "composio";
   const searchText =
     context.searchTexts.length > 0
       ? `\nSearched for: ${context.searchTexts.slice(0, 3).join(" / ")}`
+      : "";
+  const toolkitText =
+    context.toolkitSlugs.length > 0
+      ? `\nToolkit: ${context.toolkitSlugs.slice(0, 3).join(", ")}`
       : "";
   const slugText =
     context.toolSlugs.length > 0
       ? `\nTool used: ${context.toolSlugs.slice(0, 3).join(", ")}`
       : "";
 
-  return `${label}\nApp: ${appText}${searchText}${slugText}`;
+  return `${label}\nApp: ${appText}${toolkitText}${searchText}${slugText}`;
 };
 
 const dedupe = <T,>(items: T[]) => Array.from(new Set(items));
+
+const getDisplayAppSlugs = (appSlugs: string[]) => {
+  const nonComposioSlugs = appSlugs.filter((slug) => slug !== "composio");
+  return nonComposioSlugs.length > 0 ? nonComposioSlugs : appSlugs;
+};
+
+const getPrimaryAppSlug = (appSlugs: string[]) =>
+  getDisplayAppSlugs(appSlugs)[0];
+
+const isString = (value: string | undefined): value is string =>
+  typeof value === "string";
 
 const cleanTooltipText = (value: string) =>
   value.replace(/\s+/g, " ").trim();
 
 const formatToolSlug = (value: string) => value.trim().toUpperCase();
+
+const formatToolkitSlug = (value: string) =>
+  value
+    .trim()
+    .replace(/[^a-zA-Z0-9_-]+/g, "")
+    .toLowerCase();
+
+const getToolkitSlugFromToolSlug = (value: string) => {
+  const slug = value.trim().toUpperCase();
+
+  if (!slug || slug.startsWith("COMPOSIO_")) {
+    return undefined;
+  }
+
+  if (slug.startsWith("GOOGLECALENDAR_")) {
+    return "googlecalendar";
+  }
+
+  if (slug.startsWith("GOOGLEDRIVE_")) {
+    return "googledrive";
+  }
+
+  if (slug.startsWith("GOOGLESHEETS_")) {
+    return "googlesheets";
+  }
+
+  if (slug.startsWith("GOOGLEDOCS_")) {
+    return "googledocs";
+  }
+
+  if (slug.startsWith("GOOGLEMEET_")) {
+    return "googlemeet";
+  }
+
+  const [toolkit] = slug.split("_");
+  return toolkit ? toolkit.toLowerCase() : undefined;
+};
+
+const formatAppSlug = (slug: string) =>
+  slug
+    .split(/[_-]/g)
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");

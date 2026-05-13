@@ -21,6 +21,7 @@ import { ChatRequestOptions, DefaultChatTransport } from "ai";
 import { useUser } from "@/lib/hooks/user/use-user";
 import chatService from "@/lib/services/chat-service";
 import { auth } from "@/lib/clients/firebase";
+import { motion, useReducedMotion } from "framer-motion";
 
 interface ChatProps {
   threadId: string;
@@ -295,34 +296,104 @@ const HomeSuggestions = ({
   onSuggestionClick: (suggestion: string) => Promise<void>;
 }) => {
   const { data: user } = useUser();
-  const userName = user?.name || "there";
+  const userName = user?.name?.trim();
+  const [activePrompt, setActivePrompt] = useState(0);
+  const [greeting, setGreeting] = useState("Hi");
+  const shouldReduceMotion = useReducedMotion();
 
-  const suggestions = [
-    "Create a landing page for my SaaS",
-    "Latest news in AI",
-    "What is the meaning of life?",
-    "Help me optimize my website SEO",
-    "Product Hunt launch guide",
-    "Create an email campaign",
-    "Generate tweet for build in public",
-    "Explain AI concepts in simple terms",
-    "How do I get more users?",
+  const promptMoods = [
+    "What are we building today?",
+    "Start messy. I’ll help shape it.",
+    "Pick a prompt or write your own.",
   ];
 
+  useEffect(() => {
+    const hour = new Date().getHours();
+    if (hour < 12) {
+      setGreeting("Good morning");
+    } else if (hour < 17) {
+      setGreeting("Good afternoon");
+    } else {
+      setGreeting("Good evening");
+    }
+
+    const interval = window.setInterval(() => {
+      setActivePrompt((current) => (current + 1) % promptMoods.length);
+    }, 2600);
+
+    return () => window.clearInterval(interval);
+  }, [promptMoods.length]);
+
+  const suggestions = [
+    "Turn my rough idea into a plan",
+    "Help me write a sharper landing page",
+    "Find what I’m missing in this strategy",
+    "Draft a launch post in my voice",
+    "Explain this like I’m new to it",
+    "Help me make this page convert better",
+    "Brainstorm names for my next project",
+    "Give me a practical growth checklist",
+  ];
+
+  const pillContainerVariants = {
+    hidden: {},
+    visible: {
+      transition: {
+        staggerChildren: 0.045,
+        delayChildren: 0.08,
+      },
+    },
+  };
+
+  const pillVariants = {
+    hidden: {
+      opacity: 0,
+    },
+    visible: {
+      opacity: 1,
+      transition: {
+        duration: 0.24,
+        ease: "easeOut",
+      },
+    },
+  };
+
   return (
-    <div className="flex flex-col items-center justify-center h-full max-w-4xl mx-auto p-6 text-center">
-      <div className="space-y-6 w-full">
+    <motion.div
+      className="flex h-full flex-col items-center justify-center px-6 py-10 text-center"
+      initial={{ opacity: 0, y: 8 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.25, ease: "easeOut" }}
+    >
+      <div className="w-full max-w-4xl space-y-7">
         <div className="space-y-2">
-          <h1 className="text-3xl font-medium tracking-tight">
-            What's on your mind{`, ${userName}` || ""}?
+          <motion.p
+            key={activePrompt}
+            className="text-sm text-muted-foreground"
+            initial={{ opacity: 0, y: 4 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.18 }}
+          >
+            {promptMoods[activePrompt]}
+          </motion.p>
+          <h1 className="text-3xl font-medium tracking-tight text-foreground sm:text-4xl">
+            {greeting}
+            {userName ? `, ${userName}` : ""}
           </h1>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 w-full">
-          {suggestions.map((suggestion, index) => (
-            <button
-              key={index}
-              className="cursor-pointer text-sm px-3 py-2 rounded-md bg-secondary/80 text-gray-700 hover:bg-secondary/80 w-full text-left transition-colors"
+        <motion.div
+          className="mx-auto flex max-w-3xl flex-wrap justify-center gap-3"
+          variants={pillContainerVariants}
+          initial={shouldReduceMotion ? false : "hidden"}
+          animate="visible"
+        >
+          {suggestions.map((suggestion) => (
+            <motion.button
+              key={suggestion}
+              className="max-w-full cursor-pointer rounded-full bg-secondary/70 px-5 py-3 text-sm text-muted-foreground transition-all hover:bg-secondary hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:text-base"
+              variants={pillVariants}
+              whileTap={{ scale: 0.99 }}
               tabIndex={0}
               aria-label={suggestion}
               onClick={() => onSuggestionClick(suggestion)}
@@ -334,14 +405,14 @@ const HomeSuggestions = ({
               }}
             >
               {suggestion}
-            </button>
+            </motion.button>
           ))}
-        </div>
+        </motion.div>
 
-        <div className="mt-6 text-xs text-muted-foreground">
-          <p>Type your question below or select from the suggestions above</p>
+        <div className="text-xs text-muted-foreground">
+          <p>Type below or choose a prompt to begin.</p>
         </div>
       </div>
-    </div>
+    </motion.div>
   );
 };
