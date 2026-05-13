@@ -88,6 +88,147 @@ const composioToolDisplay: Array<{
     Icon: ListTodo,
   },
   {
+    match: (context) => includesAny(context, ["GITHUB"]),
+    appSlug: "github",
+    fallbackLoading: "Working with GitHub",
+    fallbackDone: "Used GitHub",
+    Icon: PlugZap,
+  },
+  {
+    match: (context) => includesAny(context, ["TRELLO"]),
+    appSlug: "trello",
+    fallbackLoading: "Working with Trello",
+    fallbackDone: "Used Trello",
+    Icon: PlugZap,
+  },
+  {
+    match: (context) => includesAny(context, ["GOOGLEDOCS", "GOOGLE DOCS"]),
+    appSlug: "googledocs",
+    fallbackLoading: "Working with Google Docs",
+    fallbackDone: "Used Google Docs",
+    Icon: PlugZap,
+  },
+  {
+    match: (context) => includesAny(context, ["GOOGLESHEETS", "GOOGLE SHEETS"]),
+    appSlug: "googlesheets",
+    fallbackLoading: "Working with Google Sheets",
+    fallbackDone: "Used Google Sheets",
+    Icon: PlugZap,
+  },
+  {
+    match: (context) => includesAny(context, ["OUTLOOK"]),
+    appSlug: "outlook",
+    fallbackLoading: "Working with Outlook",
+    fallbackDone: "Used Outlook",
+    Icon: PlugZap,
+  },
+  {
+    match: (context) => includesAny(context, ["HUBSPOT"]),
+    appSlug: "hubspot",
+    fallbackLoading: "Working with HubSpot",
+    fallbackDone: "Used HubSpot",
+    Icon: PlugZap,
+  },
+  {
+    match: (context) => includesAny(context, ["SALESFORCE"]),
+    appSlug: "salesforce",
+    fallbackLoading: "Working with Salesforce",
+    fallbackDone: "Used Salesforce",
+    Icon: PlugZap,
+  },
+  {
+    match: (context) => includesAny(context, ["CONFLUENCE"]),
+    appSlug: "confluence",
+    fallbackLoading: "Working with Confluence",
+    fallbackDone: "Used Confluence",
+    Icon: PlugZap,
+  },
+  {
+    match: (context) => includesAny(context, ["STRIPE"]),
+    appSlug: "stripe",
+    fallbackLoading: "Working with Stripe",
+    fallbackDone: "Used Stripe",
+    Icon: PlugZap,
+  },
+  {
+    match: (context) => includesAny(context, ["GOOGLESLIDES", "GOOGLE SLIDES"]),
+    appSlug: "googleslides",
+    fallbackLoading: "Working with Google Slides",
+    fallbackDone: "Used Google Slides",
+    Icon: PlugZap,
+  },
+  {
+    match: (context) => includesAny(context, ["GOOGLEFORMS", "GOOGLE FORMS"]),
+    appSlug: "googleforms",
+    fallbackLoading: "Working with Google Forms",
+    fallbackDone: "Used Google Forms",
+    Icon: PlugZap,
+  },
+  {
+    match: (context) => includesAny(context, ["GOOGLETASKS", "GOOGLE TASKS"]),
+    appSlug: "googletasks",
+    fallbackLoading: "Working with Google Tasks",
+    fallbackDone: "Used Google Tasks",
+    Icon: PlugZap,
+  },
+  {
+    match: (context) => includesAny(context, ["GOOGLEMEET", "GOOGLE MEET"]),
+    appSlug: "googlemeet",
+    fallbackLoading: "Working with Google Meet",
+    fallbackDone: "Used Google Meet",
+    Icon: PlugZap,
+  },
+  {
+    match: (context) => includesAny(context, ["GOOGLE_CHAT", "GOOGLE CHAT"]),
+    appSlug: "google_chat",
+    fallbackLoading: "Working with Google Chat",
+    fallbackDone: "Used Google Chat",
+    Icon: PlugZap,
+  },
+  {
+    match: (context) => includesAny(context, ["GOOGLECONTACTS", "GOOGLE CONTACTS"]),
+    appSlug: "googlecontacts",
+    fallbackLoading: "Working with Google Contacts",
+    fallbackDone: "Used Google Contacts",
+    Icon: PlugZap,
+  },
+  {
+    match: (context) => includesAny(context, ["GOOGLEPHOTOS", "GOOGLE PHOTOS"]),
+    appSlug: "googlephotos",
+    fallbackLoading: "Working with Google Photos",
+    fallbackDone: "Used Google Photos",
+    Icon: PlugZap,
+  },
+  {
+    match: (context) => includesAny(context, ["GOOGLE_MAPS", "GOOGLE MAPS"]),
+    appSlug: "google_maps",
+    fallbackLoading: "Working with Google Maps",
+    fallbackDone: "Used Google Maps",
+    Icon: PlugZap,
+  },
+  {
+    match: (context) =>
+      includesAny(context, ["GOOGLE_SEARCH_CONSOLE", "GOOGLE SEARCH CONSOLE"]),
+    appSlug: "google_search_console",
+    fallbackLoading: "Working with Google Search Console",
+    fallbackDone: "Used Google Search Console",
+    Icon: PlugZap,
+  },
+  {
+    match: (context) => includesAny(context, ["SHOPIFY"]),
+    appSlug: "shopify",
+    fallbackLoading: "Working with Shopify",
+    fallbackDone: "Used Shopify",
+    Icon: PlugZap,
+  },
+  {
+    match: (context) => includesAny(context, ["FIGMA"]),
+    appSlug: "figma",
+    fallbackLoading: "Working with Figma",
+    fallbackDone: "Used Figma",
+    Icon: PlugZap,
+  },
+  {
     match: (context) => context.includes("COMPOSIO"),
     appSlug: "composio",
     fallbackLoading: "Using Composio",
@@ -750,16 +891,33 @@ const formatToolkitSlug = (value: string) =>
     .toLowerCase();
 
 const appLabels: Record<string, string> = {
+  confluence: "Confluence",
   composio: "Composio",
+  figma: "Figma",
+  github: "GitHub",
   gmail: "Gmail",
+  google_chat: "Google Chat",
+  google_maps: "Google Maps",
+  google_search_console: "Google Search Console",
   googlecalendar: "Google Calendar",
+  googlecontacts: "Google Contacts",
   googledocs: "Google Docs",
   googledrive: "Google Drive",
+  googleforms: "Google Forms",
   googlemeet: "Google Meet",
+  googlephotos: "Google Photos",
   googlesheets: "Google Sheets",
+  googleslides: "Google Slides",
+  googletasks: "Google Tasks",
+  hubspot: "HubSpot",
   linear: "Linear",
   notion: "Notion",
+  outlook: "Outlook",
   sandbox: "Sandbox",
+  salesforce: "Salesforce",
+  shopify: "Shopify",
+  stripe: "Stripe",
+  trello: "Trello",
 };
 
 const getToolkitSlugFromToolSlug = (value: string) => {
@@ -787,6 +945,38 @@ const getToolkitSlugFromToolSlug = (value: string) => {
 
   if (slug.startsWith("GOOGLEMEET_")) {
     return "googlemeet";
+  }
+
+  if (slug.startsWith("GOOGLE_CHAT_")) {
+    return "google_chat";
+  }
+
+  if (slug.startsWith("GOOGLECONTACTS_")) {
+    return "googlecontacts";
+  }
+
+  if (slug.startsWith("GOOGLEPHOTOS_")) {
+    return "googlephotos";
+  }
+
+  if (slug.startsWith("GOOGLE_MAPS_")) {
+    return "google_maps";
+  }
+
+  if (slug.startsWith("GOOGLE_SEARCH_CONSOLE_")) {
+    return "google_search_console";
+  }
+
+  if (slug.startsWith("GOOGLESLIDES_")) {
+    return "googleslides";
+  }
+
+  if (slug.startsWith("GOOGLEFORMS_")) {
+    return "googleforms";
+  }
+
+  if (slug.startsWith("GOOGLETASKS_")) {
+    return "googletasks";
   }
 
   const [toolkit] = slug.split("_");

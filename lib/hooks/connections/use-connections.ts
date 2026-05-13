@@ -1,4 +1,5 @@
 import { auth } from "@/lib/clients/firebase";
+import { getApiErrorMessage, readJsonResponse } from "@/lib/api-response";
 import { useQuery } from "@tanstack/react-query";
 
 export type ConnectionToolkit = {
@@ -26,13 +27,18 @@ export const fetchConnections = async (): Promise<ConnectionToolkit[]> => {
         }
       : undefined,
   });
-  const data = await response.json();
+  const data = await readJsonResponse<{
+    error?: string;
+    toolkits?: ConnectionToolkit[];
+  }>(response);
 
   if (!response.ok) {
-    throw new Error(data.error || "Unable to load connections");
+    throw new Error(
+      getApiErrorMessage(response, data, "Unable to load connections")
+    );
   }
 
-  return data.toolkits ?? [];
+  return data?.toolkits ?? [];
 };
 
 export const connectionsQueryOptions = (uid: string) => ({

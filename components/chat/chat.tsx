@@ -322,6 +322,23 @@ const CONNECTED_APP_PROMPTS: Record<string, string> = {
   googledrive: "Find the right Drive docs and summarize them",
   notion: "Turn my Notion notes into clear next steps",
   linear: "Review my Linear issues and prioritize work",
+  github: "Review my GitHub issues and pull requests",
+  trello: "Summarize my Trello boards and next actions",
+  googledocs: "Draft and refine a Google Doc",
+  googlesheets: "Analyze a Google Sheet and summarize insights",
+  outlook: "Summarize my Outlook inbox and calendar",
+  hubspot: "Review HubSpot contacts and deals",
+  salesforce: "Summarize Salesforce records and next steps",
+  confluence: "Find Confluence pages and extract action items",
+  stripe: "Review Stripe customers and payments",
+  googleslides: "Outline a Google Slides deck",
+  googletasks: "Organize my Google Tasks",
+  googlemeet: "Find Google Meet notes and follow-ups",
+  googlephotos: "Find relevant Google Photos",
+  google_maps: "Look up places and route details",
+  google_search_console: "Summarize Search Console performance",
+  shopify: "Review Shopify orders and customers",
+  figma: "Summarize Figma project context",
 };
 
 const DEFAULT_PROMPTS = [

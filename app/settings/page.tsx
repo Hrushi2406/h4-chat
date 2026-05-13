@@ -39,6 +39,7 @@ import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { useAuth } from "@/lib/hooks/auth/use-auth";
 import { auth } from "@/lib/clients/firebase";
+import { getApiErrorMessage, readJsonResponse } from "@/lib/api-response";
 import {
   ConnectionToolkit,
   useConnections,
@@ -373,10 +374,19 @@ const ConnectionsSettings = () => {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ authToken, toolkit }),
       });
-      const data = await response.json();
+      const data = await readJsonResponse<{
+        error?: string;
+        redirectUrl?: string;
+      }>(response);
 
       if (!response.ok) {
-        throw new Error(data.error || "Unable to start connection");
+        throw new Error(
+          getApiErrorMessage(response, data, "Unable to start connection")
+        );
+      }
+
+      if (!data?.redirectUrl) {
+        throw new Error("Connection link was not returned");
       }
 
       window.location.href = data.redirectUrl;
@@ -403,10 +413,12 @@ const ConnectionsSettings = () => {
           connectedAccountId: toolkit.connectedAccountId,
         }),
       });
-      const data = await response.json();
+      const data = await readJsonResponse<{ error?: string }>(response);
 
       if (!response.ok) {
-        throw new Error(data.error || "Unable to disconnect app");
+        throw new Error(
+          getApiErrorMessage(response, data, "Unable to disconnect app")
+        );
       }
 
       toast.success(`${toolkit.name} disconnected`);
