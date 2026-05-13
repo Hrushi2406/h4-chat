@@ -15,7 +15,15 @@ import {
   ThreadMessage,
   ThreadMessageMetadata,
 } from "@/lib/types/thread";
-import { FileText, ChevronDown, ChevronRight, Sparkles, ListTree } from "lucide-react";
+import {
+  ArrowDown,
+  ArrowUp,
+  FileText,
+  ChevronDown,
+  ChevronRight,
+  Sparkles,
+  ListTree,
+} from "lucide-react";
 import CodeBlock from "./code-block";
 import {
   Tooltip,
@@ -462,8 +470,22 @@ const MessageTokenUsage = ({ message }: { message: ThreadMessage }) => {
     >
       <Tooltip>
         <TooltipTrigger asChild>
-          <span className="rounded-full px-1.5 py-1 tabular-nums">
-            {formatTokenCount(totalTokens)} tokens
+          <span className="inline-flex items-center gap-1.5 rounded-full px-1.5 py-1 tabular-nums">
+            <span>{formatTokenCount(totalTokens)} tokens</span>
+            <span
+              className="inline-flex items-center gap-0.5"
+              aria-label={`${formatTokenCount(inputTokens)} input tokens`}
+            >
+              <ArrowDown className="h-3 w-3" aria-hidden="true" />
+              {formatTokenCount(inputTokens)}
+            </span>
+            <span
+              className="inline-flex items-center gap-0.5"
+              aria-label={`${formatTokenCount(outputTokens)} output tokens`}
+            >
+              <ArrowUp className="h-3 w-3" aria-hidden="true" />
+              {formatTokenCount(outputTokens)}
+            </span>
           </span>
         </TooltipTrigger>
         <TooltipContent side="top">

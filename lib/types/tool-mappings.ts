@@ -1,11 +1,18 @@
 import {
   CalendarDays,
+  Code2,
+  Download,
+  FileArchive,
   FileText,
+  GitBranch,
   Globe,
   HardDrive,
   Hammer,
+  Image,
   Inbox,
   ListTodo,
+  Package,
+  Play,
   PlugZap,
   Sun,
 } from "lucide-react";
@@ -52,15 +59,15 @@ const composioToolDisplay: Array<{
   {
     match: (context) => includesAny(context, ["GOOGLECALENDAR", "CALENDAR"]),
     appSlug: "googlecalendar",
-    fallbackLoading: "Working with Googlecalendar",
-    fallbackDone: "Used Googlecalendar",
+    fallbackLoading: "Working with Google Calendar",
+    fallbackDone: "Used Google Calendar",
     Icon: CalendarDays,
   },
   {
     match: (context) => includesAny(context, ["GOOGLEDRIVE", "DRIVE"]),
     appSlug: "googledrive",
-    fallbackLoading: "Working with Googledrive",
-    fallbackDone: "Used Googledrive",
+    fallbackLoading: "Working with Google Drive",
+    fallbackDone: "Used Google Drive",
     Icon: HardDrive,
   },
   {
@@ -113,7 +120,7 @@ export const getToolDisplayName = (
 
     return {
       displayName: label,
-      Icon: composioTool.Icon,
+      Icon: getToolIcon(normalizedToolName, toolContext, composioTool.Icon),
       tooltip: getComposioTooltip(label, toolName, toolContext, appSlugs),
     };
   }
@@ -146,6 +153,21 @@ const isToolCalling = (status: string) =>
   status === "call" ||
   status === "input-streaming" ||
   status === "input-available";
+
+const getToolIcon = (
+  toolName: string,
+  context: ReturnType<typeof getToolContext>,
+  fallbackIcon: any
+) => {
+  if (
+    toolName !== COMPOSIO_META_TOOLS.REMOTE_BASH_TOOL &&
+    toolName !== COMPOSIO_META_TOOLS.REMOTE_WORKBENCH
+  ) {
+    return fallbackIcon;
+  }
+
+  return getSandboxAction(context)?.Icon ?? fallbackIcon;
+};
 
 const getComposioAction = (toolName: string, searchText = "") => {
   const normalized = `${toolName.replace(/^COMPOSIO_/, "")} ${searchText}`;
@@ -213,8 +235,16 @@ const getToolContext = (toolName: string, toolPart?: unknown) => {
   const toolSlugs: string[] = [];
   const toolkitSlugs: string[] = [];
   const searchParts: string[] = [];
+  const commandParts: string[] = [];
 
-  collectContext(toolPart, contextParts, toolSlugs, toolkitSlugs, searchParts);
+  collectContext(
+    toolPart,
+    contextParts,
+    toolSlugs,
+    toolkitSlugs,
+    searchParts,
+    commandParts
+  );
 
   return {
     raw: contextParts
@@ -223,11 +253,14 @@ const getToolContext = (toolName: string, toolPart?: unknown) => {
       .replace(/\s+/g, " ")
       .trim()
       .toUpperCase(),
-    toolSlugs: dedupe(toolSlugs).map(formatToolSlug),
-    toolkitSlugs: dedupe(toolkitSlugs).map(formatToolkitSlug),
+    toolSlugs: dedupe(toolSlugs.map(formatToolSlug)),
+    toolkitSlugs: dedupe(toolkitSlugs.map(formatToolkitSlug)),
     toolSlugContext: dedupe(toolSlugs).join(" ").toUpperCase(),
     searchText: searchParts.join(" ").toUpperCase(),
     searchTexts: dedupe(searchParts.map(cleanTooltipText)).filter(Boolean),
+    commandText: dedupe(commandParts.map(cleanTooltipText))
+      .filter(Boolean)
+      .join("\n"),
   };
 };
 
@@ -237,6 +270,7 @@ const collectContext = (
   toolSlugs: string[],
   toolkitSlugs: string[],
   searchParts: string[],
+  commandParts: string[],
   depth = 0
 ) => {
   if (depth > 4 || contextParts.join(" ").length > 6000) {
@@ -256,6 +290,7 @@ const collectContext = (
         toolSlugs,
         toolkitSlugs,
         searchParts,
+        commandParts,
         depth + 1
       )
     );
@@ -281,12 +316,17 @@ const collectContext = (
       extractStrings(item).forEach((text) => searchParts.push(text));
     }
 
+    if (isCommandTextKey(key)) {
+      extractStrings(item).forEach((text) => commandParts.push(text));
+    }
+
     collectContext(
       item,
       contextParts,
       toolSlugs,
       toolkitSlugs,
       searchParts,
+      commandParts,
       depth + 1
     );
   });
@@ -318,6 +358,17 @@ const isSearchTextKey = (key: string) =>
   ["query", "use_case", "usecase", "known_fields", "knownfields"].includes(
     key.toLowerCase()
   );
+
+const isCommandTextKey = (key: string) =>
+  [
+    "bash",
+    "cmd",
+    "code",
+    "command",
+    "commands",
+    "script",
+    "shell",
+  ].includes(key.toLowerCase());
 
 const extractStrings = (value: unknown): string[] => {
   if (typeof value === "string") {
@@ -431,11 +482,25 @@ const getComposioLabel = (
   }
 
   if (toolName === COMPOSIO_META_TOOLS.REMOTE_BASH_TOOL) {
-    return calling ? "Running Sandbox command" : "Ran Sandbox command";
+    const action = getSandboxAction(context);
+    return action
+      ? calling
+        ? action.loading
+        : action.done
+      : calling
+        ? "Running Sandbox command"
+        : "Ran Sandbox command";
   }
 
   if (toolName === COMPOSIO_META_TOOLS.REMOTE_WORKBENCH) {
-    return calling ? "Processing Sandbox data" : "Processed Sandbox data";
+    const action = getSandboxAction(context);
+    return action
+      ? calling
+        ? action.loading
+        : action.done
+      : calling
+        ? "Processing Sandbox data"
+        : "Processed Sandbox data";
   }
 
   const action = getComposioAction(
@@ -472,6 +537,106 @@ const getConnectionAction = (context: string) => {
   return { loading: "Connecting", done: "Connected" };
 };
 
+const getSandboxAction = (context: ReturnType<typeof getToolContext>) => {
+  const command = `${context.commandText} ${context.raw}`.toLowerCase();
+
+  if (!command.trim()) {
+    return undefined;
+  }
+
+  if (
+    /\b(apt-get|apt|brew|pip|pip3|npm|pnpm|yarn)\s+(install|add)\b/.test(
+      command
+    )
+  ) {
+    return {
+      loading: "Installing dependencies",
+      done: "Installed dependencies",
+      Icon: Package,
+    };
+  }
+
+  const matchedCommand = sandboxCommandLabels.find(({ match }) =>
+    match(command)
+  );
+
+  if (matchedCommand) {
+    return matchedCommand.label;
+  }
+
+  return undefined;
+};
+
+const sandboxCommandLabels: Array<{
+  label: { loading: string; done: string; Icon: any };
+  match: (command: string) => boolean;
+}> = [
+  {
+    label: {
+      loading: "Processing media",
+      done: "Processed media",
+      Icon: Play,
+    },
+    match: (command) => /\bffmpeg\b/.test(command),
+  },
+  {
+    label: {
+      loading: "Editing images",
+      done: "Edited images",
+      Icon: Image,
+    },
+    match: (command) => /\b(convert|magick)\b/.test(command),
+  },
+  {
+    label: {
+      loading: "Running analysis",
+      done: "Ran analysis",
+      Icon: FileText,
+    },
+    match: (command) => /\b(python|python3|py)\b/.test(command),
+  },
+  {
+    label: {
+      loading: "Running code",
+      done: "Ran code",
+      Icon: Code2,
+    },
+    match: (command) => /\b(node|tsx|ts-node)\b/.test(command),
+  },
+  {
+    label: {
+      loading: "Installing dependencies",
+      done: "Installed dependencies",
+      Icon: Package,
+    },
+    match: (command) => /\b(pnpm|npm|yarn)\b/.test(command),
+  },
+  {
+    label: {
+      loading: "Working with files",
+      done: "Updated files",
+      Icon: GitBranch,
+    },
+    match: (command) => /\bgit\b/.test(command),
+  },
+  {
+    label: {
+      loading: "Fetching data",
+      done: "Fetched data",
+      Icon: Download,
+    },
+    match: (command) => /\b(curl|wget)\b/.test(command),
+  },
+  {
+    label: {
+      loading: "Preparing files",
+      done: "Prepared files",
+      Icon: FileArchive,
+    },
+    match: (command) => /\b(tar|zip|unzip)\b/.test(command),
+  },
+];
+
 const getComposioTooltip = (
   label: string,
   toolName: string,
@@ -479,21 +644,33 @@ const getComposioTooltip = (
   appSlugs: string[]
 ) => {
   const displaySlugs = getDisplayAppSlugs(appSlugs);
-  const appText = displaySlugs.length > 0 ? displaySlugs.join(", ") : "composio";
+  const appText =
+    displaySlugs.length > 0
+      ? displaySlugs.map(formatAppSlug).join(", ")
+      : formatAppSlug("composio");
   const searchText =
     context.searchTexts.length > 0
       ? `\nSearched for: ${context.searchTexts.slice(0, 3).join(" / ")}`
       : "";
   const toolkitText =
     context.toolkitSlugs.length > 0
-      ? `\nToolkit: ${context.toolkitSlugs.slice(0, 3).join(", ")}`
+      ? `\nToolkit: ${context.toolkitSlugs
+          .slice(0, 3)
+          .map(formatAppSlug)
+          .join(", ")}`
       : "";
   const slugText =
     context.toolSlugs.length > 0
-      ? `\nTool used: ${context.toolSlugs.slice(0, 3).join(", ")}`
+      ? `\nTool used: ${context.toolSlugs
+          .slice(0, 3)
+          .map(formatToolSlugForDisplay)
+          .join(", ")}`
       : "";
+  const commandText = context.commandText
+    ? `\nCommand: ${truncateTooltipText(context.commandText, 180)}`
+    : "";
 
-  return `${label}\nApp: ${appText}${toolkitText}${searchText}${slugText}`;
+  return `${label}\nApp: ${appText}${toolkitText}${searchText}${slugText}${commandText}`;
 };
 
 const dedupe = <T,>(items: T[]) => Array.from(new Set(items));
@@ -512,6 +689,9 @@ const isString = (value: string | undefined): value is string =>
 const cleanTooltipText = (value: string) =>
   value.replace(/\s+/g, " ").trim();
 
+const truncateTooltipText = (value: string, maxLength: number) =>
+  value.length > maxLength ? `${value.slice(0, maxLength - 1)}...` : value;
+
 const formatToolSlug = (value: string) => value.trim().toUpperCase();
 
 const formatToolkitSlug = (value: string) =>
@@ -519,6 +699,19 @@ const formatToolkitSlug = (value: string) =>
     .trim()
     .replace(/[^a-zA-Z0-9_-]+/g, "")
     .toLowerCase();
+
+const appLabels: Record<string, string> = {
+  composio: "Composio",
+  gmail: "Gmail",
+  googlecalendar: "Google Calendar",
+  googledocs: "Google Docs",
+  googledrive: "Google Drive",
+  googlemeet: "Google Meet",
+  googlesheets: "Google Sheets",
+  linear: "Linear",
+  notion: "Notion",
+  sandbox: "Sandbox",
+};
 
 const getToolkitSlugFromToolSlug = (value: string) => {
   const slug = value.trim().toUpperCase();
@@ -551,9 +744,33 @@ const getToolkitSlugFromToolSlug = (value: string) => {
   return toolkit ? toolkit.toLowerCase() : undefined;
 };
 
-const formatAppSlug = (slug: string) =>
-  slug
+const formatAppSlug = (slug: string) => {
+  const normalized = formatToolkitSlug(slug);
+  return (
+    appLabels[normalized] ??
+    normalized
+      .split(/[_-]/g)
+      .filter(Boolean)
+      .map(formatTitlePart)
+      .join(" ")
+  );
+};
+
+const formatToolSlugForDisplay = (slug: string) => {
+  const normalized = slug.trim().replace(/^COMPOSIO_/, "");
+  const toolkit = getToolkitSlugFromToolSlug(normalized);
+  const withoutToolkit = toolkit
+    ? normalized.replace(new RegExp(`^${toolkit.toUpperCase()}_`), "")
+    : normalized;
+
+  return withoutToolkit
     .split(/[_-]/g)
     .filter(Boolean)
-    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .map(formatTitlePart)
     .join(" ");
+};
+
+const formatTitlePart = (part: string) =>
+  part.length <= 3
+    ? part.toUpperCase()
+    : part.charAt(0).toUpperCase() + part.slice(1).toLowerCase();

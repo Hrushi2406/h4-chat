@@ -21,7 +21,7 @@ import { ChatRequestOptions, DefaultChatTransport } from "ai";
 import { useUser } from "@/lib/hooks/user/use-user";
 import chatService from "@/lib/services/chat-service";
 import { auth } from "@/lib/clients/firebase";
-import { motion, useReducedMotion } from "framer-motion";
+import { motion, useReducedMotion, type Variants } from "framer-motion";
 
 interface ChatProps {
   threadId: string;
@@ -290,22 +290,57 @@ export function Chat({ threadId, isNew = false }: ChatProps) {
   );
 }
 
+type ConnectedApp = {
+  slug: string;
+  name: string;
+  logo?: string;
+  isConnected: boolean;
+};
+
+type PromptSuggestion = {
+  label: string;
+  appName?: string;
+  logo?: string;
+};
+
+const PROMPT_MOODS = [
+  "What are we building today?",
+  "Start messy. I’ll help shape it.",
+  "Pick a prompt or write your own.",
+];
+
+const CONNECTED_APP_PROMPTS: Record<string, string> = {
+  gmail: "Summarize my unread emails and draft replies",
+  googlecalendar: "Check my calendar and plan today",
+  googledrive: "Find the right Drive docs and summarize them",
+  notion: "Turn my Notion notes into clear next steps",
+  linear: "Review my Linear issues and prioritize work",
+};
+
+const DEFAULT_PROMPTS = [
+  "Turn my rough idea into a plan",
+  "Help me write a sharper landing page",
+  "Find what I’m missing in this strategy",
+  "Draft a launch post in my voice",
+  "Explain this like I’m new to it",
+  "Help me make this page convert better",
+  "Brainstorm names for my next project",
+  "Give me a practical growth checklist",
+];
+
 const HomeSuggestions = ({
   onSuggestionClick,
 }: {
   onSuggestionClick: (suggestion: string) => Promise<void>;
 }) => {
   const { data: user } = useUser();
+  const { uid } = useAuth();
   const userName = user?.name?.trim();
   const [activePrompt, setActivePrompt] = useState(0);
   const [greeting, setGreeting] = useState("Hi");
+  const [connectedApps, setConnectedApps] = useState<ConnectedApp[]>([]);
+  const [arePromptsReady, setArePromptsReady] = useState(false);
   const shouldReduceMotion = useReducedMotion();
-
-  const promptMoods = [
-    "What are we building today?",
-    "Start messy. I’ll help shape it.",
-    "Pick a prompt or write your own.",
-  ];
 
   useEffect(() => {
     const hour = new Date().getHours();
@@ -318,24 +353,79 @@ const HomeSuggestions = ({
     }
 
     const interval = window.setInterval(() => {
-      setActivePrompt((current) => (current + 1) % promptMoods.length);
+      setActivePrompt((current) => (current + 1) % PROMPT_MOODS.length);
     }, 2600);
 
     return () => window.clearInterval(interval);
-  }, [promptMoods.length]);
+  }, []);
 
-  const suggestions = [
-    "Turn my rough idea into a plan",
-    "Help me write a sharper landing page",
-    "Find what I’m missing in this strategy",
-    "Draft a launch post in my voice",
-    "Explain this like I’m new to it",
-    "Help me make this page convert better",
-    "Brainstorm names for my next project",
-    "Give me a practical growth checklist",
-  ];
+  useEffect(() => {
+    setArePromptsReady(false);
+    setConnectedApps([]);
 
-  const pillContainerVariants = {
+    if (!uid) {
+      return;
+    }
+
+    let isMounted = true;
+
+    const fetchConnectedApps = async () => {
+      try {
+        const authToken = await auth.currentUser?.getIdToken();
+        const response = await fetch("/api/connections", {
+          cache: "no-store",
+          headers: authToken
+            ? {
+                Authorization: `Bearer ${authToken}`,
+              }
+            : undefined,
+        });
+
+        if (!response.ok) return;
+
+        const data: { toolkits?: ConnectedApp[] } = await response.json();
+        if (!isMounted) return;
+
+        setConnectedApps(
+          (data.toolkits ?? []).filter((toolkit) => toolkit.isConnected)
+        );
+      } catch {
+        if (isMounted) {
+          setConnectedApps([]);
+        }
+      } finally {
+        if (isMounted) {
+          setArePromptsReady(true);
+        }
+      }
+    };
+
+    fetchConnectedApps();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [uid]);
+
+  const suggestions = useMemo<PromptSuggestion[]>(() => {
+    const appPrompts = connectedApps.flatMap<PromptSuggestion>((app) => {
+        const label = CONNECTED_APP_PROMPTS[app.slug];
+        if (!label) return [];
+
+        return [
+          {
+            label,
+            appName: app.name,
+            logo: app.logo,
+          },
+        ];
+      });
+
+    const genericPrompts = DEFAULT_PROMPTS.map((label) => ({ label }));
+    return [...appPrompts, ...genericPrompts].slice(0, 8);
+  }, [connectedApps]);
+
+  const pillContainerVariants: Variants = {
     hidden: {},
     visible: {
       transition: {
@@ -345,7 +435,7 @@ const HomeSuggestions = ({
     },
   };
 
-  const pillVariants = {
+  const pillVariants: Variants = {
     hidden: {
       opacity: 0,
     },
@@ -374,7 +464,7 @@ const HomeSuggestions = ({
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.18 }}
           >
-            {promptMoods[activePrompt]}
+            {PROMPT_MOODS[activePrompt]}
           </motion.p>
           <h1 className="text-3xl font-medium tracking-tight text-foreground sm:text-4xl">
             {greeting}
@@ -382,35 +472,52 @@ const HomeSuggestions = ({
           </h1>
         </div>
 
-        <motion.div
-          className="mx-auto flex max-w-3xl flex-wrap justify-center gap-3"
-          variants={pillContainerVariants}
-          initial={shouldReduceMotion ? false : "hidden"}
-          animate="visible"
-        >
-          {suggestions.map((suggestion) => (
-            <motion.button
-              key={suggestion}
-              className="max-w-full cursor-pointer rounded-full bg-secondary/70 px-5 py-3 text-sm text-muted-foreground transition-all hover:bg-secondary hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:text-base"
-              variants={pillVariants}
-              whileTap={{ scale: 0.99 }}
-              tabIndex={0}
-              aria-label={suggestion}
-              onClick={() => onSuggestionClick(suggestion)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" || e.key === " ") {
-                  e.preventDefault();
-                  onSuggestionClick(suggestion);
-                }
-              }}
-            >
-              {suggestion}
-            </motion.button>
-          ))}
-        </motion.div>
+        <div className="flex min-h-[280px] flex-col items-center justify-start gap-7">
+          {arePromptsReady && (
+            <>
+              <motion.div
+                className="mx-auto flex max-w-3xl flex-wrap justify-center gap-3"
+                variants={pillContainerVariants}
+                initial={shouldReduceMotion ? false : "hidden"}
+                animate="visible"
+              >
+                {suggestions.map((suggestion) => (
+                  <motion.button
+                    key={suggestion.label}
+                    className="inline-flex max-w-full cursor-pointer items-center gap-2 rounded-full bg-secondary/70 px-5 py-3 text-sm text-muted-foreground transition-all hover:bg-secondary hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:text-base"
+                    variants={pillVariants}
+                    whileTap={{ scale: 0.99 }}
+                    tabIndex={0}
+                    aria-label={
+                      suggestion.appName
+                        ? `${suggestion.appName}: ${suggestion.label}`
+                        : suggestion.label
+                    }
+                    onClick={() => onSuggestionClick(suggestion.label)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault();
+                        onSuggestionClick(suggestion.label);
+                      }
+                    }}
+                  >
+                    {suggestion.logo && (
+                      <span
+                        className="h-5 w-5 shrink-0 rounded-full bg-background bg-[length:14px_14px] bg-center bg-no-repeat"
+                        style={{ backgroundImage: `url(${suggestion.logo})` }}
+                        aria-hidden="true"
+                      />
+                    )}
+                    <span className="truncate">{suggestion.label}</span>
+                  </motion.button>
+                ))}
+              </motion.div>
 
-        <div className="text-xs text-muted-foreground">
-          <p>Type below or choose a prompt to begin.</p>
+              <div className="text-xs text-muted-foreground">
+                <p>Type below or choose a prompt to begin.</p>
+              </div>
+            </>
+          )}
         </div>
       </div>
     </motion.div>
