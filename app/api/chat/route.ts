@@ -10,6 +10,11 @@ import { getModelById } from "@/lib/available-models";
 import { createComposioSession, isComposioConfigured } from "@/lib/composio";
 import { verifyFirebaseIdToken } from "@/lib/firebase-auth-server";
 import {
+  closeMcpClients,
+  createMcpToolContext,
+  type McpServerInput,
+} from "@/lib/mcp";
+import {
   COMPOSIO_META_TOOLS,
   COMPOSIO_TOOLKIT_EXAMPLES,
   COMPOSIO_TOOL_NAME_PATTERN,
@@ -23,6 +28,7 @@ export async function POST(req: Request) {
     userInfo,
     authToken,
     threadId,
+    mcpServers = [],
   } = await req.json();
 
   const geo = geolocation(req);
@@ -39,11 +45,19 @@ export async function POST(req: Request) {
     verifiedUserId,
     getChatCallbackUrl(req, threadId)
   );
+  const mcpContext = await createMcpToolContext(
+    verifiedUserId,
+    normalizeRequestMcpServers(mcpServers)
+  );
   const systemPrompt = getSystemPrompt(
     geo,
     searchEnabled,
     Boolean(composioTools),
+    mcpContext?.servers,
     userInfo
+  );
+  const closeMcpClientsOnce = createCloseMcpClientsOnce(
+    mcpContext?.clients ?? []
   );
 
   const result = streamText({
@@ -51,12 +65,20 @@ export async function POST(req: Request) {
     system: systemPrompt,
     messages: await convertToModelMessages(messages.slice(-10)),
     stopWhen: stepCountIs(50),
-    onError: (error) => {
+    onError: async (error) => {
       console.log("error: ", error);
+      await closeMcpClientsOnce();
+    },
+    onAbort: async () => {
+      await closeMcpClientsOnce();
+    },
+    onFinish: async () => {
+      await closeMcpClientsOnce();
     },
 
     tools: {
       ...composioTools,
+      ...mcpContext?.tools,
       webSearch: {
         description: `Search the web for current information, facts, recent events, or detailed explanations.
     
@@ -110,6 +132,14 @@ const getSystemPrompt = (
   geo: Geo,
   searchEnabled: boolean,
   composioEnabled: boolean,
+  mcpServers:
+    | Array<{
+        id: string;
+        name: string;
+        instructions?: string;
+        toolNames: string[];
+      }>
+    | undefined,
   userInfo: Partial<IUser>
 ) => {
   const requestHints = getRequestPromptFromHints(geo);
@@ -136,6 +166,20 @@ const getSystemPrompt = (
       For discovery, call ${COMPOSIO_META_TOOLS.SEARCH_TOOLS} first. Use returned tool slugs as-is. If you need exact input fields, call ${COMPOSIO_META_TOOLS.GET_TOOL_SCHEMAS} with tool_slugs from search results.
       For authorization or connection status, call ${COMPOSIO_META_TOOLS.MANAGE_CONNECTIONS} with valid toolkit slugs such as gmail, googlecalendar, googledrive, notion, or linear, then provide the Connect Link in chat and continue once the user confirms.
       Execute selected app actions with ${COMPOSIO_META_TOOLS.MULTI_EXECUTE_TOOL} when actions are independent. Ask before taking irreversible actions such as sending email, deleting files, or creating/updating external records unless the user already gave explicit instructions.`
+    }
+    - ${
+      mcpServers?.length &&
+      `You can use configured MCP server tools when they are relevant.
+      MCP tool names are namespaced as mcp_<server>_<tool>. Available MCP servers:
+      ${mcpServers
+        .map(
+          (server) =>
+            `- ${server.name} (${server.id}): ${server.toolNames.join(", ")}${
+              server.instructions ? `\n  Server instructions: ${server.instructions}` : ""
+            }`
+        )
+        .join("\n")}
+      Before using MCP tools that place orders, submit payments, modify carts, or make external changes, ask for explicit user confirmation unless the user's message already provides unambiguous approval.`
     }
 
     ${name && `User's name is ${name}`}
@@ -167,6 +211,71 @@ function getChatCallbackUrl(req: Request, threadId?: string) {
 
   return threadId ? `${origin}/chat/${threadId}` : origin;
 }
+
+const createCloseMcpClientsOnce = (clients: Parameters<typeof closeMcpClients>[0]) => {
+  let didClose = false;
+
+  return async () => {
+    if (didClose || clients.length === 0) {
+      return;
+    }
+
+    didClose = true;
+    await closeMcpClients(clients);
+  };
+};
+
+const normalizeRequestMcpServers = (value: unknown): McpServerInput[] => {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value
+    .map((server): McpServerInput | undefined => {
+      if (typeof server !== "object" || server === null) {
+        return undefined;
+      }
+
+      const candidate = server as Record<string, unknown>;
+      const id = typeof candidate.id === "string" ? candidate.id : undefined;
+      const url =
+        typeof candidate.url === "string" ? candidate.url.trim() : undefined;
+
+      if (!id || !url) {
+        return undefined;
+      }
+
+      return {
+        id,
+        name: typeof candidate.name === "string" ? candidate.name : undefined,
+        url,
+        transport: candidate.transport === "sse" ? "sse" : "http",
+        headers: normalizeRequestHeaders(candidate.headers),
+        enabled:
+          typeof candidate.enabled === "boolean" ? candidate.enabled : true,
+      };
+    })
+    .filter((server): server is McpServerInput => Boolean(server));
+};
+
+const normalizeRequestHeaders = (value: unknown) => {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    return undefined;
+  }
+
+  const headers = Object.entries(value).reduce<Record<string, string>>(
+    (acc, [key, headerValue]) => {
+      if (typeof headerValue === "string") {
+        acc[key] = headerValue;
+      }
+
+      return acc;
+    },
+    {}
+  );
+
+  return Object.keys(headers).length > 0 ? headers : undefined;
+};
 
 // Google Custom Search API integration
 import axios from "axios";

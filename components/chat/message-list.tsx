@@ -10,6 +10,7 @@ import { motion } from "framer-motion";
 import { TextShimmer } from "@/components/ui/text-shimmer";
 import clsx from "clsx";
 import { getToolDisplayName } from "@/lib/types/tool-mappings";
+import type { BrowserMcpServer } from "@/lib/mcp-browser";
 import {
   getMessageAttachments,
   getMessageContent,
@@ -23,6 +24,7 @@ import {
   ChevronDown,
   ChevronRight,
   ListTree,
+  Zap,
 } from "lucide-react";
 import CodeBlock from "./code-block";
 import {
@@ -74,17 +76,26 @@ interface MessageListProps {
   messages: ThreadMessage[];
   status?: "submitted" | "streaming" | "ready" | "error";
   toolApps?: ToolAppIcon[];
+  mcpServers?: BrowserMcpServer[];
 }
 
 export const MessageList = memo(function MessageList({
   messages,
   status = "ready",
   toolApps = [],
+  mcpServers = [],
 }: MessageListProps) {
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const previousMessageSnapshotRef = useRef(getMessageSnapshot(messages));
   const wasNearBottomRef = useRef(true);
+  const mcpServerNames = useMemo(
+    () =>
+      Object.fromEntries(
+        mcpServers.map((server) => [server.id.toLowerCase(), server.name]),
+      ),
+    [mcpServers],
+  );
 
   // Show loading indicator only when status is "submitted" (before streaming starts)
   const showLoadingIndicator = status === "submitted";
@@ -185,6 +196,7 @@ export const MessageList = memo(function MessageList({
               key={message.id}
               message={message}
               toolApps={toolApps}
+              mcpServerNames={mcpServerNames}
               isLastAssistantMessage={isLastAssistantMessage}
               isStreaming={
                 isLastAssistantMessage &&
@@ -240,11 +252,13 @@ const MessageItem = memo(
   ({
     message,
     toolApps,
+    mcpServerNames,
     isLastAssistantMessage,
     isStreaming,
   }: {
     message: ThreadMessage;
     toolApps: ToolAppIcon[];
+    mcpServerNames: Record<string, string>;
     isLastAssistantMessage: boolean;
     isStreaming: boolean;
   }) => {
@@ -277,6 +291,7 @@ const MessageItem = memo(
               <AssistantMessage
                 message={message}
                 toolApps={toolApps}
+                mcpServerNames={mcpServerNames}
                 isStreaming={isStreaming}
               />
             ) : (
@@ -291,6 +306,7 @@ const MessageItem = memo(
   (prevProps, nextProps) =>
     prevProps.message === nextProps.message &&
     prevProps.toolApps === nextProps.toolApps &&
+    prevProps.mcpServerNames === nextProps.mcpServerNames &&
     prevProps.isLastAssistantMessage === nextProps.isLastAssistantMessage &&
     prevProps.isStreaming === nextProps.isStreaming,
 );
@@ -301,10 +317,12 @@ const AssistantMessage = memo(
   ({
     message,
     toolApps,
+    mcpServerNames,
     isStreaming,
   }: {
     message: ThreadMessage;
     toolApps: ToolAppIcon[];
+    mcpServerNames: Record<string, string>;
     isStreaming: boolean;
   }) => {
     const reasoningPart = message.parts?.find(
@@ -320,7 +338,14 @@ const AssistantMessage = memo(
           if (part.type === "reasoning") return null;
 
           if (part.type === "dynamic-tool" || part.type.startsWith("tool-")) {
-            return <ToolPart key={index} part={part} toolApps={toolApps} />;
+            return (
+              <ToolPart
+                key={index}
+                part={part}
+                toolApps={toolApps}
+                mcpServerNames={mcpServerNames}
+              />
+            );
           }
 
           if (part.type === "text") {
@@ -337,17 +362,27 @@ const AssistantMessage = memo(
 AssistantMessage.displayName = "AssistantMessage";
 
 const ToolPart = memo(
-  ({ part, toolApps }: { part: any; toolApps: ToolAppIcon[] }) => {
+  ({
+    part,
+    toolApps,
+    mcpServerNames,
+  }: {
+    part: any;
+    toolApps: ToolAppIcon[];
+    mcpServerNames: Record<string, string>;
+  }) => {
     const toolStatus = part.state;
     const toolName = part.toolName ?? part.type.replace(/^tool-/, "");
     const isCalling =
       toolStatus === "input-streaming" || toolStatus === "input-available";
-    const { displayName, Icon, tooltip, appSlugs } = getToolDisplayName(
+    const { displayName, Icon, tooltip, appSlugs, source, toolLabel } = getToolDisplayName(
       toolName,
       toolStatus,
       part,
+      mcpServerNames,
     );
     const logos = getToolLogos(appSlugs, toolApps);
+    const isMcp = source === "mcp";
 
     return (
       <Tooltip>
@@ -364,17 +399,21 @@ const ToolPart = memo(
                 key={`${toolName}-${toolStatus}-calling`}
                 className="flex gap-2 items-center animate-in fade-in "
               >
-                <ToolIcon
-                  Icon={Icon}
-                  logos={logos}
-                  className="text-blue-500 animate-bounce"
-                />
+                {isMcp ? (
+                  <McpToolIcon isCalling />
+                ) : (
+                  <ToolIcon
+                    Icon={Icon}
+                    logos={logos}
+                    className="text-blue-500 animate-bounce"
+                  />
+                )}
                 <TextShimmer
                   className="text-sm md:text-base [--base-color:theme(colors.blue.600)] [--base-gradient-color:theme(colors.blue.200)] dark:[--base-color:theme(colors.blue.700)] dark:[--base-gradient-color:theme(colors.blue.400)]"
                   duration={1.5}
                   spread={1.5}
                 >
-                  {displayName}
+                  {toolLabel ? `${displayName} / ${toolLabel}` : displayName}
                 </TextShimmer>
               </div>
             ) : (
@@ -382,8 +421,13 @@ const ToolPart = memo(
                 key={`${toolName}-${toolStatus}`}
                 className="flex items-center gap-2 text-sm md:text-sm"
               >
-                <ToolIcon Icon={Icon} logos={logos} />
-                {displayName}
+                {isMcp ? <McpToolIcon /> : <ToolIcon Icon={Icon} logos={logos} />}
+                <span>{displayName}</span>
+                {toolLabel && (
+                  <span className="max-w-44 truncate rounded-sm bg-blue-100 px-1.5 py-0.5 text-xs font-medium text-blue-900 dark:bg-blue-900/70 dark:text-blue-100">
+                    {toolLabel}
+                  </span>
+                )}
               </div>
             )}
           </div>
@@ -401,6 +445,18 @@ const ToolPart = memo(
 );
 
 ToolPart.displayName = "ToolPart";
+
+const McpToolIcon = ({ isCalling = false }: { isCalling?: boolean }) => (
+  <span
+    className={clsx(
+      "grid h-4 w-4 shrink-0 place-items-center rounded-sm bg-blue-600 text-white dark:bg-blue-500",
+      isCalling && "animate-bounce",
+    )}
+    aria-hidden="true"
+  >
+    <Zap className="h-3 w-3" />
+  </span>
+);
 
 const ToolIcon = ({
   Icon,

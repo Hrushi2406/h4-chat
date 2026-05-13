@@ -23,6 +23,8 @@ type ToolDisplay = {
   Icon: any;
   tooltip: string;
   appSlugs?: string[];
+  source?: "mcp" | "composio" | "native";
+  toolLabel?: string;
 };
 
 export const toolDisplayNames: Record<
@@ -98,7 +100,26 @@ export const getToolDisplayName = (
   toolName: string,
   status: string,
   toolPart?: unknown,
+  mcpServerNames: Record<string, string> = {},
 ): ToolDisplay => {
+  if (isMcpToolName(toolName)) {
+    const details = getMcpToolDetails(toolName, mcpServerNames);
+
+    return {
+      displayName: isToolCalling(status)
+        ? `Using ${details.serverName}`
+        : `Used ${details.serverName}`,
+      toolLabel: details.toolName,
+      Icon: PlugZap,
+      tooltip: [
+        `${details.serverName} MCP`,
+        `Tool: ${details.toolName}`,
+        `Slug: ${toolName}`,
+      ].join("\n"),
+      source: "mcp",
+    };
+  }
+
   const normalizedToolName = toolName.toUpperCase();
   const toolContext = getToolContext(normalizedToolName, toolPart);
   const appSlugs = getComposioAppSlugs(normalizedToolName, toolContext);
@@ -124,6 +145,7 @@ export const getToolDisplayName = (
       Icon: getToolIcon(normalizedToolName, toolContext, composioTool.Icon),
       tooltip: getComposioTooltip(label, toolName, toolContext, appSlugs),
       appSlugs: getDisplayAppSlugs(appSlugs),
+      source: "composio",
     };
   }
 
@@ -134,6 +156,7 @@ export const getToolDisplayName = (
       displayName: toolName.toLowerCase(),
       Icon: Hammer,
       tooltip: `Tool: ${toolName}`,
+      source: "native",
     };
 
   if (isToolCalling(status)) {
@@ -141,12 +164,14 @@ export const getToolDisplayName = (
       displayName: tool.loading,
       Icon: tool.Icon,
       tooltip: `Tool: ${toolName}`,
+      source: "native",
     };
   }
   return {
     displayName: tool.done,
     Icon: tool.Icon,
     tooltip: `Tool: ${toolName}`,
+    source: "native",
   };
 };
 
@@ -155,6 +180,31 @@ const isToolCalling = (status: string) =>
   status === "call" ||
   status === "input-streaming" ||
   status === "input-available";
+
+const isMcpToolName = (toolName: string) => toolName.toLowerCase().startsWith("mcp_");
+
+const getMcpToolDetails = (
+  toolName: string,
+  mcpServerNames: Record<string, string>,
+) => {
+  const withoutPrefix = toolName.replace(/^mcp_/i, "");
+  const [server, ...toolParts] = withoutPrefix.split("_");
+  const tool = toolParts.join(" ") || server || "tool";
+  const serverId = server || "mcp";
+  const configuredName = mcpServerNames[serverId.toLowerCase()];
+
+  return {
+    serverName: configuredName?.trim() || formatReadableSlug(serverId),
+    toolName: formatReadableSlug(tool),
+  };
+};
+
+const formatReadableSlug = (value: string) =>
+  value
+    .replace(/[-_]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .replace(/\b\w/g, (char) => char.toUpperCase());
 
 const getToolIcon = (
   toolName: string,

@@ -22,6 +22,10 @@ import { useUser } from "@/lib/hooks/user/use-user";
 import { auth } from "@/lib/clients/firebase";
 import { motion, useReducedMotion, type Variants } from "framer-motion";
 import { useConnections } from "@/lib/hooks/connections/use-connections";
+import {
+  BrowserMcpServer,
+  getBrowserMcpServers,
+} from "@/lib/mcp-browser";
 
 interface ChatProps {
   threadId: string;
@@ -39,6 +43,7 @@ export function Chat({ threadId, isNew = false }: ChatProps) {
   const [searchEnabled, setSearchEnabled] = useState<boolean>(false);
 
   const [input, setInput] = useState("");
+  const [mcpServers, setMcpServers] = useState<BrowserMcpServer[]>([]);
   const threadWriteQueueRef = useRef<Promise<void>>(Promise.resolve());
 
   const { uid } = useAuth();
@@ -115,6 +120,21 @@ export function Chat({ threadId, isNew = false }: ChatProps) {
       setMessages(threadData.messages.map(normalizeThreadMessage));
     }
   }, [threadId, threadData, messages.length]);
+
+  useEffect(() => {
+    const syncMcpServers = () => {
+      setMcpServers(getBrowserMcpServers().filter((server) => server.enabled));
+    };
+
+    syncMcpServers();
+    window.addEventListener("storage", syncMcpServers);
+    window.addEventListener("mcp-servers-changed", syncMcpServers);
+
+    return () => {
+      window.removeEventListener("storage", syncMcpServers);
+      window.removeEventListener("mcp-servers-changed", syncMcpServers);
+    };
+  }, []);
 
   const handleInputChangeWithClearSuggestions = (
     e: React.ChangeEvent<HTMLTextAreaElement>
@@ -201,16 +221,18 @@ export function Chat({ threadId, isNew = false }: ChatProps) {
     e.preventDefault();
 
     const submittedInput = input.trim();
-    if (!submittedInput) return;
-
     const submittedAttachments = attachments;
+    if (!submittedInput && submittedAttachments.length === 0) return;
+
+    const submittedTitle =
+      submittedInput || submittedAttachments[0]?.name || "Image attachment";
     const msg = generateDefaultUserMessage(submittedInput, submittedAttachments);
 
     setInput("");
     setAttachments([]);
 
     enqueueThreadWrite(() =>
-      persistUserMessageBeforeSend(submittedInput, msg)
+      persistUserMessageBeforeSend(submittedTitle, msg)
     ).catch((error) => {
       console.error("Failed to save user message:", error);
     });
@@ -233,6 +255,7 @@ export function Chat({ threadId, isNew = false }: ChatProps) {
         searchEnabled: searchEnabled,
         authToken: await auth.currentUser?.getIdToken(),
         threadId,
+        mcpServers,
         userInfo: {
           name: user?.name,
           occupation: user?.occupation,
@@ -258,6 +281,7 @@ export function Chat({ threadId, isNew = false }: ChatProps) {
           messages={messages}
           status={status}
           toolApps={toolApps}
+          mcpServers={mcpServers}
         />
       </div>
 

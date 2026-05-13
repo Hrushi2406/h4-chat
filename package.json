@@ -9,6 +9,7 @@
     "lint": "eslint ."
   },
   "dependencies": {
+    "@ai-sdk/mcp": "^1.0.42",
     "@ai-sdk/react": "^3.0.174",
     "@composio/core": "^0.8.1",
     "@composio/vercel": "^0.8.1",

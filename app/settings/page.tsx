@@ -11,14 +11,25 @@ import {
   Inbox,
   ListTodo,
   Loader2,
+  Plus,
   PlugZap,
   RefreshCw,
   Save,
+  Server,
+  Trash2,
 } from "lucide-react";
 import Link from "next/link";
 import React from "react";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch";
 import { useUser } from "@/lib/hooks/user/use-user";
 import { useUserActions } from "@/lib/hooks/user/use-user-actions";
 import { Textarea } from "@/components/ui/textarea";
@@ -32,6 +43,12 @@ import {
   ConnectionToolkit,
   useConnections,
 } from "@/lib/hooks/connections/use-connections";
+import {
+  BrowserMcpServer,
+  getBrowserMcpServers,
+  removeBrowserMcpServer,
+  saveBrowserMcpServer,
+} from "@/lib/mcp-browser";
 
 export default function SettingsPage() {
   const [activeTab, setActiveTab] = React.useState("account");
@@ -277,9 +294,53 @@ const toolkitIcons: Record<string, React.ElementType> = {
   linear: ListTodo,
 };
 
+const slugifyMcpId = (value: string) =>
+  value
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9_-]/g, "_")
+    .replace(/_+/g, "_")
+    .replace(/^_+|_+$/g, "");
+
+const parseMcpHeaders = (value: string) => {
+  const trimmed = value.trim();
+
+  if (!trimmed) {
+    return undefined;
+  }
+
+  try {
+    const parsed: unknown = JSON.parse(trimmed);
+
+    if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
+      return null;
+    }
+
+    return Object.entries(parsed).reduce<Record<string, string>>(
+      (acc, [key, headerValue]) => {
+        if (typeof headerValue === "string") {
+          acc[key] = headerValue;
+        }
+
+        return acc;
+      },
+      {}
+    );
+  } catch {
+    return null;
+  }
+};
+
 const ConnectionsSettings = () => {
   const { uid } = useAuth();
   const [pendingSlug, setPendingSlug] = React.useState<string>();
+  const [mcpServers, setMcpServers] = React.useState<BrowserMcpServer[]>([]);
+  const [mcpName, setMcpName] = React.useState("");
+  const [mcpId, setMcpId] = React.useState("");
+  const [mcpUrl, setMcpUrl] = React.useState("");
+  const [mcpHeaders, setMcpHeaders] = React.useState("");
+  const [mcpTransport, setMcpTransport] =
+    React.useState<BrowserMcpServer["transport"]>("http");
   const {
     data: toolkits = [],
     error,
@@ -287,6 +348,18 @@ const ConnectionsSettings = () => {
     isLoading,
     refetch,
   } = useConnections(uid);
+
+  React.useEffect(() => {
+    setMcpServers(getBrowserMcpServers());
+  }, []);
+
+  React.useEffect(() => {
+    if (mcpId) {
+      return;
+    }
+
+    setMcpId(slugifyMcpId(mcpName));
+  }, [mcpId, mcpName]);
 
   const connect = async (toolkit: string) => {
     if (!uid) return;
@@ -345,6 +418,67 @@ const ConnectionsSettings = () => {
     } finally {
       setPendingSlug(undefined);
     }
+  };
+
+  const addMcpServer = () => {
+    const url = mcpUrl.trim();
+    const id = slugifyMcpId(mcpId || mcpName);
+    const name = mcpName.trim() || id;
+    const headers = parseMcpHeaders(mcpHeaders);
+
+    if (!id) {
+      toast.error("Give this MCP a name");
+      return;
+    }
+    if (headers === null) {
+      toast.error("Headers must be valid JSON");
+      return;
+    }
+    if (!url) {
+      toast.error("Paste the MCP server URL first");
+      return;
+    }
+
+    try {
+      const parsed = new URL(url);
+
+      if (!["http:", "https:"].includes(parsed.protocol)) {
+        throw new Error("Invalid protocol");
+      }
+    } catch {
+      toast.error("Enter a valid MCP URL");
+      return;
+    }
+
+    const nextServers = saveBrowserMcpServer({
+      id,
+      name,
+      url,
+      transport: mcpTransport,
+      headers,
+      enabled: true,
+    });
+
+    setMcpServers(nextServers);
+    setMcpName("");
+    setMcpId("");
+    setMcpUrl("");
+    setMcpHeaders("");
+    setMcpTransport("http");
+    toast.success(`${name} MCP connected`);
+  };
+
+  const toggleMcpServer = (server: BrowserMcpServer, enabled: boolean) => {
+    const nextServers = saveBrowserMcpServer({ ...server, enabled });
+
+    setMcpServers(nextServers);
+  };
+
+  const disconnectMcpServer = (server: BrowserMcpServer) => {
+    const nextServers = removeBrowserMcpServer(server.id);
+
+    setMcpServers(nextServers);
+    toast.success(`${server.name} MCP removed`);
   };
 
   return (
@@ -457,6 +591,148 @@ const ConnectionsSettings = () => {
                 </div>
               );
             })}
+      </div>
+
+      <div className="space-y-3 pt-2">
+        <div>
+          <h3 className="text-sm font-medium">MCP Servers</h3>
+          <p className="text-xs text-muted-foreground">
+            Add any remote MCP server with HTTP or SSE transport.
+          </p>
+        </div>
+
+        <div className="rounded-md border p-3">
+          <div className="grid gap-3 sm:grid-cols-[1fr_0.8fr]">
+            <div className="space-y-1.5">
+              <Label htmlFor="mcp-name">Name</Label>
+              <Input
+                id="mcp-name"
+                value={mcpName}
+                onChange={(event) => setMcpName(event.target.value)}
+                placeholder="Zepto, Linear MCP, Docs"
+                className="text-sm"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="mcp-id">Tool prefix</Label>
+              <Input
+                id="mcp-id"
+                value={mcpId}
+                onChange={(event) => setMcpId(slugifyMcpId(event.target.value))}
+                placeholder="zepto"
+                className="text-sm"
+              />
+            </div>
+          </div>
+
+          <div className="mt-3 grid gap-3 sm:grid-cols-[1fr_120px_auto]">
+            <div className="space-y-1.5">
+              <Label htmlFor="mcp-url">Server URL</Label>
+              <Input
+                id="mcp-url"
+                value={mcpUrl}
+                onChange={(event) => setMcpUrl(event.target.value)}
+                placeholder="https://example.com/mcp"
+                className="text-sm"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label>Transport</Label>
+              <Select
+                value={mcpTransport}
+                onValueChange={(value) =>
+                  setMcpTransport(value === "sse" ? "sse" : "http")
+                }
+              >
+                <SelectTrigger className="w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="http">HTTP</SelectItem>
+                  <SelectItem value="sse">SSE</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <Button
+              type="button"
+              onClick={addMcpServer}
+              className="self-end"
+            >
+              <Plus className="h-4 w-4" />
+              Add
+            </Button>
+          </div>
+
+          <div className="mt-3 space-y-1.5">
+            <Label htmlFor="mcp-headers">Headers JSON</Label>
+            <Textarea
+              id="mcp-headers"
+              value={mcpHeaders}
+              onChange={(event) => setMcpHeaders(event.target.value)}
+              placeholder='{"Authorization":"Bearer token"}'
+              className="min-h-[72px] font-mono text-xs"
+            />
+          </div>
+        </div>
+
+        <div className="space-y-2">
+          {mcpServers.length === 0 ? (
+            <div className="rounded-md border border-dashed px-3 py-6 text-center text-sm text-muted-foreground">
+              No MCP servers added yet.
+            </div>
+          ) : (
+            mcpServers.map((server) => (
+              <div
+                key={server.id}
+                className="flex items-center justify-between gap-3 rounded-md border p-3"
+              >
+                <div className="flex min-w-0 items-center gap-3">
+                  <div className="grid h-10 w-10 shrink-0 place-items-center rounded-md border bg-background">
+                    <Server className="h-5 w-5 text-muted-foreground" />
+                  </div>
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2">
+                      <p className="truncate font-medium">{server.name}</p>
+                      <Badge variant="outline" className="px-2 py-0 text-xs">
+                        {server.transport.toUpperCase()}
+                      </Badge>
+                      {server.enabled && (
+                        <Badge
+                          variant="outline"
+                          className="px-2 py-0 text-xs text-emerald-700"
+                        >
+                          Enabled
+                        </Badge>
+                      )}
+                    </div>
+                    <p className="truncate text-xs text-muted-foreground">
+                      mcp_{server.id}_* / {server.url}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex shrink-0 items-center gap-2">
+                  <Switch
+                    checked={server.enabled}
+                    onCheckedChange={(enabled) =>
+                      toggleMcpServer(server, enabled)
+                    }
+                    aria-label={`Toggle ${server.name}`}
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="icon"
+                    onClick={() => disconnectMcpServer(server)}
+                    aria-label={`Remove ${server.name}`}
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                </div>
+              </div>
+            ))
+          )}
+        </div>
       </div>
     </div>
   );

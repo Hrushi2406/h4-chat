@@ -11,7 +11,13 @@ import {
   Square,
   X,
 } from "lucide-react";
-import { FormEvent, KeyboardEvent, useCallback, useState } from "react";
+import {
+  ClipboardEvent,
+  FormEvent,
+  KeyboardEvent,
+  useCallback,
+  useState,
+} from "react";
 import { motion } from "framer-motion";
 import { type AIModel } from "@/lib/available-models";
 import clsx from "clsx";
@@ -29,6 +35,34 @@ import {
 } from "@/components/ui/tooltip";
 
 const CONTEXT_WINDOW_TOKENS = 200_000;
+
+const CLIPBOARD_IMAGE_EXTENSIONS: Record<string, string> = {
+  "image/gif": "gif",
+  "image/jpeg": "jpg",
+  "image/png": "png",
+  "image/webp": "webp",
+};
+
+const getClipboardImageFiles = (clipboardData: DataTransfer): File[] => {
+  return Array.from(clipboardData.items)
+    .filter((item) => item.kind === "file" && item.type.startsWith("image/"))
+    .map((item, index) => {
+      const file = item.getAsFile();
+
+      if (!file) {
+        return undefined;
+      }
+
+      const extension = CLIPBOARD_IMAGE_EXTENSIONS[file.type] ?? "png";
+      const fallbackName = `pasted-image-${Date.now()}-${index + 1}.${extension}`;
+
+      return new File([file], file.name || fallbackName, {
+        type: file.type,
+        lastModified: file.lastModified,
+      });
+    })
+    .filter((file): file is File => Boolean(file));
+};
 
 interface ChatInputProps {
   input: string;
@@ -64,11 +98,16 @@ export const ChatInput = ({
   const { uid } = useAuth();
   const pathname = usePathname();
   const threadId = pathname.split("/").pop();
+  const hasAttachments = attachments.length > 0;
 
   const handleKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
-      if (input.trim() && !isLoading && !uploadImages.isPending) {
+      if (
+        (input.trim() || hasAttachments) &&
+        !isLoading &&
+        !uploadImages.isPending
+      ) {
         handleFormSubmit(e as any);
       }
     }
@@ -78,29 +117,56 @@ export const ChatInput = ({
     onStop();
   };
 
-  const handleImageUpload = useCallback(
+  const handleFileUpload = useCallback(
     async (acceptedFiles: File[]) => {
-      setSelectedFiles(acceptedFiles);
+      if (acceptedFiles.length === 0) {
+        return;
+      }
 
-      const files = await uploadImages.mutateAsync({
-        files: acceptedFiles,
-        userId: uid!,
-        threadId: threadId,
-      });
+      setSelectedFiles((previousFiles) => [...previousFiles, ...acceptedFiles]);
 
-      if (files) {
-        const transformedFiles: Attachment[] = files.map((file) => {
-          return {
-            name: file.fileName,
-            url: file.url,
-            contentType: file.fileType,
-            id: file.fileId,
-          };
+      try {
+        const files = await uploadImages.mutateAsync({
+          files: acceptedFiles,
+          userId: uid!,
+          threadId: threadId,
         });
-        setAttachments(transformedFiles);
+
+        if (files) {
+          const transformedFiles: Attachment[] = files.map((file) => {
+            return {
+              name: file.fileName,
+              url: file.url,
+              contentType: file.fileType,
+              id: file.fileId,
+            };
+          });
+          setAttachments((previousAttachments) => [
+            ...previousAttachments,
+            ...transformedFiles,
+          ]);
+        }
+      } catch {
+        setSelectedFiles((previousFiles) =>
+          previousFiles.filter((file) => !acceptedFiles.includes(file))
+        );
       }
     },
     [uploadImages, uid, threadId, setAttachments]
+  );
+
+  const handlePaste = useCallback(
+    (e: ClipboardEvent<HTMLTextAreaElement>) => {
+      const imageFiles = getClipboardImageFiles(e.clipboardData);
+
+      if (imageFiles.length === 0) {
+        return;
+      }
+
+      e.preventDefault();
+      void handleFileUpload(imageFiles);
+    },
+    [handleFileUpload]
   );
 
   const handleRemoveFile = (index: number) => {
@@ -126,10 +192,10 @@ export const ChatInput = ({
 
   const { getRootProps, getInputProps, isDragActive, open } = useDropzone({
     accept: {
-      "image/*": [".jpeg", ".jpg", ".png", ".webp"],
+      "image/*": [".gif", ".jpeg", ".jpg", ".png", ".webp"],
       "application/pdf": [".pdf"],
     },
-    onDrop: handleImageUpload,
+    onDrop: handleFileUpload,
     noClick: true,
     noKeyboard: true,
     maxSize: 10485760, // 10MB
@@ -168,10 +234,11 @@ export const ChatInput = ({
                     value={input}
                     onChange={handleInputChange}
                     onKeyDown={handleKeyDown}
+                    onPaste={handlePaste}
                     placeholder={
                       isDragActive
                         ? "Drop files here..."
-                        : "Type your message here..."
+                        : "Type your message or paste an image..."
                     }
                     className="w-full min-h-[48px] max-h-[200px] resize-none rounded-2xl border-0 bg-transparent text-base leading-relaxed transition-all duration-200 focus:ring-0 focus:border-0 focus:outline-none focus-visible:ring-0 shadow-none"
                     rows={1}
@@ -229,7 +296,7 @@ export const ChatInput = ({
                         variant={isLoading ? "ghost" : "default"}
                         onClick={isLoading ? handleStopGeneration : undefined}
                         disabled={
-                          (!input.trim() && !isLoading) ||
+                          (!input.trim() && !hasAttachments && !isLoading) ||
                           uploadImages.isPending
                         }
                         className={clsx(
