@@ -79,6 +79,7 @@ export default function SharedChatPage({ params }: SharedChatPageProps) {
       <div className="mx-auto max-w-4xl ">
         <div className="flex-1 overflow-y-auto">
           <MessageList
+            threadId={threadData.id}
             messages={threadData.messages}
             status={"ready"}
           />

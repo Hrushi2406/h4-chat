@@ -229,6 +229,111 @@ const composioToolDisplay: Array<{
     Icon: PlugZap,
   },
   {
+    match: (context) => includesAny(context, ["INSTAGRAM"]),
+    appSlug: "instagram",
+    fallbackLoading: "Working with Instagram",
+    fallbackDone: "Used Instagram",
+    Icon: PlugZap,
+  },
+  {
+    match: (context) => includesAny(context, ["STRAVA"]),
+    appSlug: "strava",
+    fallbackLoading: "Working with Strava",
+    fallbackDone: "Used Strava",
+    Icon: PlugZap,
+  },
+  {
+    match: (context) => includesAny(context, ["YOUTUBE"]),
+    appSlug: "youtube",
+    fallbackLoading: "Working with YouTube",
+    fallbackDone: "Used YouTube",
+    Icon: PlugZap,
+  },
+  {
+    match: (context) => includesAny(context, ["ELEVENLABS"]),
+    appSlug: "elevenlabs",
+    fallbackLoading: "Working with ElevenLabs",
+    fallbackDone: "Used ElevenLabs",
+    Icon: PlugZap,
+  },
+  {
+    match: (context) => includesAny(context, ["CATS"]),
+    appSlug: "cats",
+    fallbackLoading: "Working with Cats",
+    fallbackDone: "Used Cats",
+    Icon: PlugZap,
+  },
+  {
+    match: (context) => includesAny(context, ["FAL_AI", "FAL AI"]),
+    appSlug: "fal_ai",
+    fallbackLoading: "Working with Fal.ai",
+    fallbackDone: "Used Fal.ai",
+    Icon: PlugZap,
+  },
+  {
+    match: (context) => includesAny(context, ["TODOIST"]),
+    appSlug: "todoist",
+    fallbackLoading: "Working with Todoist",
+    fallbackDone: "Used Todoist",
+    Icon: PlugZap,
+  },
+  {
+    match: (context) => includesAny(context, ["METAADS", "META ADS"]),
+    appSlug: "metaads",
+    fallbackLoading: "Working with Meta Ads",
+    fallbackDone: "Used Meta Ads",
+    Icon: PlugZap,
+  },
+  {
+    match: (context) => includesAny(context, ["GOOGLEADS", "GOOGLE ADS"]),
+    appSlug: "googleads",
+    fallbackLoading: "Working with Google Ads",
+    fallbackDone: "Used Google Ads",
+    Icon: PlugZap,
+  },
+  {
+    match: (context) => includesAny(context, ["REDDIT"]),
+    appSlug: "reddit",
+    fallbackLoading: "Working with Reddit",
+    fallbackDone: "Used Reddit",
+    Icon: PlugZap,
+  },
+  {
+    match: (context) => includesAny(context, ["FACEBOOK"]),
+    appSlug: "facebook",
+    fallbackLoading: "Working with Facebook",
+    fallbackDone: "Used Facebook",
+    Icon: PlugZap,
+  },
+  {
+    match: (context) => includesAny(context, ["LINKEDIN"]),
+    appSlug: "linkedin",
+    fallbackLoading: "Working with LinkedIn",
+    fallbackDone: "Used LinkedIn",
+    Icon: PlugZap,
+  },
+  {
+    match: (context) => includesAny(context, ["AHREFS"]),
+    appSlug: "ahrefs",
+    fallbackLoading: "Working with Ahrefs",
+    fallbackDone: "Used Ahrefs",
+    Icon: PlugZap,
+  },
+  {
+    match: (context) => includesAny(context, ["GEMINI"]),
+    appSlug: "gemini",
+    fallbackLoading: "Working with Gemini",
+    fallbackDone: "Used Gemini",
+    Icon: PlugZap,
+  },
+  {
+    match: (context) => includesAny(context, ["COMPOSIO_SEARCH", "COMPOSIO SEARCH"]),
+    appSlug: "composio_search",
+    fallbackLoading: "Searching Composio",
+    fallbackDone: "Searched Composio",
+    Icon: PlugZap,
+  },
+  {
     match: (context) => context.includes("COMPOSIO"),
     appSlug: "composio",
     fallbackLoading: "Using Composio",
@@ -891,9 +996,16 @@ const formatToolkitSlug = (value: string) =>
     .toLowerCase();
 
 const appLabels: Record<string, string> = {
+  ahrefs: "Ahrefs",
+  cats: "Cats",
   confluence: "Confluence",
   composio: "Composio",
+  composio_search: "Composio Search",
+  elevenlabs: "ElevenLabs",
+  facebook: "Facebook",
+  fal_ai: "Fal.ai",
   figma: "Figma",
+  gemini: "Gemini",
   github: "GitHub",
   gmail: "Gmail",
   google_chat: "Google Chat",
@@ -910,14 +1022,21 @@ const appLabels: Record<string, string> = {
   googleslides: "Google Slides",
   googletasks: "Google Tasks",
   hubspot: "HubSpot",
+  instagram: "Instagram",
   linear: "Linear",
+  linkedin: "LinkedIn",
+  metaads: "Meta Ads",
   notion: "Notion",
   outlook: "Outlook",
+  reddit: "Reddit",
   sandbox: "Sandbox",
   salesforce: "Salesforce",
   shopify: "Shopify",
+  strava: "Strava",
   stripe: "Stripe",
+  todoist: "Todoist",
   trello: "Trello",
+  youtube: "YouTube",
 };
 
 const getToolkitSlugFromToolSlug = (value: string) => {
@@ -977,6 +1096,22 @@ const getToolkitSlugFromToolSlug = (value: string) => {
 
   if (slug.startsWith("GOOGLETASKS_")) {
     return "googletasks";
+  }
+
+  if (slug.startsWith("FAL_AI_")) {
+    return "fal_ai";
+  }
+
+  if (slug.startsWith("METAADS_")) {
+    return "metaads";
+  }
+
+  if (slug.startsWith("GOOGLEADS_")) {
+    return "googleads";
+  }
+
+  if (slug.startsWith("COMPOSIO_SEARCH_")) {
+    return "composio_search";
   }
 
   const [toolkit] = slug.split("_");

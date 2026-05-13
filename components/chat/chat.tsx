@@ -45,6 +45,7 @@ export function Chat({ threadId, isNew = false }: ChatProps) {
   const [input, setInput] = useState("");
   const [mcpServers, setMcpServers] = useState<BrowserMcpServer[]>([]);
   const threadWriteQueueRef = useRef<Promise<void>>(Promise.resolve());
+  const loadedThreadIdRef = useRef<string | null>(null);
 
   const { uid } = useAuth();
   const { data: user } = useUser();
@@ -114,12 +115,25 @@ export function Chat({ threadId, isNew = false }: ChatProps) {
     return usage;
   }, [messages]);
 
-  // Load existing thread messages when thread data is available
+  // Replace messages when navigating between existing threads.
   useEffect(() => {
-    if (threadId && threadData && messages.length === 0) {
-      setMessages(threadData.messages.map(normalizeThreadMessage));
+    if (!threadId || loadedThreadIdRef.current === threadId) {
+      return;
     }
-  }, [threadId, threadData, messages.length]);
+
+    if (isNewThread) {
+      setMessages([]);
+      loadedThreadIdRef.current = threadId;
+      return;
+    }
+
+    if (!threadData) {
+      return;
+    }
+
+    setMessages(threadData.messages.map(normalizeThreadMessage));
+    loadedThreadIdRef.current = threadId;
+  }, [threadId, threadData, isNewThread, setMessages]);
 
   useEffect(() => {
     const syncMcpServers = () => {
@@ -278,6 +292,7 @@ export function Chat({ threadId, isNew = false }: ChatProps) {
       {/* Chat Content Area */}
       <div className="flex-1 overflow-y-auto">
         <MessageList
+          threadId={threadId}
           messages={messages}
           status={status}
           toolApps={toolApps}
@@ -339,6 +354,21 @@ const CONNECTED_APP_PROMPTS: Record<string, string> = {
   google_search_console: "Summarize Search Console performance",
   shopify: "Review Shopify orders and customers",
   figma: "Summarize Figma project context",
+  instagram: "Review recent Instagram activity",
+  strava: "Summarize my Strava activity",
+  youtube: "Analyze my YouTube channel and videos",
+  elevenlabs: "Create or manage ElevenLabs voice assets",
+  cats: "Find cat images or breed facts",
+  fal_ai: "Run a Fal.ai media generation task",
+  todoist: "Organize my Todoist tasks",
+  metaads: "Review Meta Ads performance",
+  googleads: "Review Google Ads performance",
+  reddit: "Find and summarize Reddit discussions",
+  facebook: "Review Facebook pages and activity",
+  linkedin: "Draft and review LinkedIn content",
+  ahrefs: "Analyze SEO data in Ahrefs",
+  gemini: "Use Gemini for a generation task",
+  composio_search: "Search available Composio tools",
 };
 
 const DEFAULT_PROMPTS = [

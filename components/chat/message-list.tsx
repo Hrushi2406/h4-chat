@@ -61,18 +61,29 @@ const markdownComponents = {
     <div className="bg-secondary p-2 rounded-lg">{children}</div>
   ),
   a: ({ href, children }) => (
-    <a
-      href={href}
-      target="_blank"
-      rel="noopener noreferrer"
-      className="text-primary hover:text-primary/80 transition-colors"
-    >
-      {children}
-    </a>
+    isImageUrl(href) ? (
+      <InlineImage src={href} alt={getNodeText(children) || "Generated image"} />
+    ) : (
+      <a
+        href={href}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="text-primary hover:text-primary/80 transition-colors"
+      >
+        {children}
+      </a>
+    )
+  ),
+  img: ({ src, alt }) => (
+    <InlineImage
+      src={typeof src === "string" ? src : undefined}
+      alt={alt || "Generated image"}
+    />
   ),
 } satisfies Components;
 
 interface MessageListProps {
+  threadId: string;
   messages: ThreadMessage[];
   status?: "submitted" | "streaming" | "ready" | "error";
   toolApps?: ToolAppIcon[];
@@ -80,6 +91,7 @@ interface MessageListProps {
 }
 
 export const MessageList = memo(function MessageList({
+  threadId,
   messages,
   status = "ready",
   toolApps = [],
@@ -87,6 +99,7 @@ export const MessageList = memo(function MessageList({
 }: MessageListProps) {
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const previousThreadIdRef = useRef(threadId);
   const previousMessageSnapshotRef = useRef(getMessageSnapshot(messages));
   const wasNearBottomRef = useRef(true);
   const mcpServerNames = useMemo(
@@ -103,6 +116,7 @@ export const MessageList = memo(function MessageList({
   useEffect(() => {
     const currentSnapshot = getMessageSnapshot(messages);
     const previousSnapshot = previousMessageSnapshotRef.current;
+    const hasChangedThread = previousThreadIdRef.current !== threadId;
     const hasNewMessage = currentSnapshot.count > previousSnapshot.count;
     const isSameThread =
       currentSnapshot.count === 0 ||
@@ -114,15 +128,16 @@ export const MessageList = memo(function MessageList({
       (currentSnapshot.firstId !== previousSnapshot.firstId ||
         (currentSnapshot.count <= previousSnapshot.count &&
           currentSnapshot.lastId !== previousSnapshot.lastId));
-    if (hasSwitchedThreads) {
+    if (hasChangedThread || hasSwitchedThreads) {
       wasNearBottomRef.current = true;
-      requestAnimationFrame(scrollToBottom);
+      requestAnimationFrame(() => scrollToBottom("auto"));
     } else if (hasNewMessage && (wasNearBottomRef.current || !isSameThread)) {
       scrollToBottom();
     }
 
+    previousThreadIdRef.current = threadId;
     previousMessageSnapshotRef.current = currentSnapshot;
-  }, [messages]);
+  }, [threadId, messages]);
 
   useEffect(() => {
     if (showLoadingIndicator && wasNearBottomRef.current) {
@@ -146,19 +161,19 @@ export const MessageList = memo(function MessageList({
     wasNearBottomRef.current = isNearBottom(getScrollElement());
   };
 
-  const scrollToBottom = () => {
+  const scrollToBottom = (behavior: ScrollBehavior = "smooth") => {
     const scrollElement = getScrollElement();
 
     if (scrollElement) {
       scrollElement.scrollTo({
         top: scrollElement.scrollHeight,
-        behavior: "smooth",
+        behavior,
       });
       return;
     }
 
     messagesEndRef.current?.scrollIntoView({
-      behavior: "smooth",
+      behavior,
       block: "end",
     });
   };
@@ -352,6 +367,16 @@ const AssistantMessage = memo(
             return <MarkdownPart key={index} text={part.text} />;
           }
 
+          if (part.type === "file" && part.mediaType?.startsWith("image/")) {
+            return (
+              <InlineImage
+                key={index}
+                src={part.url}
+                alt={part.filename || "Generated image"}
+              />
+            );
+          }
+
           return null;
         })}
       </>
@@ -504,6 +529,65 @@ const MarkdownPart = memo(({ text }: { text: string }) => (
 ));
 
 MarkdownPart.displayName = "MarkdownPart";
+
+const InlineImage = ({
+  src,
+  alt,
+}: {
+  src?: string;
+  alt: string;
+}) => {
+  if (!src) {
+    return null;
+  }
+
+  return (
+    <a
+      href={src}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="not-prose my-3 block max-w-full"
+    >
+      <img
+        src={src}
+        alt={alt}
+        className="max-h-[520px] max-w-full rounded-lg border border-border bg-muted object-contain shadow-sm"
+        loading="lazy"
+      />
+    </a>
+  );
+};
+
+const imageExtensionPattern = /\.(avif|gif|jpe?g|png|svg|webp)$/i;
+
+const isImageUrl = (href?: string) => {
+  if (!href) {
+    return false;
+  }
+
+  if (href.startsWith("data:image/")) {
+    return true;
+  }
+
+  try {
+    const url = new URL(href);
+    return imageExtensionPattern.test(decodeURIComponent(url.pathname));
+  } catch {
+    return imageExtensionPattern.test(href.split(/[?#]/)[0]);
+  }
+};
+
+const getNodeText = (node: React.ReactNode): string => {
+  if (typeof node === "string" || typeof node === "number") {
+    return String(node);
+  }
+
+  if (Array.isArray(node)) {
+    return node.map(getNodeText).join("");
+  }
+
+  return "";
+};
 
 const UserMessage = memo(
   ({

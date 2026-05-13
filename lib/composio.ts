@@ -24,6 +24,21 @@ export const COMPOSIO_TOOLKITS = [
   "google_search_console",
   "shopify",
   "figma",
+  "instagram",
+  "strava",
+  "youtube",
+  "elevenlabs",
+  "cats",
+  "fal_ai",
+  "todoist",
+  "metaads",
+  "googleads",
+  "reddit",
+  "facebook",
+  "linkedin",
+  "ahrefs",
+  "gemini",
+  "composio_search",
 ] as const;
 
 export const COMPOSIO_TOOLKIT_LABELS: Record<ComposioToolkit, string> = {
@@ -49,6 +64,21 @@ export const COMPOSIO_TOOLKIT_LABELS: Record<ComposioToolkit, string> = {
   google_search_console: "Google Search Console",
   shopify: "Shopify",
   figma: "Figma",
+  instagram: "Instagram",
+  strava: "Strava",
+  youtube: "YouTube",
+  elevenlabs: "ElevenLabs",
+  cats: "Cats",
+  fal_ai: "Fal.ai",
+  todoist: "Todoist",
+  metaads: "Meta Ads",
+  googleads: "Google Ads",
+  reddit: "Reddit",
+  facebook: "Facebook",
+  linkedin: "LinkedIn",
+  ahrefs: "Ahrefs",
+  gemini: "Gemini",
+  composio_search: "Composio Search",
 };
 
 export type ComposioToolkit = (typeof COMPOSIO_TOOLKITS)[number];
