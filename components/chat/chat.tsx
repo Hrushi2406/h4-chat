@@ -43,6 +43,7 @@ export function Chat({ threadId, isNew = false }: ChatProps) {
 
   const { uid } = useAuth();
   const { data: user } = useUser();
+  const { data: toolApps = [] } = useConnections(uid);
 
   const { createThread, addMessageToThread } = useThreadActions();
 
@@ -256,6 +257,7 @@ export function Chat({ threadId, isNew = false }: ChatProps) {
         <MessageList
           messages={messages}
           status={status}
+          toolApps={toolApps}
         />
       </div>
 

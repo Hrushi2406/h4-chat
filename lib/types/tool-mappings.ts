@@ -22,6 +22,7 @@ type ToolDisplay = {
   displayName: string;
   Icon: any;
   tooltip: string;
+  appSlugs?: string[];
 };
 
 export const toolDisplayNames: Record<
@@ -96,7 +97,7 @@ const composioToolDisplay: Array<{
 export const getToolDisplayName = (
   toolName: string,
   status: string,
-  toolPart?: unknown
+  toolPart?: unknown,
 ): ToolDisplay => {
   const normalizedToolName = toolName.toUpperCase();
   const toolContext = getToolContext(normalizedToolName, toolPart);
@@ -115,13 +116,14 @@ export const getToolDisplayName = (
       toolContext,
       appSlugs,
       composioTool,
-      isToolCalling(status)
+      isToolCalling(status),
     );
 
     return {
       displayName: label,
       Icon: getToolIcon(normalizedToolName, toolContext, composioTool.Icon),
       tooltip: getComposioTooltip(label, toolName, toolContext, appSlugs),
+      appSlugs: getDisplayAppSlugs(appSlugs),
     };
   }
 
@@ -157,7 +159,7 @@ const isToolCalling = (status: string) =>
 const getToolIcon = (
   toolName: string,
   context: ReturnType<typeof getToolContext>,
-  fallbackIcon: any
+  fallbackIcon: any,
 ) => {
   if (
     toolName !== COMPOSIO_META_TOOLS.REMOTE_BASH_TOOL &&
@@ -215,7 +217,7 @@ const hasAny = (value: string, tokens: string[]) =>
       value.endsWith(`_${token}`) ||
       value.includes(` ${token} `) ||
       value.startsWith(`${token} `) ||
-      value.endsWith(` ${token}`)
+      value.endsWith(` ${token}`),
   );
 
 const includesAny = (context: string, tokens: string[]) =>
@@ -227,7 +229,7 @@ const includesAny = (context: string, tokens: string[]) =>
       context.endsWith(`_${token}`) ||
       context.includes(` ${token} `) ||
       context.startsWith(`${token} `) ||
-      context.endsWith(` ${token}`)
+      context.endsWith(` ${token}`),
   );
 
 const getToolContext = (toolName: string, toolPart?: unknown) => {
@@ -243,7 +245,7 @@ const getToolContext = (toolName: string, toolPart?: unknown) => {
     toolSlugs,
     toolkitSlugs,
     searchParts,
-    commandParts
+    commandParts,
   );
 
   return {
@@ -271,7 +273,7 @@ const collectContext = (
   toolkitSlugs: string[],
   searchParts: string[],
   commandParts: string[],
-  depth = 0
+  depth = 0,
 ) => {
   if (depth > 4 || contextParts.join(" ").length > 6000) {
     return;
@@ -283,17 +285,19 @@ const collectContext = (
   }
 
   if (Array.isArray(value)) {
-    value.slice(0, 20).forEach((item) =>
-      collectContext(
-        item,
-        contextParts,
-        toolSlugs,
-        toolkitSlugs,
-        searchParts,
-        commandParts,
-        depth + 1
-      )
-    );
+    value
+      .slice(0, 20)
+      .forEach((item) =>
+        collectContext(
+          item,
+          contextParts,
+          toolSlugs,
+          toolkitSlugs,
+          searchParts,
+          commandParts,
+          depth + 1,
+        ),
+      );
     return;
   }
 
@@ -327,7 +331,7 @@ const collectContext = (
       toolkitSlugs,
       searchParts,
       commandParts,
-      depth + 1
+      depth + 1,
     );
   });
 };
@@ -356,19 +360,13 @@ const isToolkitSlugKey = (key: string) =>
 
 const isSearchTextKey = (key: string) =>
   ["query", "use_case", "usecase", "known_fields", "knownfields"].includes(
-    key.toLowerCase()
+    key.toLowerCase(),
   );
 
 const isCommandTextKey = (key: string) =>
-  [
-    "bash",
-    "cmd",
-    "code",
-    "command",
-    "commands",
-    "script",
-    "shell",
-  ].includes(key.toLowerCase());
+  ["bash", "cmd", "code", "command", "commands", "script", "shell"].includes(
+    key.toLowerCase(),
+  );
 
 const extractStrings = (value: unknown): string[] => {
   if (typeof value === "string") {
@@ -383,12 +381,14 @@ const extractStrings = (value: unknown): string[] => {
     return [];
   }
 
-  return Object.values(value as Record<string, unknown>).flatMap(extractStrings);
+  return Object.values(value as Record<string, unknown>).flatMap(
+    extractStrings,
+  );
 };
 
 const getComposioAppSlugs = (
   toolName: string,
-  context: ReturnType<typeof getToolContext>
+  context: ReturnType<typeof getToolContext>,
 ) => {
   if (
     toolName === COMPOSIO_META_TOOLS.REMOTE_BASH_TOOL ||
@@ -442,7 +442,7 @@ const getComposioLabel = (
   context: ReturnType<typeof getToolContext>,
   appSlugs: string[],
   display: (typeof composioToolDisplay)[number],
-  calling: boolean
+  calling: boolean,
 ) => {
   const displaySlugs = getDisplayAppSlugs(appSlugs);
   const appLabel =
@@ -476,9 +476,9 @@ const getComposioLabel = (
   if (toolName === COMPOSIO_META_TOOLS.MULTI_EXECUTE_TOOL) {
     const action = getComposioAction(
       context.toolSlugContext,
-      context.searchText
+      context.searchText,
     );
-    return `${calling ? action?.loading ?? "Using" : action?.done ?? "Used"} ${appLabel}`;
+    return `${calling ? (action?.loading ?? "Using") : (action?.done ?? "Used")} ${appLabel}`;
   }
 
   if (toolName === COMPOSIO_META_TOOLS.REMOTE_BASH_TOOL) {
@@ -505,7 +505,7 @@ const getComposioLabel = (
 
   const action = getComposioAction(
     `${context.toolSlugContext} ${toolName}`,
-    context.searchText
+    context.searchText,
   );
 
   if (action) {
@@ -546,7 +546,7 @@ const getSandboxAction = (context: ReturnType<typeof getToolContext>) => {
 
   if (
     /\b(apt-get|apt|brew|pip|pip3|npm|pnpm|yarn)\s+(install|add)\b/.test(
-      command
+      command,
     )
   ) {
     return {
@@ -557,7 +557,7 @@ const getSandboxAction = (context: ReturnType<typeof getToolContext>) => {
   }
 
   const matchedCommand = sandboxCommandLabels.find(({ match }) =>
-    match(command)
+    match(command),
   );
 
   if (matchedCommand) {
@@ -641,7 +641,7 @@ const getComposioTooltip = (
   label: string,
   toolName: string,
   context: ReturnType<typeof getToolContext>,
-  appSlugs: string[]
+  appSlugs: string[],
 ) => {
   const displaySlugs = getDisplayAppSlugs(appSlugs);
   const appText =
@@ -673,7 +673,7 @@ const getComposioTooltip = (
   return `${label}\nApp: ${appText}${toolkitText}${searchText}${slugText}${commandText}`;
 };
 
-const dedupe = <T,>(items: T[]) => Array.from(new Set(items));
+const dedupe = <T>(items: T[]) => Array.from(new Set(items));
 
 const getDisplayAppSlugs = (appSlugs: string[]) => {
   const nonComposioSlugs = appSlugs.filter((slug) => slug !== "composio");
@@ -686,8 +686,7 @@ const getPrimaryAppSlug = (appSlugs: string[]) =>
 const isString = (value: string | undefined): value is string =>
   typeof value === "string";
 
-const cleanTooltipText = (value: string) =>
-  value.replace(/\s+/g, " ").trim();
+const cleanTooltipText = (value: string) => value.replace(/\s+/g, " ").trim();
 
 const truncateTooltipText = (value: string, maxLength: number) =>
   value.length > maxLength ? `${value.slice(0, maxLength - 1)}...` : value;
@@ -748,11 +747,7 @@ const formatAppSlug = (slug: string) => {
   const normalized = formatToolkitSlug(slug);
   return (
     appLabels[normalized] ??
-    normalized
-      .split(/[_-]/g)
-      .filter(Boolean)
-      .map(formatTitlePart)
-      .join(" ")
+    normalized.split(/[_-]/g).filter(Boolean).map(formatTitlePart).join(" ")
   );
 };
 
