@@ -28,6 +28,10 @@ import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { useAuth } from "@/lib/hooks/auth/use-auth";
 import { auth } from "@/lib/clients/firebase";
+import {
+  ConnectionToolkit,
+  useConnections,
+} from "@/lib/hooks/connections/use-connections";
 
 export default function SettingsPage() {
   const [activeTab, setActiveTab] = React.useState("account");
@@ -265,16 +269,6 @@ const CustomizationSettings = () => {
   );
 };
 
-type ConnectionToolkit = {
-  slug: string;
-  name: string;
-  providerName: string;
-  logo?: string;
-  isConnected: boolean;
-  connectedAccountId?: string;
-  status?: string;
-};
-
 const toolkitIcons: Record<string, React.ElementType> = {
   gmail: Inbox,
   googlecalendar: CalendarDays,
@@ -285,46 +279,14 @@ const toolkitIcons: Record<string, React.ElementType> = {
 
 const ConnectionsSettings = () => {
   const { uid } = useAuth();
-  const [toolkits, setToolkits] = React.useState<ConnectionToolkit[]>([]);
-  const [isLoading, setIsLoading] = React.useState(true);
   const [pendingSlug, setPendingSlug] = React.useState<string>();
-  const [error, setError] = React.useState<string>();
-
-  const fetchConnections = React.useCallback(async () => {
-    if (!uid) return;
-
-    setIsLoading(true);
-    setError(undefined);
-
-    try {
-      const authToken = await auth.currentUser?.getIdToken();
-      const response = await fetch("/api/connections", {
-        cache: "no-store",
-        headers: authToken
-          ? {
-              Authorization: `Bearer ${authToken}`,
-            }
-          : undefined,
-      });
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.error || "Unable to load connections");
-      }
-
-      setToolkits(data.toolkits ?? []);
-    } catch (error) {
-      const message =
-        error instanceof Error ? error.message : "Unable to load connections";
-      setError(message);
-    } finally {
-      setIsLoading(false);
-    }
-  }, [uid]);
-
-  React.useEffect(() => {
-    fetchConnections();
-  }, [fetchConnections]);
+  const {
+    data: toolkits = [],
+    error,
+    isFetching,
+    isLoading,
+    refetch,
+  } = useConnections(uid);
 
   const connect = async (toolkit: string) => {
     if (!uid) return;
@@ -375,7 +337,7 @@ const ConnectionsSettings = () => {
       }
 
       toast.success(`${toolkit.name} disconnected`);
-      await fetchConnections();
+      await refetch();
     } catch (error) {
       const message =
         error instanceof Error ? error.message : "Unable to disconnect app";
@@ -398,11 +360,11 @@ const ConnectionsSettings = () => {
           type="button"
           variant="outline"
           size="sm"
-          onClick={fetchConnections}
-          disabled={isLoading || !uid}
+          onClick={() => refetch()}
+          disabled={isFetching || !uid}
         >
           <RefreshCw
-            className={cn("w-4 h-4", isLoading && "animate-spin")}
+            className={cn("w-4 h-4", isFetching && "animate-spin")}
           />
           Refresh
         </Button>
@@ -410,9 +372,9 @@ const ConnectionsSettings = () => {
 
       {error && (
         <div className="rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive">
-          {error === "Composio is not configured"
+          {error.message === "Composio is not configured"
             ? "Add COMPOSIO_API_KEY to your environment to enable app connections."
-            : error}
+            : error.message}
         </div>
       )}
 

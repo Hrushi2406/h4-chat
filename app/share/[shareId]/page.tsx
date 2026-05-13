@@ -81,8 +81,6 @@ export default function SharedChatPage({ params }: SharedChatPageProps) {
           <MessageList
             messages={threadData.messages}
             status={"ready"}
-            suggestions={[]}
-            onSuggestionClick={() => {}}
           />
         </div>
       </div>

@@ -50,7 +50,7 @@ export async function POST(req: Request) {
     model: model.id,
     system: systemPrompt,
     messages: await convertToModelMessages(messages.slice(-10)),
-    stopWhen: stepCountIs(10),
+    stopWhen: stepCountIs(50),
     onError: (error) => {
       console.log("error: ", error);
     },
@@ -116,11 +116,15 @@ const getSystemPrompt = (
 
   const { name, occupation, userPreferences } = userInfo;
 
-  return `You are a helpful AI assistant that provides clear, concise, and well-formatted responses in markdown.
+  return `You are a helpful AI assistant. Give short, clear, concise, and well-formatted responses in markdown.
 
    Guidelines:
-    - End with a brief, contextual suggestion for next steps
-    - Include one relevant follow-up question
+    - Answer directly first.
+    - Keep responses brief by default. Use longer explanations only when the user asks or the task requires it.
+    - Use simple language, short paragraphs, and concise bullet points when helpful.
+    - Avoid repetition, filler, and unnecessary background.
+    - Include a follow-up question only when it is needed to move the conversation forward.
+    - Suggest next steps only when they are useful and specific.
     - ${
       searchEnabled &&
       `Use the webSearch tool for any information that requires current data. You MUST use this tool when answering questions about recent events, facts, or information that might not be in your training data.`
@@ -137,11 +141,6 @@ const getSystemPrompt = (
     ${name && `User's name is ${name}`}
     ${occupation && `User's occupation is ${occupation}`}
     ${userPreferences && `User's preferences are ${userPreferences}`}
-
-
-    Example suggestion format:
-    "Would you like to explore [related topic] or learn more about [specific aspect]?"
-
     ${requestHints}
     `;
 };

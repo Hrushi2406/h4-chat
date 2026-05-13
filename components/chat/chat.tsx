@@ -19,9 +19,9 @@ import {
 import { useAuth } from "@/lib/hooks/auth/use-auth";
 import { ChatRequestOptions, DefaultChatTransport } from "ai";
 import { useUser } from "@/lib/hooks/user/use-user";
-import chatService from "@/lib/services/chat-service";
 import { auth } from "@/lib/clients/firebase";
 import { motion, useReducedMotion, type Variants } from "framer-motion";
+import { useConnections } from "@/lib/hooks/connections/use-connections";
 
 interface ChatProps {
   threadId: string;
@@ -38,7 +38,6 @@ export function Chat({ threadId, isNew = false }: ChatProps) {
   const [isCreatingThread, setIsCreatingThread] = useState(false);
   const [searchEnabled, setSearchEnabled] = useState<boolean>(false);
 
-  const [suggestions, setSuggestions] = useState<string[]>([]);
   const [input, setInput] = useState("");
   const threadWriteQueueRef = useRef<Promise<void>>(Promise.resolve());
 
@@ -75,12 +74,6 @@ export function Chat({ threadId, isNew = false }: ChatProps) {
 
       // Save assistant message to thread when response is complete
       if (threadId) {
-        chatService.generateSuggestions(
-          finishedMessages,
-          false,
-          "ready",
-          setSuggestions
-        );
         enqueueThreadWrite(() =>
           saveMessageToThread(normalizeThreadMessage(message))
         ).catch((error) => {
@@ -129,8 +122,6 @@ export function Chat({ threadId, isNew = false }: ChatProps) {
   };
 
   const handleSuggestionClick = async (suggestion: string) => {
-    setSuggestions([]);
-
     const msg = generateDefaultUserMessage(suggestion);
     enqueueThreadWrite(() => persistUserMessageBeforeSend(suggestion, msg)).catch(
       (error) => {
@@ -214,7 +205,6 @@ export function Chat({ threadId, isNew = false }: ChatProps) {
     const submittedAttachments = attachments;
     const msg = generateDefaultUserMessage(submittedInput, submittedAttachments);
 
-    setSuggestions([]);
     setInput("");
     setAttachments([]);
 
@@ -266,8 +256,6 @@ export function Chat({ threadId, isNew = false }: ChatProps) {
         <MessageList
           messages={messages}
           status={status}
-          suggestions={suggestions}
-          onSuggestionClick={handleSuggestionClick}
         />
       </div>
 
@@ -289,13 +277,6 @@ export function Chat({ threadId, isNew = false }: ChatProps) {
     </div>
   );
 }
-
-type ConnectedApp = {
-  slug: string;
-  name: string;
-  logo?: string;
-  isConnected: boolean;
-};
 
 type PromptSuggestion = {
   label: string;
@@ -338,9 +319,14 @@ const HomeSuggestions = ({
   const userName = user?.name?.trim();
   const [activePrompt, setActivePrompt] = useState(0);
   const [greeting, setGreeting] = useState("Hi");
-  const [connectedApps, setConnectedApps] = useState<ConnectedApp[]>([]);
-  const [arePromptsReady, setArePromptsReady] = useState(false);
   const shouldReduceMotion = useReducedMotion();
+  const { data: toolkits = [], isLoading: areConnectionsLoading } =
+    useConnections(uid);
+  const connectedApps = useMemo(
+    () => toolkits.filter((toolkit) => toolkit.isConnected),
+    [toolkits]
+  );
+  const arePromptsReady = !!uid && !areConnectionsLoading;
 
   useEffect(() => {
     const hour = new Date().getHours();
@@ -359,67 +345,19 @@ const HomeSuggestions = ({
     return () => window.clearInterval(interval);
   }, []);
 
-  useEffect(() => {
-    setArePromptsReady(false);
-    setConnectedApps([]);
-
-    if (!uid) {
-      return;
-    }
-
-    let isMounted = true;
-
-    const fetchConnectedApps = async () => {
-      try {
-        const authToken = await auth.currentUser?.getIdToken();
-        const response = await fetch("/api/connections", {
-          cache: "no-store",
-          headers: authToken
-            ? {
-                Authorization: `Bearer ${authToken}`,
-              }
-            : undefined,
-        });
-
-        if (!response.ok) return;
-
-        const data: { toolkits?: ConnectedApp[] } = await response.json();
-        if (!isMounted) return;
-
-        setConnectedApps(
-          (data.toolkits ?? []).filter((toolkit) => toolkit.isConnected)
-        );
-      } catch {
-        if (isMounted) {
-          setConnectedApps([]);
-        }
-      } finally {
-        if (isMounted) {
-          setArePromptsReady(true);
-        }
-      }
-    };
-
-    fetchConnectedApps();
-
-    return () => {
-      isMounted = false;
-    };
-  }, [uid]);
-
   const suggestions = useMemo<PromptSuggestion[]>(() => {
     const appPrompts = connectedApps.flatMap<PromptSuggestion>((app) => {
-        const label = CONNECTED_APP_PROMPTS[app.slug];
-        if (!label) return [];
+      const label = CONNECTED_APP_PROMPTS[app.slug];
+      if (!label) return [];
 
-        return [
-          {
-            label,
-            appName: app.name,
-            logo: app.logo,
-          },
-        ];
-      });
+      return [
+        {
+          label,
+          appName: app.name,
+          logo: app.logo,
+        },
+      ];
+    });
 
     const genericPrompts = DEFAULT_PROMPTS.map((label) => ({ label }));
     return [...appPrompts, ...genericPrompts].slice(0, 8);

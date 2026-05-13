@@ -1,11 +1,14 @@
 "use client";
 
-import { QueryClientProvider } from "@tanstack/react-query";
+import { QueryClientProvider, useQueryClient } from "@tanstack/react-query";
 import { Toaster } from "sonner";
 import { queryClient } from "@/lib/clients/query-client";
 import { useAuth } from "@/lib/hooks/auth/use-auth";
 import AuthDialog from "@/components/auth/auth-dialog";
 import { TextShimmer } from "@/components/ui/text-shimmer";
+import { useEffect } from "react";
+import { userQueryOptions } from "@/lib/hooks/user/use-user";
+import { connectionsQueryOptions } from "@/lib/hooks/connections/use-connections";
 
 interface ClientProviderProps {
   children: React.ReactNode;
@@ -22,6 +25,14 @@ export const ClientProvider = ({ children }: ClientProviderProps) => {
 
 const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const { uid } = useAuth();
+  const queryClient = useQueryClient();
+
+  useEffect(() => {
+    if (!uid) return;
+
+    void queryClient.prefetchQuery(userQueryOptions(uid));
+    void queryClient.prefetchQuery(connectionsQueryOptions(uid));
+  }, [queryClient, uid]);
 
   if (!uid)
     return (
