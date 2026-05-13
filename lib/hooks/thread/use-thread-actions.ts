@@ -11,10 +11,8 @@ export const useThreadActions = () => {
   const createThread = useMutation({
     mutationFn: threadService.createThread,
     onSuccess: (newThread) => {
-      qc.setQueryData(threadKeys.all, (oldData: Thread[] | undefined) => {
-        if (!oldData) return [newThread];
-        return [newThread, ...oldData];
-      });
+      qc.setQueryData(threadKeys.detail(newThread.id), newThread);
+      qc.invalidateQueries({ queryKey: threadKeys.all });
     },
     onError: (error) => handleError(error, "Failed to create thread"),
   });
@@ -22,12 +20,12 @@ export const useThreadActions = () => {
   const updateThread = useMutation({
     mutationFn: threadService.updateThread,
     onSuccess: (_, { threadId, title }) => {
-      qc.setQueryData(threadKeys.all, (oldData: Thread[] | undefined) => {
-        if (!oldData) return oldData;
-        return oldData.map((thread) =>
-          thread.id === threadId ? { ...thread, title } : thread
-        );
-      });
+      qc.setQueryData(
+        threadKeys.detail(threadId),
+        (oldData: Thread | undefined) =>
+          oldData ? { ...oldData, title } : oldData
+      );
+      qc.invalidateQueries({ queryKey: threadKeys.all });
     },
     onError: (error) => handleError(error, "Failed to update thread"),
   });
@@ -35,10 +33,8 @@ export const useThreadActions = () => {
   const deleteThread = useMutation({
     mutationFn: threadService.deleteThread,
     onSuccess: (_, { threadId }) => {
-      qc.setQueryData(threadKeys.all, (oldData: Thread[] | undefined) => {
-        if (!oldData) return oldData;
-        return oldData.filter((thread) => thread.id !== threadId);
-      });
+      qc.removeQueries({ queryKey: threadKeys.detail(threadId) });
+      qc.invalidateQueries({ queryKey: threadKeys.all });
     },
     onError: (error) => handleError(error, "Failed to delete thread"),
   });

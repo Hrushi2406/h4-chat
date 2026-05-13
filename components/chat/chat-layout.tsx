@@ -60,10 +60,10 @@ export default function ChatLayout({
   const pathname = usePathname();
 
   return (
-    <SidebarProvider>
-      <div className="flex h-screen w-full">
+    <SidebarProvider className="h-screen min-h-0 overflow-hidden">
+      <div className="flex h-full min-h-0 w-full overflow-hidden">
         <ThreadSidebar />
-        <SidebarInset className="flex-1">
+        <SidebarInset className="min-h-0 flex-1">
           <Navbar />
           <div className="flex-1 overflow-hidden">{children}</div>
         </SidebarInset>
@@ -74,7 +74,13 @@ export default function ChatLayout({
 
 const ThreadSidebar = () => {
   const { uid } = useAuth();
-  const { data: threads = [], isLoading } = useThreads();
+  const {
+    data: threads = [],
+    isLoading,
+    fetchNextPage,
+    hasNextPage,
+    isFetchingNextPage,
+  } = useThreads();
   const router = useRouter();
   const params = useParams();
   const pathname = usePathname();
@@ -150,7 +156,7 @@ const ThreadSidebar = () => {
           </div>
         </SidebarHeader>
 
-        <SidebarContent>
+        <SidebarContent className="min-h-0 overflow-y-auto overscroll-contain">
           {isLoading ? (
             <LoadingState />
           ) : !threads.length ? (
@@ -162,6 +168,9 @@ const ThreadSidebar = () => {
               currentThreadId={currentThreadId}
               onThreadClick={handleThreadClick}
               onDeleteThread={handleDeleteThread}
+              onLoadMore={() => fetchNextPage()}
+              hasMoreThreads={!!hasNextPage}
+              isLoadingMoreThreads={isFetchingNextPage}
             />
           )}
         </SidebarContent>
@@ -198,6 +207,9 @@ interface ThreadsListProps {
   currentThreadId: string;
   onThreadClick: (threadId: string) => void;
   onDeleteThread: (threadId: string, threadTitle: string) => void;
+  onLoadMore: () => void;
+  hasMoreThreads: boolean;
+  isLoadingMoreThreads: boolean;
 }
 
 const ThreadsList = ({
@@ -205,7 +217,11 @@ const ThreadsList = ({
   currentThreadId,
   onThreadClick,
   onDeleteThread,
+  onLoadMore,
+  hasMoreThreads,
+  isLoadingMoreThreads,
 }: ThreadsListProps) => {
+  const loadMoreRef = React.useRef<HTMLDivElement>(null);
   const timePeriods: ThreadTimePeriod[] = [
     "today",
     "yesterday",
@@ -213,8 +229,32 @@ const ThreadsList = ({
     "older",
   ];
 
+  React.useEffect(() => {
+    const node = loadMoreRef.current;
+
+    if (!node || !hasMoreThreads || isLoadingMoreThreads) {
+      return;
+    }
+
+    let didRequestNextPage = false;
+    const scrollRoot = node.closest('[data-sidebar="content"]');
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting && !didRequestNextPage) {
+          didRequestNextPage = true;
+          onLoadMore();
+        }
+      },
+      { root: scrollRoot, rootMargin: "120px" }
+    );
+
+    observer.observe(node);
+
+    return () => observer.disconnect();
+  }, [hasMoreThreads, isLoadingMoreThreads, onLoadMore]);
+
   return (
-    <>
+    <div className="min-h-0">
       {timePeriods.map((period) => {
         const threadsInPeriod = groupedThreads[period];
         if (!threadsInPeriod.length) return null;
@@ -240,7 +280,28 @@ const ThreadsList = ({
           </SidebarGroup>
         );
       })}
-    </>
+      <div ref={loadMoreRef} className="px-2 py-3">
+        {hasMoreThreads ? (
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="w-full text-muted-foreground"
+            onClick={onLoadMore}
+            disabled={isLoadingMoreThreads}
+          >
+            {isLoadingMoreThreads ? (
+              <>
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Loading older chats...
+              </>
+            ) : (
+              "Load older chats"
+            )}
+          </Button>
+        ) : null}
+      </div>
+    </div>
   );
 };
 

@@ -11,6 +11,10 @@ import {
   limit,
   where,
   setDoc,
+  startAfter,
+  type DocumentData,
+  type QueryConstraint,
+  type QueryDocumentSnapshot,
 } from "firebase/firestore";
 import { auth, db } from "@/lib/clients/firebase";
 import {
@@ -23,6 +27,12 @@ import {
 import { v4 } from "uuid";
 
 const colThreads = "threads";
+export type ThreadCursor = QueryDocumentSnapshot<DocumentData>;
+
+export interface ThreadsPage {
+  threads: Thread[];
+  nextCursor: ThreadCursor | null;
+}
 
 const removeUndefinedValues = <T>(value: T): T => {
   if (value === undefined) {
@@ -101,23 +111,44 @@ class ThreadService {
     }
   }
 
-  // Get threads with options (limit to 20 max)
-  async getThreads({ userId }: { userId: string }): Promise<Thread[]> {
+  // Get threads with pagination
+  async getThreads({
+    userId,
+    cursor,
+    pageSize = 20,
+  }: {
+    userId: string;
+    cursor?: ThreadCursor | null;
+    pageSize?: number;
+  }): Promise<ThreadsPage> {
     try {
-      const q = query(
-        collection(db, colThreads),
+      const constraints: QueryConstraint[] = [
         where("userId", "==", userId),
         orderBy("updatedAt", "desc"),
-        limit(20)
+      ];
+
+      if (cursor) {
+        constraints.push(startAfter(cursor));
+      }
+
+      constraints.push(limit(pageSize));
+
+      const q = query(
+        collection(db, colThreads),
+        ...constraints
       );
 
       const querySnapshot = await getDocs(q);
       const threads: Thread[] = querySnapshot.docs.map(
         (doc) => doc.data() as Thread
       );
+      const nextCursor =
+        querySnapshot.docs.length === pageSize
+          ? querySnapshot.docs[querySnapshot.docs.length - 1]
+          : null;
 
       console.log(`Retrieved ${threads.length} threads`);
-      return threads;
+      return { threads, nextCursor };
     } catch (error) {
       console.error("Failed to fetch threads:", error);
       throw error;

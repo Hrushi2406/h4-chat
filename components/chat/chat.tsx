@@ -46,6 +46,7 @@ export function Chat({ threadId, isNew = false }: ChatProps) {
   const [mcpServers, setMcpServers] = useState<BrowserMcpServer[]>([]);
   const threadWriteQueueRef = useRef<Promise<void>>(Promise.resolve());
   const loadedThreadIdRef = useRef<string | null>(null);
+  const previousThreadIdRef = useRef(threadId);
 
   const { uid } = useAuth();
   const { data: user } = useUser();
@@ -114,6 +115,17 @@ export function Chat({ threadId, isNew = false }: ChatProps) {
 
     return usage;
   }, [messages]);
+
+  // Clear stale messages immediately when the route changes to another thread.
+  useEffect(() => {
+    if (previousThreadIdRef.current === threadId) {
+      return;
+    }
+
+    previousThreadIdRef.current = threadId;
+    loadedThreadIdRef.current = null;
+    setMessages([]);
+  }, [threadId, setMessages]);
 
   // Replace messages when navigating between existing threads.
   useEffect(() => {
@@ -290,8 +302,9 @@ export function Chat({ threadId, isNew = false }: ChatProps) {
       )}
 
       {/* Chat Content Area */}
-      <div className="flex-1 overflow-y-auto">
+      <div className="flex-1 overflow-hidden">
         <MessageList
+          key={threadId}
           threadId={threadId}
           messages={messages}
           status={status}

@@ -5,7 +5,7 @@ import type { Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import remarkToc from "remark-toc";
 import rehypeRaw from "rehype-raw";
-import { memo, useRef, useEffect, useMemo, useState } from "react";
+import { memo, useRef, useEffect, useLayoutEffect, useMemo, useState } from "react";
 import { motion } from "framer-motion";
 import { TextShimmer } from "@/components/ui/text-shimmer";
 import clsx from "clsx";
@@ -113,11 +113,29 @@ export const MessageList = memo(function MessageList({
   // Show loading indicator only when status is "submitted" (before streaming starts)
   const showLoadingIndicator = status === "submitted";
 
+  useLayoutEffect(() => {
+    if (messages.length === 0) {
+      return;
+    }
+
+    wasNearBottomRef.current = true;
+    scrollToBottom("auto");
+    const animationFrame = requestAnimationFrame(() => scrollToBottom("auto"));
+    const timeout = window.setTimeout(() => scrollToBottom("auto"), 0);
+
+    return () => {
+      cancelAnimationFrame(animationFrame);
+      window.clearTimeout(timeout);
+    };
+  }, [threadId]);
+
   useEffect(() => {
     const currentSnapshot = getMessageSnapshot(messages);
     const previousSnapshot = previousMessageSnapshotRef.current;
     const hasChangedThread = previousThreadIdRef.current !== threadId;
     const hasNewMessage = currentSnapshot.count > previousSnapshot.count;
+    const hasLoadedThreadMessages =
+      previousSnapshot.count === 0 && currentSnapshot.count > 0;
     const isSameThread =
       currentSnapshot.count === 0 ||
       previousSnapshot.count === 0 ||
@@ -128,8 +146,9 @@ export const MessageList = memo(function MessageList({
       (currentSnapshot.firstId !== previousSnapshot.firstId ||
         (currentSnapshot.count <= previousSnapshot.count &&
           currentSnapshot.lastId !== previousSnapshot.lastId));
-    if (hasChangedThread || hasSwitchedThreads) {
+    if (hasChangedThread || hasSwitchedThreads || hasLoadedThreadMessages) {
       wasNearBottomRef.current = true;
+      scrollToBottom("auto");
       requestAnimationFrame(() => scrollToBottom("auto"));
     } else if (hasNewMessage && (wasNearBottomRef.current || !isSameThread)) {
       scrollToBottom();
@@ -199,7 +218,7 @@ export const MessageList = memo(function MessageList({
     <div
       ref={scrollContainerRef}
       onScroll={updateNearBottom}
-      className="flex-1 overflow-y-auto p-4"
+      className="h-full flex-1 overflow-y-auto [overflow-anchor:none] p-4"
     >
       <div className="space-y-3 md:space-y-4 max-w-4xl mx-auto">
         {messages.map((message, index) => {
