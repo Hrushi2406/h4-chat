@@ -224,6 +224,13 @@ const composioToolDisplay: Array<{
     Icon: PlugZap,
   },
   {
+    match: (context) => includesAny(context, ["CANVA"]),
+    appSlug: "canva",
+    fallbackLoading: "Working with Canva",
+    fallbackDone: "Used Canva",
+    Icon: Image,
+  },
+  {
     match: (context) => includesAny(context, ["INSTAGRAM"]),
     appSlug: "instagram",
     fallbackLoading: "Working with Instagram",
@@ -1000,6 +1007,7 @@ const formatToolkitSlug = (value: string) =>
 
 const appLabels: Record<string, string> = {
   ahrefs: "Ahrefs",
+  canva: "Canva",
   cats: "Cats",
   confluence: "Confluence",
   composio: "Composio",

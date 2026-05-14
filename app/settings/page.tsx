@@ -9,6 +9,7 @@ import {
   FileText,
   Globe,
   HardDrive,
+  Image,
   Inbox,
   ListTodo,
   Loader2,
@@ -295,6 +296,7 @@ const toolkitIcons: Record<string, React.ElementType> = {
   googledrive: HardDrive,
   notion: FileText,
   linear: ListTodo,
+  canva: Image,
   whatsapp: MessageCircle,
   browser_tool: Globe,
 };
