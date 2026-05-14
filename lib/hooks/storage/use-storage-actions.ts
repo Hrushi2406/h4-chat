@@ -2,18 +2,18 @@ import { useMutation } from "@tanstack/react-query";
 import storageService from "@/lib/services/storage-service";
 import { toast } from "sonner";
 
-interface UploadImageParams {
+interface UploadFileParams {
   files: File[];
   userId: string;
   threadId?: string;
 }
 
 export const useStorageActions = () => {
-  const uploadImages = useMutation({
-    mutationFn: async ({ files, userId, threadId }: UploadImageParams) => {
+  const uploadFiles = useMutation({
+    mutationFn: async ({ files, userId, threadId }: UploadFileParams) => {
       // Validate and upload files in parallel
       const promises = files.map(async (file) => {
-        storageService.validateImageFile(file);
+        storageService.validateFile(file);
         return storageService.uploadFile({ file, userId, threadId });
       });
 
@@ -21,10 +21,10 @@ export const useStorageActions = () => {
       return results;
     },
     onSuccess: (data) => {
-      toast.success("Image uploaded successfully");
+      toast.success(data.length === 1 ? "File uploaded" : "Files uploaded");
     },
     onError: (error: Error) => {
-      toast.error(error.message || "Failed to upload image");
+      toast.error(error.message || "Failed to upload file");
     },
   });
 
@@ -39,7 +39,8 @@ export const useStorageActions = () => {
   });
 
   return {
-    uploadImages,
+    uploadFiles,
+    uploadImages: uploadFiles,
     deleteFile,
   };
 };

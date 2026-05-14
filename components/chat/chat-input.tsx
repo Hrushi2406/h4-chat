@@ -23,6 +23,10 @@ import clsx from "clsx";
 import { cn } from "@/lib/utils";
 import { useDropzone } from "react-dropzone";
 import { useStorageActions } from "@/lib/hooks/storage/use-storage-actions";
+import {
+  ALLOWED_FILE_TYPES,
+  MAX_UPLOAD_FILE_SIZE,
+} from "@/lib/services/storage-service";
 import { useAuth } from "@/lib/hooks/auth/use-auth";
 import { usePathname } from "next/navigation";
 import { ModelSelector } from "./model-selector";
@@ -34,6 +38,10 @@ import {
 } from "@/components/ui/tooltip";
 
 const CONTEXT_WINDOW_TOKENS = 200_000;
+const DROPZONE_ACCEPT = ALLOWED_FILE_TYPES as unknown as Record<
+  string,
+  string[]
+>;
 
 const CLIPBOARD_IMAGE_EXTENSIONS: Record<string, string> = {
   "image/gif": "gif",
@@ -89,7 +97,7 @@ export const ChatInput = ({
   setAttachments,
 }: ChatInputProps) => {
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
-  const { uploadImages } = useStorageActions();
+  const { uploadFiles } = useStorageActions();
   const { uid } = useAuth();
   const pathname = usePathname();
   const threadId = pathname.split("/").pop();
@@ -101,7 +109,7 @@ export const ChatInput = ({
       if (
         (input.trim() || hasAttachments) &&
         !isLoading &&
-        !uploadImages.isPending
+        !uploadFiles.isPending
       ) {
         handleFormSubmit(e as any);
       }
@@ -121,7 +129,7 @@ export const ChatInput = ({
       setSelectedFiles((previousFiles) => [...previousFiles, ...acceptedFiles]);
 
       try {
-        const files = await uploadImages.mutateAsync({
+        const files = await uploadFiles.mutateAsync({
           files: acceptedFiles,
           userId: uid!,
           threadId: threadId,
@@ -147,7 +155,7 @@ export const ChatInput = ({
         );
       }
     },
-    [uploadImages, uid, threadId, setAttachments],
+    [uploadFiles, uid, threadId, setAttachments],
   );
 
   const handlePaste = useCallback(
@@ -186,14 +194,11 @@ export const ChatInput = ({
   };
 
   const { getRootProps, getInputProps, isDragActive, open } = useDropzone({
-    accept: {
-      "image/*": [".gif", ".jpeg", ".jpg", ".png", ".webp"],
-      "application/pdf": [".pdf"],
-    },
+    accept: DROPZONE_ACCEPT,
     onDrop: handleFileUpload,
     noClick: true,
     noKeyboard: true,
-    maxSize: 10485760, // 10MB
+    maxSize: MAX_UPLOAD_FILE_SIZE,
   });
 
   return (
@@ -219,7 +224,7 @@ export const ChatInput = ({
                   <FilePreviews
                     selectedFiles={selectedFiles}
                     handleRemoveFile={handleRemoveFile}
-                    isUploading={uploadImages.isPending}
+                    isUploading={uploadFiles.isPending}
                   />
                 )}
 
@@ -233,7 +238,7 @@ export const ChatInput = ({
                     placeholder={
                       isDragActive
                         ? "Drop files here..."
-                        : "Type your message or paste an image..."
+                        : "Type your message, attach files, or paste an image..."
                     }
                     className="w-full min-h-[48px] max-h-[200px] resize-none rounded-2xl border-0 bg-transparent text-base leading-relaxed transition-all duration-200 focus:ring-0 focus:border-0 focus:outline-none focus-visible:ring-0 shadow-none"
                     rows={1}
@@ -276,7 +281,7 @@ export const ChatInput = ({
                         onClick={isLoading ? handleStopGeneration : undefined}
                         disabled={
                           (!input.trim() && !hasAttachments && !isLoading) ||
-                          uploadImages.isPending
+                          uploadFiles.isPending
                         }
                         className={clsx(
                           "h-10 w-10 rounded-full transition-colors disabled:opacity-50",

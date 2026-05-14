@@ -7,6 +7,39 @@ import {
 } from "firebase/storage";
 import { v4 as uuidv4 } from "uuid";
 
+export const ALLOWED_FILE_TYPES = {
+  "image/jpeg": [".jpeg", ".jpg"],
+  "image/jpg": [".jpg"],
+  "image/png": [".png"],
+  "image/gif": [".gif"],
+  "image/webp": [".webp"],
+  "application/pdf": [".pdf"],
+  "text/csv": [".csv"],
+  "application/csv": [".csv"],
+  "text/comma-separated-values": [".csv"],
+  "application/vnd.ms-excel": [".xls", ".csv"],
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": [
+    ".xlsx",
+  ],
+  "application/vnd.oasis.opendocument.spreadsheet": [".ods"],
+  "application/msword": [".doc"],
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document": [
+    ".docx",
+  ],
+  "application/vnd.oasis.opendocument.text": [".odt"],
+  "application/vnd.ms-powerpoint": [".ppt"],
+  "application/vnd.openxmlformats-officedocument.presentationml.presentation": [
+    ".pptx",
+  ],
+  "application/vnd.oasis.opendocument.presentation": [".odp"],
+  "text/plain": [".txt"],
+  "text/markdown": [".md"],
+  "application/json": [".json"],
+  "application/zip": [".zip"],
+} as const;
+
+export const MAX_UPLOAD_FILE_SIZE = 25 * 1024 * 1024;
+
 interface UploadFileParams {
   file: File;
   userId: string;
@@ -63,30 +96,41 @@ class StorageService {
     }
   }
 
-  validateImageFile(file: File): boolean {
-    const allowedTypes = [
-      "image/jpeg",
-      "image/jpg",
-      "image/png",
-      "image/gif",
-      "image/webp",
-      "application/pdf",
-    ];
-    const maxSize = 10 * 1024 * 1024; // 10MB
+  validateFile(file: File): boolean {
+    const allowedTypes = Object.keys(ALLOWED_FILE_TYPES);
+    const allowedExtensions: readonly string[] =
+      Object.values(ALLOWED_FILE_TYPES).flat();
+    const extension = getFileExtension(file.name);
+    const hasAllowedMimeType = allowedTypes.includes(file.type);
+    const hasAllowedExtension = allowedExtensions.includes(extension);
 
-    if (!allowedTypes.includes(file.type)) {
+    if (!hasAllowedMimeType && !hasAllowedExtension) {
       throw new Error(
-        "Only JPEG, PNG, GIF, WebP images and PDF files are allowed"
+        "Only images, PDFs, spreadsheets, documents, text files, JSON, and ZIP files are allowed"
       );
     }
 
-    if (file.size > maxSize) {
-      throw new Error("File size must be less than 10MB");
+    if (file.size > MAX_UPLOAD_FILE_SIZE) {
+      throw new Error("File size must be less than 25MB");
     }
 
     return true;
   }
+
+  validateImageFile(file: File): boolean {
+    return this.validateFile(file);
+  }
 }
+
+const getFileExtension = (fileName: string) => {
+  const dotIndex = fileName.lastIndexOf(".");
+
+  if (dotIndex === -1) {
+    return "";
+  }
+
+  return fileName.slice(dotIndex).toLowerCase();
+};
 
 const storageService = new StorageService();
 export default storageService;

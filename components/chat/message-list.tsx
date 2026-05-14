@@ -859,6 +859,15 @@ const getNodeText = (node: React.ReactNode): string => {
   return "";
 };
 
+const getAttachmentExtension = (name?: string) => {
+  const extension = name?.split(".").pop();
+  return extension ? extension.toUpperCase() : "FILE";
+};
+
+const isImageAttachment = (attachment: ReturnType<typeof getMessageAttachments>[number]) =>
+  attachment.contentType?.startsWith("image/") ||
+  /\.(gif|jpe?g|png|webp)$/i.test(attachment.name ?? "");
+
 const UserMessage = memo(
   ({
     content,
@@ -875,9 +884,7 @@ const UserMessage = memo(
           }`}
         >
           {attachments.map((attachment, attachmentIndex) => {
-            const isPdf =
-              attachment.name?.toLowerCase().endsWith(".pdf") ||
-              attachment.contentType === "application/pdf";
+            const isImage = isImageAttachment(attachment);
 
             return (
               <div
@@ -888,21 +895,7 @@ const UserMessage = memo(
                     : "min-w-0 max-w-[min(200px,calc(100vw-3rem))]"
                 }`}
               >
-                {isPdf ? (
-                  <a
-                    href={attachment.url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="block h-full w-full min-h-[120px]"
-                  >
-                    <div className="flex flex-col items-center justify-center h-full w-full gap-2 p-2 bg-muted">
-                      <FileText className="h-8 w-8 text-muted-foreground " />
-                      <span className="text-xs text-primary hover:text-primary/80 transition-colors mt-1 text-center max-w-full">
-                        {attachment.name || "PDF Document"}
-                      </span>
-                    </div>
-                  </a>
-                ) : (
+                {isImage ? (
                   <a
                     href={attachment.url}
                     target="_blank"
@@ -914,6 +907,23 @@ const UserMessage = memo(
                       className="h-full w-full object-cover"
                       loading="lazy"
                     />
+                  </a>
+                ) : (
+                  <a
+                    href={attachment.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="block h-full w-full min-h-[120px]"
+                  >
+                    <div className="flex h-full w-full flex-col items-center justify-center gap-2 bg-muted p-2">
+                      <FileText className="h-8 w-8 text-muted-foreground" />
+                      <span className="rounded bg-background px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">
+                        {getAttachmentExtension(attachment.name)}
+                      </span>
+                      <span className="mt-1 max-w-full truncate text-center text-xs text-primary transition-colors hover:text-primary/80">
+                        {attachment.name || "Attached file"}
+                      </span>
+                    </div>
                   </a>
                 )}
               </div>

@@ -254,7 +254,7 @@ export function Chat({ threadId, isNew = false }: ChatProps) {
     if (!submittedInput && submittedAttachments.length === 0) return;
 
     const submittedTitle =
-      submittedInput || submittedAttachments[0]?.name || "Image attachment";
+      submittedInput || submittedAttachments[0]?.name || "File attachment";
     const msg = generateDefaultUserMessage(submittedInput, submittedAttachments);
 
     setInput("");
