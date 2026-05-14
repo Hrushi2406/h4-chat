@@ -10,9 +10,11 @@ interface CodeBlockProps {
 const CodeBlock: React.FC<CodeBlockProps> = memo(
   ({ language = "js", value }) => {
     return (
-      <SyntaxHighlighter language={language} style={a11yDark}>
-        {value}
-      </SyntaxHighlighter>
+      <div className="max-w-full overflow-x-auto [&_pre]:my-0 [&_pre]:max-w-none">
+        <SyntaxHighlighter language={language} style={a11yDark}>
+          {value}
+        </SyntaxHighlighter>
+      </div>
     );
   }
 );

@@ -66,7 +66,9 @@ const markdownComponents = {
     );
   },
   pre: ({ children }) => (
-    <div className="bg-secondary p-2 rounded-lg">{children}</div>
+    <div className="max-w-full overflow-x-auto rounded-lg bg-secondary p-2">
+      {children}
+    </div>
   ),
   a: ({ href, children }) => (
     isImageUrl(href) ? (
@@ -345,11 +347,11 @@ export const MessageList = memo(function MessageList({
       <div
         ref={scrollContainerRef}
         onScroll={updateNearBottom}
-        className="h-full min-h-0 flex-1 overflow-y-auto overscroll-contain [overflow-anchor:none] p-4"
+        className="h-full min-h-0 flex-1 overflow-y-auto overscroll-contain [overflow-anchor:none] px-3 pt-3 pb-4 sm:p-4"
       >
-        <div ref={contentRef} className="max-w-4xl mx-auto">
+        <div ref={contentRef} className="mx-auto w-full min-w-0 max-w-4xl">
           <div
-            className="relative w-full"
+            className="relative min-w-0 w-full"
             style={{ height: `${virtualizer.getTotalSize()}px` }}
           >
             {virtualItems.map((virtualItem) => {
@@ -366,7 +368,7 @@ export const MessageList = memo(function MessageList({
                   key={virtualItem.key}
                   data-index={index}
                   ref={virtualizer.measureElement}
-                  className="absolute left-0 top-0 w-full"
+                  className="absolute left-0 top-0 w-full min-w-0"
                   style={{
                     transform: `translateY(${virtualItem.start}px)`,
                     paddingBottom:
@@ -408,7 +410,7 @@ export const MessageList = memo(function MessageList({
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: 18 }}
             transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
-            className="pointer-events-none absolute inset-x-4 bottom-4 z-20 mx-auto flex max-w-4xl justify-end"
+            className="pointer-events-none absolute inset-x-3 bottom-3 z-20 mx-auto flex max-w-4xl justify-end sm:inset-x-4 sm:bottom-4"
           >
             <Tooltip>
               <TooltipTrigger asChild>
@@ -507,10 +509,10 @@ const LoadingMessage = () => (
       duration: 0.2,
       ease: "easeOut",
     }}
-    className="flex justify-start"
+    className="flex min-w-0 w-full justify-start"
   >
     <div
-      className={`max-w-[75%] ${heightClass} py-3 text-foreground rounded-lg`}
+      className={`min-w-0 w-full max-w-full md:w-auto md:max-w-[75%] ${heightClass} rounded-lg py-3 text-foreground`}
     >
       <TextShimmer
         className="text-sm md:text-base leading-loose [--base-color:theme(colors.blue.600)] [--base-gradient-color:theme(colors.blue.200)] dark:[--base-color:theme(colors.blue.700)] dark:[--base-gradient-color:theme(colors.blue.400)]"
@@ -546,18 +548,22 @@ const MessageItemContent = memo(
     return (
       <div
         className={clsx(
+          "min-w-0",
           !isLastAssistantMessage &&
             "[content-visibility:auto] [contain-intrinsic-size:0_160px]",
         )}
       >
         <div
-          className={`flex ${
+          className={`flex min-w-0 w-full ${
             message.role === "user" ? "justify-end" : "justify-start"
           }`}
         >
           <div
             className={clsx(
-              "md:max-w-[75%] leading-7",
+              "min-w-0 leading-7",
+              message.role === "user"
+                ? "max-w-[min(100%,92%)] md:max-w-[75%]"
+                : "w-full max-w-full md:w-auto md:max-w-[75%]",
               message.role === "user" &&
                 attachments.length === 0 &&
                 userMessageStyle(content),
@@ -780,8 +786,8 @@ const getToolLogos = (appSlugs: string[] = [], toolApps: ToolAppIcon[]) =>
     .filter((logo): logo is string => !!logo);
 
 const MarkdownPart = memo(({ text }: { text: string }) => (
-  <div>
-    <div className="text-sm md:text-base prose prose-sm prose-neutral md:prose-base max-w-none leading-loose prose-headings:text-foreground prose-p:text-[#364153] prose-strong:text-foreground prose-li:text-[#364153] prose-th:text-[#364153] prose-td:text-[#364153] prose-a:text-primary prose-code:text-foreground prose-pre:bg-secondary dark:prose-invert dark:prose-p:text-[#d1d5dc] dark:prose-li:text-[#d1d5dc] dark:prose-th:text-[#d1d5dc] dark:prose-td:text-[#d1d5dc]">
+  <div className="min-w-0 w-full overflow-x-auto">
+    <div className="break-words text-sm md:text-base prose prose-sm prose-neutral md:prose-base prose-headings:break-words prose-p:break-words max-w-none leading-loose prose-headings:text-foreground prose-p:text-[#364153] prose-strong:text-foreground prose-li:text-[#364153] prose-th:text-[#364153] prose-td:text-[#364153] prose-a:text-primary prose-code:break-all prose-code:text-foreground prose-pre:bg-secondary dark:prose-invert dark:prose-p:text-[#d1d5dc] dark:prose-li:text-[#d1d5dc] dark:prose-th:text-[#d1d5dc] dark:prose-td:text-[#d1d5dc]">
       <ReactMarkdown
         remarkPlugins={markdownRemarkPlugins}
         components={markdownComponents}
@@ -879,7 +885,7 @@ const UserMessage = memo(
                 className={`rounded-lg overflow-hidden border border-border ${
                   attachments.length > 1
                     ? "max-w-[48%] max-h-[100px] aspect-square bg-muted"
-                    : "min-w-[100px] max-w-[200px]"
+                    : "min-w-0 max-w-[min(200px,calc(100vw-3rem))]"
                 }`}
               >
                 {isPdf ? (
@@ -925,7 +931,7 @@ const UserMessage = memo(
             : undefined
         }
       >
-        <p className="text-sm md:text-base whitespace-pre-wrap leading-loose">
+        <p className="break-words text-sm md:text-base whitespace-pre-wrap leading-loose">
           {content}
         </p>
       </div>
@@ -1019,7 +1025,7 @@ const ReasoningBlock = ({
         )}
       </button>
       {open && (
-        <div className="rounded-2xl border border-border/60 bg-muted/20 px-4 py-3 text-xs text-muted-foreground whitespace-pre-wrap leading-relaxed max-w-prose">
+        <div className="max-w-full rounded-2xl border border-border/60 bg-muted/20 px-3 py-3 text-xs leading-relaxed text-muted-foreground whitespace-pre-wrap sm:max-w-prose sm:px-4">
           {text}
         </div>
       )}
@@ -1027,7 +1033,7 @@ const ReasoningBlock = ({
   );
 };
 
-const heightClass = `min-h-[calc(100vh-19rem)] md:min-h-[calc(100vh-20rem)]`;
+const heightClass = `min-h-[calc(100dvh-19rem)] md:min-h-[calc(100dvh-20rem)]`;
 const getActiveResponseEstimate = () => {
   if (typeof window === "undefined") return 480;
 

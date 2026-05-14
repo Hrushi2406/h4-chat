@@ -17,12 +17,12 @@ import {
   Plus,
   PlugZap,
   RefreshCw,
-  Save,
   Server,
   Trash2,
 } from "lucide-react";
 import Link from "next/link";
-import React from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import React, { Suspense } from "react";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import {
@@ -54,61 +54,130 @@ import {
   saveBrowserMcpServer,
 } from "@/lib/mcp-browser";
 
-export default function SettingsPage() {
-  const [activeTab, setActiveTab] = React.useState("account");
+const settingsCardClass = "rounded-3xl border shadow-xs";
+const settingsPanelClass = "rounded-3xl border bg-card/50 p-4 shadow-xs";
+const settingsControlClass = "rounded-full shadow-xs";
+const settingsBtnClass = "rounded-full";
+
+const SETTINGS_TABS = [
+  "account",
+  "customization",
+  "connections",
+  "mcp",
+] as const;
+type SettingsTab = (typeof SETTINGS_TABS)[number];
+
+const isSettingsTab = (value: string): value is SettingsTab =>
+  SETTINGS_TABS.includes(value as SettingsTab);
+
+function SettingsPageInner() {
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const tabParam = searchParams.get("tab") ?? "";
+  const tabFromUrl: SettingsTab = isSettingsTab(tabParam)
+    ? tabParam
+    : "account";
+  const [activeTab, setActiveTab] = React.useState<SettingsTab>(tabFromUrl);
 
   React.useEffect(() => {
-    const tab = new URLSearchParams(window.location.search).get("tab");
-    if (tab === "connections") {
-      setActiveTab("connections");
-    }
-  }, []);
+    setActiveTab(tabFromUrl);
+  }, [tabFromUrl]);
+
+  const handleTabChange = React.useCallback(
+    (value: string) => {
+      const nextTab = isSettingsTab(value) ? value : "account";
+      setActiveTab(nextTab);
+      const next = new URLSearchParams(searchParams.toString());
+      next.set("tab", nextTab);
+      router.replace(`${pathname}?${next.toString()}`, { scroll: false });
+    },
+    [pathname, router, searchParams],
+  );
 
   return (
-    <div className="container py-6 max-w-4xl mx-auto">
-      <div className="flex justify-between items-center mb-6">
-        <div className="flex-1">
-          <Button variant="outline" className="mb-6 " asChild>
-            <Link href="/">
-              <ChevronLeft className="w-4 h-4 " />
-              Back to chat
-            </Link>
-          </Button>
+    <div className="w-full py-6 max-w-4xl mx-auto">
+      <Tabs
+        value={activeTab}
+        onValueChange={handleTabChange}
+        className="w-full"
+      >
+        <div className="mb-6 flex items-center gap-4">
+          <div className="flex min-w-0 flex-1 basis-0 justify-start">
+            <Button variant="outline" className={settingsBtnClass} asChild>
+              <Link href="/">
+                <ChevronLeft className="w-4 h-4 " />
+                Back to chat
+              </Link>
+            </Button>
+          </div>
+          <TabsList className="h-10 border bg-card shrink-0 rounded-full p-1 sm:w-fit">
+            <TabsTrigger
+              value="account"
+              className={cn(settingsBtnClass, "px-4")}
+            >
+              Account
+            </TabsTrigger>
+            <TabsTrigger
+              value="customization"
+              className={cn(settingsBtnClass, "px-4")}
+            >
+              Customization
+            </TabsTrigger>
+            <TabsTrigger
+              value="connections"
+              className={cn(settingsBtnClass, "px-4")}
+            >
+              Connections
+            </TabsTrigger>
+            <TabsTrigger value="mcp" className={cn(settingsBtnClass, "px-4")}>
+              MCP
+            </TabsTrigger>
+          </TabsList>
+          <div className="min-w-0 flex-1 basis-0" aria-hidden="true" />
         </div>
-
-        <h1 className="text-lg font-bold mb-6 text-center">Settings</h1>
-        <div className="flex-1"></div>
-      </div>
-
-      <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full ">
-        <TabsList className="mb-1">
-          <TabsTrigger value="account">Account</TabsTrigger>
-          <TabsTrigger value="customization">Customization</TabsTrigger>
-          <TabsTrigger value="connections">Connections</TabsTrigger>
-        </TabsList>
         <TabsContent value="account">
-          <Card>
+          <Card className={settingsCardClass}>
             <CardContent className="">
               <AccountSettings />
             </CardContent>
           </Card>
         </TabsContent>
         <TabsContent value="customization">
-          <Card>
+          <Card className={settingsCardClass}>
             <CardContent className="">
               <CustomizationSettings />
             </CardContent>
           </Card>
         </TabsContent>
         <TabsContent value="connections">
-          <Card>
+          <Card className={settingsCardClass}>
             <CardContent className="">
               <ConnectionsSettings />
             </CardContent>
           </Card>
         </TabsContent>
+        <TabsContent value="mcp">
+          <Card className={settingsCardClass}>
+            <CardContent className="">
+              <McpSettings />
+            </CardContent>
+          </Card>
+        </TabsContent>
       </Tabs>
     </div>
+  );
+}
+
+export default function SettingsPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="container mx-auto max-w-4xl min-h-[40vh] py-6" />
+      }
+    >
+      <SettingsPageInner />
+    </Suspense>
   );
 }
 
@@ -156,7 +225,7 @@ const AccountSettings = () => {
             </div>
 
             <div className="flex justify-between items-center mb-2"> </div>
-            <Progress value={25} max={400} className="w-48 h-1.5" />
+            <Progress value={25} max={400} className="h-2 w-48" />
             <p className="text-xs mt-2 text-right text-muted-foreground">
               Demo usage
             </p>
@@ -173,7 +242,7 @@ const CustomizationSettings = () => {
   const [name, setName] = React.useState(user?.name || "");
   const [occupation, setOccupation] = React.useState(user?.occupation || "");
   const [userPreferences, setUserPreferences] = React.useState(
-    user?.userPreferences || ""
+    user?.userPreferences || "",
   );
 
   React.useEffect(() => {
@@ -193,7 +262,7 @@ const CustomizationSettings = () => {
   };
 
   const handleUserPreferencesChange = (
-    e: React.ChangeEvent<HTMLTextAreaElement>
+    e: React.ChangeEvent<HTMLTextAreaElement>,
   ) => {
     setUserPreferences(e.target.value.slice(0, 500));
   };
@@ -215,8 +284,21 @@ const CustomizationSettings = () => {
 
   return (
     <div className="">
-      <h2 className="text-xl font-semibold mb-6">Customization Settings</h2>
       <form onSubmit={handleSaveChanges} className="space-y-4">
+        <div className="mb-6 flex items-center justify-between gap-4">
+          <h2 className="text-xl font-semibold">Customization Settings</h2>
+          <Button
+            type="submit"
+            size="sm"
+            disabled={updateUser.isPending}
+            className={cn("shrink-0", settingsBtnClass)}
+          >
+            {updateUser.isPending && (
+              <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />
+            )}
+            Save Changes
+          </Button>
+        </div>
         <div className="space-y-2">
           <Label htmlFor="display-name">What should Saaki Chat call you?</Label>
           <div className="flex flex-col gap-1">
@@ -226,6 +308,7 @@ const CustomizationSettings = () => {
               onChange={handleNameChange}
               placeholder="Enter your name"
               maxLength={50}
+              className={settingsControlClass}
             />
             <div className="flex justify-end">
               <span className="text-xs text-muted-foreground">
@@ -243,6 +326,7 @@ const CustomizationSettings = () => {
               onChange={handleOccupationChange}
               placeholder="Indie Hacker, Designer, Developer, etc."
               maxLength={50}
+              className={settingsControlClass}
             />
             <div className="flex justify-end">
               <span className="text-xs text-muted-foreground">
@@ -262,7 +346,7 @@ const CustomizationSettings = () => {
               onChange={handleUserPreferencesChange}
               placeholder="I love buying new domains every week..."
               maxLength={500}
-              className="min-h-[100px] text-sm placeholder:text-sm"
+              className="min-h-[100px] rounded-3xl text-sm shadow-xs placeholder:text-sm"
             />
             <div className="flex justify-end">
               <span className="text-xs text-muted-foreground">
@@ -270,20 +354,6 @@ const CustomizationSettings = () => {
               </span>
             </div>
           </div>
-        </div>
-        <div className="pt-4 flex justify-end">
-          <Button
-            type="submit"
-            disabled={updateUser.isPending}
-            className="w-full sm:w-auto"
-          >
-            {updateUser.isPending ? (
-              <Loader2 className="w-4 h-4 animate-spin " />
-            ) : (
-              <Save className="w-4 h-4 " />
-            )}
-            Save Changes
-          </Button>
         </div>
       </form>
     </div>
@@ -319,7 +389,11 @@ const parseMcpHeaders = (value: string) => {
   try {
     const parsed: unknown = JSON.parse(trimmed);
 
-    if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
+    if (
+      typeof parsed !== "object" ||
+      parsed === null ||
+      Array.isArray(parsed)
+    ) {
       return null;
     }
 
@@ -331,16 +405,14 @@ const parseMcpHeaders = (value: string) => {
 
         return acc;
       },
-      {}
+      {},
     );
   } catch {
     return null;
   }
 };
 
-const ConnectionsSettings = () => {
-  const { uid } = useAuth();
-  const [pendingSlug, setPendingSlug] = React.useState<string>();
+const McpSettings = () => {
   const [mcpServers, setMcpServers] = React.useState<BrowserMcpServer[]>([]);
   const [mcpName, setMcpName] = React.useState("");
   const [mcpId, setMcpId] = React.useState("");
@@ -348,6 +420,227 @@ const ConnectionsSettings = () => {
   const [mcpHeaders, setMcpHeaders] = React.useState("");
   const [mcpTransport, setMcpTransport] =
     React.useState<BrowserMcpServer["transport"]>("http");
+
+  React.useEffect(() => {
+    setMcpServers(getBrowserMcpServers());
+  }, []);
+
+  React.useEffect(() => {
+    if (mcpId) return;
+    setMcpId(slugifyMcpId(mcpName));
+  }, [mcpId, mcpName]);
+
+  const handleAddMcpServer = () => {
+    const url = mcpUrl.trim();
+    const id = slugifyMcpId(mcpId || mcpName);
+    const name = mcpName.trim() || id;
+    const headers = parseMcpHeaders(mcpHeaders);
+
+    if (!id) {
+      toast.error("Give this MCP a name");
+      return;
+    }
+    if (headers === null) {
+      toast.error("Headers must be valid JSON");
+      return;
+    }
+    if (!url) {
+      toast.error("Paste the MCP server URL first");
+      return;
+    }
+
+    try {
+      const parsed = new URL(url);
+      if (!["http:", "https:"].includes(parsed.protocol)) throw new Error();
+    } catch {
+      toast.error("Enter a valid MCP URL");
+      return;
+    }
+
+    setMcpServers(
+      saveBrowserMcpServer({
+        id,
+        name,
+        url,
+        transport: mcpTransport,
+        headers,
+        enabled: true,
+      }),
+    );
+    setMcpName("");
+    setMcpId("");
+    setMcpUrl("");
+    setMcpHeaders("");
+    setMcpTransport("http");
+    toast.success(`${name} MCP connected`);
+  };
+
+  const handleToggleMcpServer = (server: BrowserMcpServer, enabled: boolean) =>
+    setMcpServers(saveBrowserMcpServer({ ...server, enabled }));
+
+  const handleRemoveMcpServer = (server: BrowserMcpServer) => {
+    setMcpServers(removeBrowserMcpServer(server.id));
+    toast.success(`${server.name} MCP removed`);
+  };
+
+  return (
+    <div className="space-y-5">
+      <div>
+        <h2 className="text-xl font-semibold">MCP Servers</h2>
+        <p className="text-sm text-muted-foreground">
+          Add any remote MCP server with HTTP or SSE transport.
+        </p>
+      </div>
+
+      <div className={settingsPanelClass}>
+        <div className="grid gap-3 sm:grid-cols-[1fr_0.8fr]">
+          <div className="space-y-1.5">
+            <Label htmlFor="mcp-name">Name</Label>
+            <Input
+              id="mcp-name"
+              value={mcpName}
+              onChange={(e) => setMcpName(e.target.value)}
+              placeholder="Zepto, Linear MCP, Docs"
+              className={cn(settingsControlClass, "text-sm")}
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="mcp-id">Tool prefix</Label>
+            <Input
+              id="mcp-id"
+              value={mcpId}
+              onChange={(e) => setMcpId(slugifyMcpId(e.target.value))}
+              placeholder="zepto"
+              className={cn(settingsControlClass, "text-sm")}
+            />
+          </div>
+        </div>
+
+        <div className="mt-3 grid gap-3 sm:grid-cols-[1fr_120px_auto]">
+          <div className="space-y-1.5">
+            <Label htmlFor="mcp-url">Server URL</Label>
+            <Input
+              id="mcp-url"
+              value={mcpUrl}
+              onChange={(e) => setMcpUrl(e.target.value)}
+              placeholder="https://example.com/mcp"
+              className={cn(settingsControlClass, "text-sm")}
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label>Transport</Label>
+            <Select
+              value={mcpTransport}
+              onValueChange={(v) =>
+                setMcpTransport(v === "sse" ? "sse" : "http")
+              }
+            >
+              <SelectTrigger className={cn("w-full", settingsControlClass)}>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="http">HTTP</SelectItem>
+                <SelectItem value="sse">SSE</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <Button
+            type="button"
+            onClick={handleAddMcpServer}
+            className={cn("self-end", settingsBtnClass)}
+          >
+            <Plus className="h-4 w-4" />
+            Add
+          </Button>
+        </div>
+
+        <div className="mt-3 space-y-1.5">
+          <Label htmlFor="mcp-headers">Headers JSON</Label>
+          <Textarea
+            id="mcp-headers"
+            value={mcpHeaders}
+            onChange={(e) => setMcpHeaders(e.target.value)}
+            placeholder='{"Authorization":"Bearer token"}'
+            className="min-h-[72px] rounded-3xl font-mono text-xs shadow-xs"
+          />
+        </div>
+      </div>
+
+      <div className="space-y-2">
+        {mcpServers.length === 0 ? (
+          <div className="rounded-3xl border border-dashed bg-muted/20 px-4 py-8 text-center text-sm text-muted-foreground">
+            No MCP servers added yet.
+          </div>
+        ) : (
+          mcpServers.map((server) => (
+            <div
+              key={server.id}
+              className={cn(
+                "flex items-center justify-between gap-3",
+                settingsPanelClass,
+              )}
+            >
+              <div className="flex min-w-0 items-center gap-3">
+                <div className="grid size-10 shrink-0 place-items-center rounded-lg border bg-background shadow-xs">
+                  <Server className="h-5 w-5 text-muted-foreground" />
+                </div>
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2">
+                    <p className="truncate font-medium">{server.name}</p>
+                    <Badge
+                      variant="outline"
+                      className={cn(settingsBtnClass, "px-3 py-0.5 text-xs")}
+                    >
+                      {server.transport.toUpperCase()}
+                    </Badge>
+                    {server.enabled && (
+                      <Badge
+                        variant="outline"
+                        className={cn(
+                          settingsBtnClass,
+                          "px-3 py-0.5 text-xs text-emerald-700",
+                        )}
+                      >
+                        Enabled
+                      </Badge>
+                    )}
+                  </div>
+                  <p className="truncate text-xs text-muted-foreground">
+                    mcp_{server.id}_* / {server.url}
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex shrink-0 items-center gap-2">
+                <Switch
+                  checked={server.enabled}
+                  onCheckedChange={(enabled) =>
+                    handleToggleMcpServer(server, enabled)
+                  }
+                  aria-label={`Toggle ${server.name}`}
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="icon"
+                  className={settingsBtnClass}
+                  onClick={() => handleRemoveMcpServer(server)}
+                  aria-label={`Remove ${server.name}`}
+                >
+                  <Trash2 className="h-4 w-4" />
+                </Button>
+              </div>
+            </div>
+          ))
+        )}
+      </div>
+    </div>
+  );
+};
+
+const ConnectionsSettings = () => {
+  const { uid } = useAuth();
+  const [pendingSlug, setPendingSlug] = React.useState<string>();
   const {
     data: toolkits = [],
     error,
@@ -355,18 +648,6 @@ const ConnectionsSettings = () => {
     isLoading,
     refetch,
   } = useConnections(uid);
-
-  React.useEffect(() => {
-    setMcpServers(getBrowserMcpServers());
-  }, []);
-
-  React.useEffect(() => {
-    if (mcpId) {
-      return;
-    }
-
-    setMcpId(slugifyMcpId(mcpName));
-  }, [mcpId, mcpName]);
 
   const connect = async (toolkit: string) => {
     if (!uid) return;
@@ -387,7 +668,7 @@ const ConnectionsSettings = () => {
 
       if (!response.ok) {
         throw new Error(
-          getApiErrorMessage(response, data, "Unable to start connection")
+          getApiErrorMessage(response, data, "Unable to start connection"),
         );
       }
 
@@ -423,7 +704,7 @@ const ConnectionsSettings = () => {
 
       if (!response.ok) {
         throw new Error(
-          getApiErrorMessage(response, data, "Unable to disconnect app")
+          getApiErrorMessage(response, data, "Unable to disconnect app"),
         );
       }
 
@@ -436,67 +717,6 @@ const ConnectionsSettings = () => {
     } finally {
       setPendingSlug(undefined);
     }
-  };
-
-  const addMcpServer = () => {
-    const url = mcpUrl.trim();
-    const id = slugifyMcpId(mcpId || mcpName);
-    const name = mcpName.trim() || id;
-    const headers = parseMcpHeaders(mcpHeaders);
-
-    if (!id) {
-      toast.error("Give this MCP a name");
-      return;
-    }
-    if (headers === null) {
-      toast.error("Headers must be valid JSON");
-      return;
-    }
-    if (!url) {
-      toast.error("Paste the MCP server URL first");
-      return;
-    }
-
-    try {
-      const parsed = new URL(url);
-
-      if (!["http:", "https:"].includes(parsed.protocol)) {
-        throw new Error("Invalid protocol");
-      }
-    } catch {
-      toast.error("Enter a valid MCP URL");
-      return;
-    }
-
-    const nextServers = saveBrowserMcpServer({
-      id,
-      name,
-      url,
-      transport: mcpTransport,
-      headers,
-      enabled: true,
-    });
-
-    setMcpServers(nextServers);
-    setMcpName("");
-    setMcpId("");
-    setMcpUrl("");
-    setMcpHeaders("");
-    setMcpTransport("http");
-    toast.success(`${name} MCP connected`);
-  };
-
-  const toggleMcpServer = (server: BrowserMcpServer, enabled: boolean) => {
-    const nextServers = saveBrowserMcpServer({ ...server, enabled });
-
-    setMcpServers(nextServers);
-  };
-
-  const disconnectMcpServer = (server: BrowserMcpServer) => {
-    const nextServers = removeBrowserMcpServer(server.id);
-
-    setMcpServers(nextServers);
-    toast.success(`${server.name} MCP removed`);
   };
 
   return (
@@ -512,18 +732,17 @@ const ConnectionsSettings = () => {
           type="button"
           variant="outline"
           size="sm"
+          className={settingsBtnClass}
           onClick={() => refetch()}
           disabled={isFetching || !uid}
         >
-          <RefreshCw
-            className={cn("w-4 h-4", isFetching && "animate-spin")}
-          />
+          <RefreshCw className={cn("w-4 h-4", isFetching && "animate-spin")} />
           Refresh
         </Button>
       </div>
 
       {error && (
-        <div className="rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive">
+        <div className="rounded-3xl border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm text-destructive shadow-xs">
           {error.message === "Composio is not configured"
             ? "Add COMPOSIO_API_KEY to your environment to enable app connections."
             : error.message}
@@ -535,7 +754,7 @@ const ConnectionsSettings = () => {
           ? Array.from({ length: 5 }).map((_, index) => (
               <div
                 key={index}
-                className="h-24 animate-pulse rounded-md border bg-muted/30"
+                className="h-24 animate-pulse rounded-3xl border bg-muted/30"
               />
             ))
           : toolkits.map((toolkit) => {
@@ -545,15 +764,18 @@ const ConnectionsSettings = () => {
               return (
                 <div
                   key={toolkit.slug}
-                  className="flex items-center justify-between gap-3 rounded-md border p-3"
+                  className={cn(
+                    "flex items-center justify-between gap-3",
+                    settingsPanelClass,
+                  )}
                 >
                   <div className="flex min-w-0 items-center gap-3">
-                    <div className="grid h-10 w-10 shrink-0 place-items-center rounded-md border bg-background">
+                    <div className="grid size-10 shrink-0 place-items-center rounded-lg border bg-background shadow-xs">
                       {toolkit.logo ? (
                         <img
                           src={toolkit.logo}
                           alt=""
-                          className="h-6 w-6 rounded-sm object-contain"
+                          className="size-6 object-contain rounded-xs"
                         />
                       ) : (
                         <Icon className="h-5 w-5 text-muted-foreground" />
@@ -565,7 +787,10 @@ const ConnectionsSettings = () => {
                         {toolkit.isConnected && (
                           <Badge
                             variant="outline"
-                            className="px-2 py-0 text-xs text-emerald-700"
+                            className={cn(
+                              settingsBtnClass,
+                              "px-3 py-0.5 text-xs text-emerald-700",
+                            )}
                           >
                             Connected
                           </Badge>
@@ -583,6 +808,7 @@ const ConnectionsSettings = () => {
                       type="button"
                       variant="outline"
                       size="sm"
+                      className={settingsBtnClass}
                       onClick={() => disconnect(toolkit)}
                       disabled={Boolean(pendingSlug)}
                     >
@@ -596,6 +822,7 @@ const ConnectionsSettings = () => {
                     <Button
                       type="button"
                       size="sm"
+                      className={settingsBtnClass}
                       onClick={() => connect(toolkit.slug)}
                       disabled={Boolean(pendingSlug)}
                     >
@@ -609,148 +836,6 @@ const ConnectionsSettings = () => {
                 </div>
               );
             })}
-      </div>
-
-      <div className="space-y-3 pt-2">
-        <div>
-          <h3 className="text-sm font-medium">MCP Servers</h3>
-          <p className="text-xs text-muted-foreground">
-            Add any remote MCP server with HTTP or SSE transport.
-          </p>
-        </div>
-
-        <div className="rounded-md border p-3">
-          <div className="grid gap-3 sm:grid-cols-[1fr_0.8fr]">
-            <div className="space-y-1.5">
-              <Label htmlFor="mcp-name">Name</Label>
-              <Input
-                id="mcp-name"
-                value={mcpName}
-                onChange={(event) => setMcpName(event.target.value)}
-                placeholder="Zepto, Linear MCP, Docs"
-                className="text-sm"
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="mcp-id">Tool prefix</Label>
-              <Input
-                id="mcp-id"
-                value={mcpId}
-                onChange={(event) => setMcpId(slugifyMcpId(event.target.value))}
-                placeholder="zepto"
-                className="text-sm"
-              />
-            </div>
-          </div>
-
-          <div className="mt-3 grid gap-3 sm:grid-cols-[1fr_120px_auto]">
-            <div className="space-y-1.5">
-              <Label htmlFor="mcp-url">Server URL</Label>
-              <Input
-                id="mcp-url"
-                value={mcpUrl}
-                onChange={(event) => setMcpUrl(event.target.value)}
-                placeholder="https://example.com/mcp"
-                className="text-sm"
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label>Transport</Label>
-              <Select
-                value={mcpTransport}
-                onValueChange={(value) =>
-                  setMcpTransport(value === "sse" ? "sse" : "http")
-                }
-              >
-                <SelectTrigger className="w-full">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="http">HTTP</SelectItem>
-                  <SelectItem value="sse">SSE</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <Button
-              type="button"
-              onClick={addMcpServer}
-              className="self-end"
-            >
-              <Plus className="h-4 w-4" />
-              Add
-            </Button>
-          </div>
-
-          <div className="mt-3 space-y-1.5">
-            <Label htmlFor="mcp-headers">Headers JSON</Label>
-            <Textarea
-              id="mcp-headers"
-              value={mcpHeaders}
-              onChange={(event) => setMcpHeaders(event.target.value)}
-              placeholder='{"Authorization":"Bearer token"}'
-              className="min-h-[72px] font-mono text-xs"
-            />
-          </div>
-        </div>
-
-        <div className="space-y-2">
-          {mcpServers.length === 0 ? (
-            <div className="rounded-md border border-dashed px-3 py-6 text-center text-sm text-muted-foreground">
-              No MCP servers added yet.
-            </div>
-          ) : (
-            mcpServers.map((server) => (
-              <div
-                key={server.id}
-                className="flex items-center justify-between gap-3 rounded-md border p-3"
-              >
-                <div className="flex min-w-0 items-center gap-3">
-                  <div className="grid h-10 w-10 shrink-0 place-items-center rounded-md border bg-background">
-                    <Server className="h-5 w-5 text-muted-foreground" />
-                  </div>
-                  <div className="min-w-0">
-                    <div className="flex items-center gap-2">
-                      <p className="truncate font-medium">{server.name}</p>
-                      <Badge variant="outline" className="px-2 py-0 text-xs">
-                        {server.transport.toUpperCase()}
-                      </Badge>
-                      {server.enabled && (
-                        <Badge
-                          variant="outline"
-                          className="px-2 py-0 text-xs text-emerald-700"
-                        >
-                          Enabled
-                        </Badge>
-                      )}
-                    </div>
-                    <p className="truncate text-xs text-muted-foreground">
-                      mcp_{server.id}_* / {server.url}
-                    </p>
-                  </div>
-                </div>
-
-                <div className="flex shrink-0 items-center gap-2">
-                  <Switch
-                    checked={server.enabled}
-                    onCheckedChange={(enabled) =>
-                      toggleMcpServer(server, enabled)
-                    }
-                    aria-label={`Toggle ${server.name}`}
-                  />
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="icon"
-                    onClick={() => disconnectMcpServer(server)}
-                    aria-label={`Remove ${server.name}`}
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </Button>
-                </div>
-              </div>
-            ))
-          )}
-        </div>
       </div>
     </div>
   );
