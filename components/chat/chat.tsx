@@ -222,7 +222,7 @@ export function Chat({ threadId, isNew = false }: ChatProps) {
         await createThread.mutateAsync({
           threadId: threadId,
           title: title.length > 50 ? `${title.substring(0, 50)}...` : title,
-          userId: uid,
+          userId: uid ?? auth.currentUser?.uid,
           initialMessage: message,
         });
 

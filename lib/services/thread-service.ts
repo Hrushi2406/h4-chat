@@ -19,6 +19,7 @@ import {
   type DocumentData,
   type QueryConstraint,
   type QueryDocumentSnapshot,
+  type Timestamp,
 } from "firebase/firestore";
 import { auth, db } from "@/lib/clients/firebase";
 import {
@@ -41,8 +42,31 @@ export interface ThreadsPage {
 
 const normalizeThreadData = (thread: Thread): Thread => ({
   ...thread,
+  createdAt: normalizeThreadDate(thread.createdAt),
+  updatedAt: normalizeThreadDate(thread.updatedAt),
   messages: (thread.messages ?? []).map(normalizeThreadMessage),
 });
+
+const normalizeThreadDate = (date: unknown): Date => {
+  if (date instanceof Date) {
+    return date;
+  }
+
+  if (
+    date &&
+    typeof date === "object" &&
+    "toDate" in date &&
+    typeof (date as Timestamp).toDate === "function"
+  ) {
+    return (date as Timestamp).toDate();
+  }
+
+  if (typeof date === "string" || typeof date === "number") {
+    return new Date(date);
+  }
+
+  return new Date();
+};
 
 const ensureFirebaseAuthUser = async () => {
   if (auth.currentUser) {
@@ -101,15 +125,21 @@ class ThreadService {
     userId?: string;
   }): Promise<Thread> {
     try {
-      console.log("Creating new thread:", { title, userId });
+      await ensureFirebaseAuthUser();
+      const resolvedUserId = userId ?? auth.currentUser?.uid;
 
-      const defaultThread = generateDefaultThread(userId);
+      console.log("Creating new thread:", { title, userId: resolvedUserId });
+
+      const defaultThread = generateDefaultThread(resolvedUserId);
+      const now = new Date();
 
       const threadData = {
         ...defaultThread,
         id: threadId,
         title: title,
         isPinned: false,
+        createdAt: now,
+        updatedAt: now,
       };
 
       // Add initial message
@@ -127,7 +157,11 @@ class ThreadService {
 
       await setDoc(
         doc(db, colThreads, threadData.id),
-        removeUndefinedValues(threadData)
+        removeUndefinedValues({
+          ...threadData,
+          createdAt: now.toISOString(),
+          updatedAt: now.toISOString(),
+        })
       );
 
       console.log("Thread created successfully:", { threadId: threadData.id });
