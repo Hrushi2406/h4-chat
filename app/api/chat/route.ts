@@ -59,11 +59,37 @@ export async function POST(req: Request) {
   const closeMcpClientsOnce = createCloseMcpClientsOnce(
     mcpContext?.clients ?? []
   );
+  const tools = {
+    ...composioTools,
+    ...mcpContext?.tools,
+    webSearch: {
+      description: `Search the web for current information, facts, recent events, or detailed explanations.
+  
+      Use this tool when:
+      - User asks about current events or recent news
+      - Questions require up-to-date information
+      - User asks for specific facts that might not be in your training data
+      - User requests recent developments on any topic
+      - Questions about current stock prices, weather, or time-sensitive data
+      
+      The tool provides both instant answers and web search results with sources.`,
+      inputSchema: z.object({
+        query: z.string(),
+      }),
+      execute: async ({ query }) => {
+        const results = await webSearch(query);
+        return results;
+      },
+    },
+  } satisfies ToolSet;
 
   const result = streamText({
     model: model.id,
     system: systemPrompt,
-    messages: await convertToModelMessages(messages.slice(-10)),
+    messages: await convertToModelMessages(messages.slice(-10), {
+      tools,
+      ignoreIncompleteToolCalls: true,
+    }),
     stopWhen: stepCountIs(50),
     onError: async (error) => {
       console.log("error: ", error);
@@ -76,29 +102,7 @@ export async function POST(req: Request) {
       await closeMcpClientsOnce();
     },
 
-    tools: {
-      ...composioTools,
-      ...mcpContext?.tools,
-      webSearch: {
-        description: `Search the web for current information, facts, recent events, or detailed explanations.
-    
-        Use this tool when:
-        - User asks about current events or recent news
-        - Questions require up-to-date information
-        - User asks for specific facts that might not be in your training data
-        - User requests recent developments on any topic
-        - Questions about current stock prices, weather, or time-sensitive data
-        
-        The tool provides both instant answers and web search results with sources.`,
-        inputSchema: z.object({
-          query: z.string(),
-        }),
-        execute: async ({ query }) => {
-          const results = await webSearch(query);
-          return results;
-        },
-      },
-    },
+    tools,
   });
 
   return result.toUIMessageStreamResponse({
