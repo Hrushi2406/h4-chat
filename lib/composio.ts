@@ -41,6 +41,7 @@ export const COMPOSIO_TOOLKITS = [
   "ahrefs",
   "gemini",
   "composio_search",
+  "browser_tool",
 ] as const;
 
 export const COMPOSIO_TOOLKIT_LABELS: Record<ComposioToolkit, string> = {
@@ -83,6 +84,7 @@ export const COMPOSIO_TOOLKIT_LABELS: Record<ComposioToolkit, string> = {
   ahrefs: "Ahrefs",
   gemini: "Gemini",
   composio_search: "Composio Search",
+  browser_tool: "Browser Tool",
 };
 
 export type ComposioToolkit = (typeof COMPOSIO_TOOLKITS)[number];

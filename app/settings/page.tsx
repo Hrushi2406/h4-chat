@@ -7,6 +7,7 @@ import {
   CalendarDays,
   ChevronLeft,
   FileText,
+  Globe,
   HardDrive,
   Inbox,
   ListTodo,
@@ -295,6 +296,7 @@ const toolkitIcons: Record<string, React.ElementType> = {
   notion: FileText,
   linear: ListTodo,
   whatsapp: MessageCircle,
+  browser_tool: Globe,
 };
 
 const slugifyMcpId = (value: string) =>

@@ -139,10 +139,10 @@ const getSystemPrompt = (
     - Suggest next steps only when they are useful and specific.
     - ${
       composioEnabled &&
-      `You can use connected-app tools through Composio for email, calendar, drive, docs, spreadsheets, project management, developer workflows, CRM, payments, commerce, design, Google Workspace, social media, ads, SEO, media generation, and fitness tasks.
+      `You can use connected-app tools through Composio for email, calendar, drive, docs, spreadsheets, project management, developer workflows, CRM, payments, commerce, design, Google Workspace, social media, ads, SEO, browser automation, media generation, and fitness tasks.
       Composio tool names are canonical uppercase slugs using the ${COMPOSIO_TOOL_NAME_PATTERN} pattern, for example ${COMPOSIO_TOOLKIT_EXAMPLES.join(", ")}. Do not invent Composio tool names.
       For discovery, call ${COMPOSIO_META_TOOLS.SEARCH_TOOLS} first. Use returned tool slugs as-is. If you need exact input fields, call ${COMPOSIO_META_TOOLS.GET_TOOL_SCHEMAS} with tool_slugs from search results.
-      For authorization or connection status, call ${COMPOSIO_META_TOOLS.MANAGE_CONNECTIONS} with valid toolkit slugs such as gmail, googlecalendar, googledrive, notion, linear, github, googledocs, googlesheets, outlook, hubspot, salesforce, confluence, stripe, shopify, pexels, figma, instagram, whatsapp, youtube, metaads, googleads, reddit, facebook, linkedin, ahrefs, gemini, or composio_search, then provide the Connect Link in chat and continue once the user confirms.
+      For authorization or connection status, call ${COMPOSIO_META_TOOLS.MANAGE_CONNECTIONS} with valid toolkit slugs such as gmail, googlecalendar, googledrive, notion, linear, github, googledocs, googlesheets, outlook, hubspot, salesforce, confluence, stripe, shopify, pexels, figma, instagram, whatsapp, youtube, metaads, googleads, reddit, facebook, linkedin, ahrefs, gemini, composio_search, or browser_tool, then provide the Connect Link in chat and continue once the user confirms.
       Execute selected app actions with ${COMPOSIO_META_TOOLS.MULTI_EXECUTE_TOOL} when actions are independent. Ask before taking irreversible actions such as sending email, deleting files, or creating/updating external records unless the user already gave explicit instructions.`
     }
     - ${

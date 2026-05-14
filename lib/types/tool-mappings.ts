@@ -5,6 +5,7 @@ import {
   FileArchive,
   FileText,
   GitBranch,
+  Globe,
   HardDrive,
   Hammer,
   Image,
@@ -326,6 +327,14 @@ const composioToolDisplay: Array<{
     fallbackLoading: "Searching Composio",
     fallbackDone: "Searched Composio",
     Icon: PlugZap,
+  },
+  {
+    match: (context) =>
+      includesAny(context, ["BROWSER_TOOL", "BROWSER TOOL", "BROWSER"]),
+    appSlug: "browser_tool",
+    fallbackLoading: "Using Browser Tool",
+    fallbackDone: "Used Browser Tool",
+    Icon: Globe,
   },
   {
     match: (context) => context.includes("COMPOSIO"),
@@ -995,6 +1004,7 @@ const appLabels: Record<string, string> = {
   confluence: "Confluence",
   composio: "Composio",
   composio_search: "Composio Search",
+  browser_tool: "Browser Tool",
   elevenlabs: "ElevenLabs",
   facebook: "Facebook",
   fal_ai: "Fal.ai",
@@ -1106,6 +1116,10 @@ const getToolkitSlugFromToolSlug = (value: string) => {
 
   if (slug.startsWith("COMPOSIO_SEARCH_")) {
     return "composio_search";
+  }
+
+  if (slug.startsWith("BROWSER_TOOL_")) {
+    return "browser_tool";
   }
 
   const [toolkit] = slug.split("_");

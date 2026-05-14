@@ -384,6 +384,7 @@ const CONNECTED_APP_PROMPTS: Record<string, string> = {
   ahrefs: "Analyze SEO data in Ahrefs",
   gemini: "Use Gemini for a generation task",
   composio_search: "Search available Composio tools",
+  browser_tool: "Browse a website and extract what matters",
 };
 
 const DEFAULT_PROMPTS = [
