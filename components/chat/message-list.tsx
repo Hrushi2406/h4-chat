@@ -14,7 +14,7 @@ import {
   useState,
 } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
-import { motion } from "framer-motion";
+import { AnimatePresence, motion } from "framer-motion";
 import { TextShimmer } from "@/components/ui/text-shimmer";
 import clsx from "clsx";
 import { getToolDisplayName } from "@/lib/types/tool-mappings";
@@ -116,6 +116,8 @@ export const MessageList = memo(function MessageList({
   const pinToBottomUntilRef = useRef(0);
   const scheduledScrollRef = useRef<number | null>(null);
   const initialLoadScrollTimerRefs = useRef<number[]>([]);
+  const suppressScrollButtonUntilRef = useRef(0);
+  const [showScrollToBottom, setShowScrollToBottom] = useState(false);
   const messageSnapshot = getMessageSnapshot(messages);
   const messageSnapshotKey = `${messageSnapshot.count}:${messageSnapshot.firstId ?? ""}:${
     messageSnapshot.lastId ?? ""
@@ -138,8 +140,16 @@ export const MessageList = memo(function MessageList({
     getScrollElement: () => scrollContainerRef.current,
     estimateSize: (index) => {
       if (index === bottomSpacerIndex) return 4;
-      if (index === loadingIndicatorIndex && showLoadingIndicator) return 220;
-      return messages[index]?.role === "user" ? 96 : 180;
+      if (index === loadingIndicatorIndex && showLoadingIndicator) {
+        return getActiveResponseEstimate();
+      }
+
+      const message = messages[index];
+      if (message?.role === "assistant" && index === messages.length - 1) {
+        return getActiveResponseEstimate();
+      }
+
+      return message?.role === "user" ? 96 : 180;
     },
     getItemKey: (index) => {
       if (index === bottomSpacerIndex) return "bottom-spacer";
@@ -187,6 +197,8 @@ export const MessageList = memo(function MessageList({
       if (Date.now() <= pinToBottomUntilRef.current) {
         scrollToBottom("auto");
       }
+
+      updateScrollState();
     });
 
     resizeObserver.observe(contentElement);
@@ -243,7 +255,7 @@ export const MessageList = memo(function MessageList({
   }, [showLoadingIndicator]);
 
   const updateNearBottom = () => {
-    wasNearBottomRef.current = isNearBottom(scrollContainerRef.current);
+    updateScrollState();
   };
 
   const scrollToBottom = (behavior: ScrollBehavior = "smooth") => {
@@ -257,6 +269,30 @@ export const MessageList = memo(function MessageList({
       top: scrollElement.scrollHeight,
       behavior,
     });
+    suppressScrollButtonUntilRef.current =
+      behavior === "smooth" ? Date.now() + 700 : 0;
+    setShowScrollToBottom(false);
+    wasNearBottomRef.current = true;
+  };
+
+  const updateScrollState = () => {
+    const scrollElement = scrollContainerRef.current;
+    const nearBottom = isNearBottom(scrollElement);
+    const isProgrammaticScroll = Date.now() <= suppressScrollButtonUntilRef.current;
+
+    wasNearBottomRef.current = nearBottom;
+    if (nearBottom) {
+      suppressScrollButtonUntilRef.current = 0;
+    }
+
+    setShowScrollToBottom(
+      Boolean(
+        scrollElement &&
+          !nearBottom &&
+          !isProgrammaticScroll &&
+          hasScrollableOverflow(scrollElement),
+      ),
+    );
   };
 
   const startPinnedBottomScroll = () => {
@@ -307,64 +343,91 @@ export const MessageList = memo(function MessageList({
   };
 
   return (
-    <div
-      ref={scrollContainerRef}
-      onScroll={updateNearBottom}
-      className="h-full min-h-0 flex-1 overflow-y-auto overscroll-contain [overflow-anchor:none] p-4"
-    >
-      <div ref={contentRef} className="max-w-4xl mx-auto">
-        <div
-          className="relative w-full"
-          style={{ height: `${virtualizer.getTotalSize()}px` }}
-        >
-          {virtualItems.map((virtualItem) => {
-            const index = virtualItem.index;
-            const message = messages[index];
-            const isLastAssistantMessage =
-              message?.role === "assistant" && index === messages.length - 1;
-            const isStreaming =
-              isLastAssistantMessage &&
-              (status === "streaming" || status === "submitted");
+    <div className="relative h-full min-h-0 flex-1">
+      <div
+        ref={scrollContainerRef}
+        onScroll={updateNearBottom}
+        className="h-full min-h-0 flex-1 overflow-y-auto overscroll-contain [overflow-anchor:none] p-4"
+      >
+        <div ref={contentRef} className="max-w-4xl mx-auto">
+          <div
+            className="relative w-full"
+            style={{ height: `${virtualizer.getTotalSize()}px` }}
+          >
+            {virtualItems.map((virtualItem) => {
+              const index = virtualItem.index;
+              const message = messages[index];
+              const isLastAssistantMessage =
+                message?.role === "assistant" && index === messages.length - 1;
+              const isStreaming =
+                isLastAssistantMessage &&
+                (status === "streaming" || status === "submitted");
 
-            return (
-              <div
-                key={virtualItem.key}
-                data-index={index}
-                ref={virtualizer.measureElement}
-                className="absolute left-0 top-0 w-full"
-                style={{
-                  transform: `translateY(${virtualItem.start}px)`,
-                  paddingBottom:
-                    index === bottomSpacerIndex ? 0 : virtualMessageGap,
-                }}
-              >
-                {message ? (
-                  isStreaming ? (
-                    <ActiveMessageItem
-                      message={message}
-                      toolApps={toolApps}
-                      mcpServerNames={mcpServerNames}
-                      isLastAssistantMessage={isLastAssistantMessage}
-                      isStreaming={isStreaming}
-                    />
+              return (
+                <div
+                  key={virtualItem.key}
+                  data-index={index}
+                  ref={virtualizer.measureElement}
+                  className="absolute left-0 top-0 w-full"
+                  style={{
+                    transform: `translateY(${virtualItem.start}px)`,
+                    paddingBottom:
+                      index === bottomSpacerIndex ? 0 : virtualMessageGap,
+                  }}
+                >
+                  {message ? (
+                    isStreaming ? (
+                      <ActiveMessageItem
+                        message={message}
+                        toolApps={toolApps}
+                        mcpServerNames={mcpServerNames}
+                        isLastAssistantMessage={isLastAssistantMessage}
+                        isStreaming={isStreaming}
+                      />
+                    ) : (
+                      <CompletedMessageItem
+                        message={message}
+                        toolApps={toolApps}
+                        mcpServerNames={mcpServerNames}
+                        isLastAssistantMessage={isLastAssistantMessage}
+                      />
+                    )
+                  ) : index === loadingIndicatorIndex && showLoadingIndicator ? (
+                    <LoadingMessage />
                   ) : (
-                    <CompletedMessageItem
-                      message={message}
-                      toolApps={toolApps}
-                      mcpServerNames={mcpServerNames}
-                      isLastAssistantMessage={isLastAssistantMessage}
-                    />
-                  )
-                ) : index === loadingIndicatorIndex && showLoadingIndicator ? (
-                  <LoadingMessage />
-                ) : (
-                  <div className="h-1" />
-                )}
-              </div>
-            );
-          })}
+                    <div className="h-1" />
+                  )}
+                </div>
+              );
+            })}
+          </div>
         </div>
       </div>
+      <AnimatePresence>
+        {showScrollToBottom && (
+          <motion.div
+            initial={{ opacity: 0, y: 18 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 18 }}
+            transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
+            className="pointer-events-none absolute inset-x-4 bottom-4 z-20 mx-auto flex max-w-4xl justify-end"
+          >
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <button
+                  type="button"
+                  aria-label="Scroll to latest message"
+                  onClick={() => scrollToBottom()}
+                  className="pointer-events-auto inline-flex size-9 items-center justify-center rounded-full border border-border/80 bg-background/85 text-muted-foreground shadow-lg shadow-black/10 backdrop-blur-md transition hover:border-primary/20 hover:bg-background hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60 dark:shadow-black/30"
+                >
+                  <ArrowDown className="size-4" />
+                </button>
+              </TooltipTrigger>
+              <TooltipContent side="top">Scroll to latest</TooltipContent>
+            </Tooltip>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 });
@@ -968,6 +1031,12 @@ const ReasoningBlock = ({
 };
 
 const heightClass = `min-h-[calc(100vh-19rem)] md:min-h-[calc(100vh-20rem)]`;
+const getActiveResponseEstimate = () => {
+  if (typeof window === "undefined") return 480;
+
+  const offset = window.matchMedia("(min-width: 768px)").matches ? 320 : 304;
+  return Math.max(220, window.innerHeight - offset);
+};
 
 const isNearBottom = (element: HTMLElement | null) => {
   if (!element) return true;
@@ -977,6 +1046,9 @@ const isNearBottom = (element: HTMLElement | null) => {
     scrollBottomThreshold
   );
 };
+
+const hasScrollableOverflow = (element: HTMLElement) =>
+  element.scrollHeight - element.clientHeight > scrollBottomThreshold;
 
 const getMessageSnapshot = (messages: ThreadMessage[]) => ({
   count: messages.length,
