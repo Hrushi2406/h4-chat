@@ -12,6 +12,8 @@ interface BeforeInstallPromptEvent extends Event {
   userChoice: Promise<{ outcome: "accepted" | "dismissed"; platform: string }>;
 }
 
+type InstallFallback = "local" | "ios" | "mobile" | null;
+
 const isStandalone = () => {
   if (typeof window === "undefined") return false;
 
@@ -31,15 +33,35 @@ const isLocalhost = () => {
   return ["localhost", "127.0.0.1", "::1"].includes(window.location.hostname);
 };
 
+const isIos = () => {
+  if (typeof window === "undefined") return false;
+
+  const platform = window.navigator.platform.toLowerCase();
+  const userAgent = window.navigator.userAgent.toLowerCase();
+  const isTouchMac =
+    platform === "macintel" && window.navigator.maxTouchPoints > 1;
+
+  return /iphone|ipad|ipod/.test(userAgent) || isTouchMac;
+};
+
+const isMobile = () => {
+  if (typeof window === "undefined") return false;
+
+  return window.matchMedia("(max-width: 767px)").matches;
+};
+
 export function PwaInstallButton() {
   const [installPrompt, setInstallPrompt] =
     useState<BeforeInstallPromptEvent | null>(null);
   const [isInstalled, setIsInstalled] = useState(false);
-  const [isLocalPreview, setIsLocalPreview] = useState(false);
+  const [installFallback, setInstallFallback] =
+    useState<InstallFallback>(null);
 
   useEffect(() => {
     setIsInstalled(isStandalone());
-    setIsLocalPreview(isLocalhost());
+    setInstallFallback(
+      isLocalhost() ? "local" : isIos() ? "ios" : isMobile() ? "mobile" : null,
+    );
 
     const handleBeforeInstallPrompt = (event: Event) => {
       event.preventDefault();
@@ -75,8 +97,22 @@ export function PwaInstallButton() {
 
   const handleInstall = async () => {
     if (!installPrompt) {
-      if (isLocalPreview) {
+      if (installFallback === "local") {
         toast.info("Install is available from the deployed app.");
+      }
+
+      if (installFallback === "ios") {
+        toast.info("Add Saaki AI to your Home Screen", {
+          description:
+            "Use the browser share menu, then choose Add to Home Screen.",
+        });
+      }
+
+      if (installFallback === "mobile") {
+        toast.info("Install Saaki AI from your browser menu", {
+          description:
+            "Open the browser menu and choose Install app or Add to Home screen.",
+        });
       }
 
       return;
@@ -87,7 +123,7 @@ export function PwaInstallButton() {
     setInstallPrompt(null);
   };
 
-  if (isInstalled || (!installPrompt && !isLocalPreview)) return null;
+  if (isInstalled || (!installPrompt && !installFallback)) return null;
 
   return (
     <Button

@@ -1,13 +1,23 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { Thread } from "@/lib/types/thread";
+import { useEffect, useMemo, useState } from "react";
+import { normalizeThreadMessage, Thread } from "@/lib/types/thread";
 import threadService from "@/lib/services/thread-service";
 import { useParams, useRouter } from "next/navigation";
 import { MessageList } from "@/components/chat/message-list";
 import { Button } from "@/components/ui/button";
 import { Settings2, Plus } from "lucide-react";
 import Link from "next/link";
+import { ThemeToggle } from "@/components/theme-toggle";
+import { PwaInstallButton } from "@/components/pwa-install-button";
+import { navToolbarSecondaryBtnClass } from "@/lib/utils";
+import { TextShimmer } from "@/components/ui/text-shimmer";
+import { useAuth } from "@/lib/hooks/auth/use-auth";
+import { useConnections } from "@/lib/hooks/connections/use-connections";
+import {
+  BrowserMcpServer,
+  getBrowserMcpServers,
+} from "@/lib/mcp-browser";
 
 export default function SharedChatPage() {
   const params = useParams<{ shareId: string }>();
@@ -15,6 +25,13 @@ export default function SharedChatPage() {
   const router = useRouter();
   const [threadData, setThreadData] = useState<Thread>();
   const [error, setError] = useState<string>();
+  const [mcpServers, setMcpServers] = useState<BrowserMcpServer[]>([]);
+  const { uid } = useAuth();
+  const { data: toolApps = [] } = useConnections(uid);
+  const messages = useMemo(
+    () => threadData?.messages.map(normalizeThreadMessage) ?? [],
+    [threadData]
+  );
 
   useEffect(() => {
     if (!shareId) return;
@@ -32,35 +49,68 @@ export default function SharedChatPage() {
     fetchThread();
   }, [shareId]);
 
+  useEffect(() => {
+    const syncMcpServers = () => {
+      setMcpServers(getBrowserMcpServers().filter((server) => server.enabled));
+    };
+
+    syncMcpServers();
+    window.addEventListener("storage", syncMcpServers);
+    window.addEventListener("mcp-servers-changed", syncMcpServers);
+
+    return () => {
+      window.removeEventListener("storage", syncMcpServers);
+      window.removeEventListener("mcp-servers-changed", syncMcpServers);
+    };
+  }, []);
+
   const handleNewThread = () => {
     router.push("/");
   };
 
   return (
-    <div className="flex h-screen min-h-0 flex-col">
-      <header className="flex h-12 shrink-0 items-center gap-2 px-4 md:px-6 border-b">
+    <div className="flex h-screen min-h-0 min-w-0 flex-col overflow-hidden">
+      <header className="flex h-12 shrink-0 items-center gap-2 border-b px-4">
         <div className="flex items-center justify-between flex-1">
-          <h1 className="text-lg font-semibold">Saaki AI</h1>
+          <div className="flex min-w-0 items-center gap-2">
+            <img
+              src="/saaki-chat-transparent.png"
+              alt="Saaki AI"
+              className="h-7 w-7 shrink-0 object-contain"
+            />
+            <div className="min-w-0">
+              <h1 className="truncate text-lg font-semibold">Saaki AI</h1>
+              <p className="truncate text-xs text-muted-foreground md:hidden">
+                Shared chat
+              </p>
+            </div>
+          </div>
           <div className="flex items-center gap-2">
+            <PwaInstallButton />
+            <ThemeToggle />
             <Button
               variant="secondary"
               size="sm"
-              className="rounded-full border shadow-none"
+              className={navToolbarSecondaryBtnClass}
               onClick={handleNewThread}
             >
-              <Plus className="h-4 w-4" />
-              New Thread
+              <Plus className="h-4 w-4 shrink-0" />
+              <span className="sr-only md:not-sr-only md:inline">
+                New Thread
+              </span>
             </Button>
 
             <Button
               asChild
               variant="secondary"
               size="sm"
-              className="rounded-full border shadow-none"
+              className={navToolbarSecondaryBtnClass}
             >
-              <Link href="/settings">
-                <Settings2 className="h-4 w-4" />
-                Settings
+              <Link href="/settings" className="gap-0 md:gap-1.5">
+                <Settings2 className="h-4 w-4 shrink-0" />
+                <span className="sr-only md:not-sr-only md:inline">
+                  Settings
+                </span>
               </Link>
             </Button>
           </div>
@@ -68,19 +118,33 @@ export default function SharedChatPage() {
       </header>
 
       {error ? (
-        <main className="flex flex-1 items-center justify-center px-4 text-center text-sm text-muted-foreground">
-          {error}
+        <main className="flex min-h-0 flex-1 items-center justify-center px-4 text-center">
+          <div className="max-w-sm space-y-2">
+            <h2 className="text-lg font-medium text-foreground">
+              Shared chat unavailable
+            </h2>
+            <p className="text-sm text-muted-foreground">{error}</p>
+          </div>
         </main>
       ) : !threadData ? (
-        <main className="flex flex-1 items-center justify-center px-4 text-sm text-muted-foreground">
-          Loading shared thread...
+        <main className="flex min-h-0 flex-1 flex-col items-center justify-center gap-4 px-4">
+          <img
+            src="/saaki-chat-transparent.png"
+            alt="Saaki AI"
+            className="h-12 w-12 object-contain"
+          />
+          <TextShimmer className="text-sm font-medium leading-loose [--base-color:theme(colors.blue.400)] [--base-gradient-color:theme(colors.blue.600)] dark:[--base-color:theme(colors.blue.700)] dark:[--base-gradient-color:theme(colors.blue.400)]">
+            Loading shared chat...
+          </TextShimmer>
         </main>
       ) : (
-        <main className="min-h-0 flex-1">
+        <main className="min-h-0 min-w-0 flex-1 overflow-hidden">
           <MessageList
             threadId={threadData.id}
-            messages={threadData.messages}
-            status={"ready"}
+            messages={messages}
+            status="ready"
+            toolApps={toolApps}
+            mcpServers={mcpServers}
           />
         </main>
       )}
