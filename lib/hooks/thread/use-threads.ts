@@ -1,3 +1,4 @@
+import { useMemo } from "react";
 import {
   useInfiniteQuery,
   useQuery,
@@ -36,10 +37,12 @@ export const useThreads = () => {
     enabled: !!uid,
   });
 
-  return {
-    ...query,
-    data: query.data?.pages.flatMap((page) => page.threads) ?? [],
-  };
+  const threads = useMemo(
+    () => query.data?.pages.flatMap((p) => p.threads) ?? [],
+    [query.data]
+  );
+
+  return { ...query, data: threads };
 };
 
 export const useThread = (threadId: string, isNew?: boolean) => {
