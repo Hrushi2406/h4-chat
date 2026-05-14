@@ -18,9 +18,10 @@ export const metadata: Metadata = {
     title: "Saaki AI",
     statusBarStyle: "black-translucent",
   },
-  // icons: {
-  //   icon: "/favicon.ico",
-  // },
+  icons: {
+    icon: "/favicon.ico",
+    apple: "/icons/apple-touch-icon.png",
+  },
 };
 
 export default function RootLayout({
