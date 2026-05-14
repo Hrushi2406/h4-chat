@@ -96,14 +96,14 @@ function SettingsPageInner() {
   );
 
   return (
-    <div className="w-full py-6 max-w-4xl mx-auto">
+    <div className="mx-auto w-full max-w-4xl px-3 py-6 sm:px-0">
       <Tabs
         value={activeTab}
         onValueChange={handleTabChange}
         className="w-full"
       >
-        <div className="mb-6 flex items-center gap-4">
-          <div className="flex min-w-0 flex-1 basis-0 justify-start">
+        <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-4">
+          <div className="flex min-w-0 justify-start sm:flex-1 sm:basis-0">
             <Button variant="outline" className={settingsBtnClass} asChild>
               <Link href="/">
                 <ChevronLeft className="w-4 h-4 " />
@@ -111,30 +111,36 @@ function SettingsPageInner() {
               </Link>
             </Button>
           </div>
-          <TabsList className="h-10 border bg-card shrink-0 rounded-full p-1 sm:w-fit">
+          <TabsList className="h-10 w-full max-w-full justify-start overflow-x-auto rounded-full border bg-card p-0.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden sm:w-fit sm:shrink-0 sm:justify-center">
             <TabsTrigger
               value="account"
-              className={cn(settingsBtnClass, "px-4")}
+              className={cn(settingsBtnClass, "h-8 shrink-0 px-4")}
             >
               Account
             </TabsTrigger>
             <TabsTrigger
               value="customization"
-              className={cn(settingsBtnClass, "px-4")}
+              className={cn(settingsBtnClass, "h-8 shrink-0 px-4")}
             >
               Customization
             </TabsTrigger>
             <TabsTrigger
               value="connections"
-              className={cn(settingsBtnClass, "px-4")}
+              className={cn(settingsBtnClass, "h-8 shrink-0 px-4")}
             >
               Connections
             </TabsTrigger>
-            <TabsTrigger value="mcp" className={cn(settingsBtnClass, "px-4")}>
+            <TabsTrigger
+              value="mcp"
+              className={cn(settingsBtnClass, "h-8 shrink-0 px-4")}
+            >
               MCP
             </TabsTrigger>
           </TabsList>
-          <div className="min-w-0 flex-1 basis-0" aria-hidden="true" />
+          <div
+            className="hidden min-w-0 sm:block sm:flex-1 sm:basis-0"
+            aria-hidden="true"
+          />
         </div>
         <TabsContent value="account">
           <Card className={settingsCardClass}>
@@ -188,7 +194,7 @@ const AccountSettings = () => {
     <div className="space-y-4">
       <h2 className="text-xl font-semibold">Account Settings</h2>
       <div className="grid gap-4">
-        <div className="flex items-center gap-4">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
           <div className="h-12 w-12 rounded-full overflow-hidden">
             {user?.avatar ? (
               <img
@@ -216,7 +222,7 @@ const AccountSettings = () => {
               {user?.email || "No email provided"}
             </p>
           </div>
-          <div className="ml-auto">
+          <div className="w-full sm:ml-auto sm:w-auto">
             <div className="flex justify-between items-center mb-0">
               <p className="text-xs text-muted-foreground ">Usage</p>
               <div className="flex justify-end text-xs text-muted-foreground">
@@ -225,8 +231,8 @@ const AccountSettings = () => {
             </div>
 
             <div className="flex justify-between items-center mb-2"> </div>
-            <Progress value={25} max={400} className="h-2 w-48" />
-            <p className="text-xs mt-2 text-right text-muted-foreground">
+            <Progress value={25} max={400} className="h-2 w-full sm:w-48" />
+            <p className="mt-2 text-xs text-muted-foreground sm:text-right">
               Demo usage
             </p>
           </div>
@@ -285,8 +291,8 @@ const CustomizationSettings = () => {
   return (
     <div className="">
       <form onSubmit={handleSaveChanges} className="space-y-4">
-        <div className="mb-6 flex items-center justify-between gap-4">
-          <h2 className="text-xl font-semibold">Customization Settings</h2>
+        <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
+          <h2 className="text-lg font-semibold sm:text-xl">Customization</h2>
           <Button
             type="submit"
             size="sm"
@@ -296,7 +302,7 @@ const CustomizationSettings = () => {
             {updateUser.isPending && (
               <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />
             )}
-            Save Changes
+            Save
           </Button>
         </div>
         <div className="space-y-2">
@@ -576,7 +582,7 @@ const McpSettings = () => {
             <div
               key={server.id}
               className={cn(
-                "flex items-center justify-between gap-3",
+                "flex flex-col items-start gap-3 sm:flex-row sm:items-center sm:justify-between",
                 settingsPanelClass,
               )}
             >
@@ -611,7 +617,7 @@ const McpSettings = () => {
                 </div>
               </div>
 
-              <div className="flex shrink-0 items-center gap-2">
+              <div className="flex w-full items-center justify-between gap-2 sm:w-auto sm:shrink-0 sm:justify-start">
                 <Switch
                   checked={server.enabled}
                   onCheckedChange={(enabled) =>
@@ -721,18 +727,13 @@ const ConnectionsSettings = () => {
 
   return (
     <div className="space-y-5">
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <h2 className="text-xl font-semibold">App Connections</h2>
-          <p className="text-sm text-muted-foreground">
-            Connect apps so chat can handle daily work across your workspace.
-          </p>
-        </div>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <h2 className="text-lg font-semibold sm:text-xl">App Connections</h2>
         <Button
           type="button"
           variant="outline"
           size="sm"
-          className={settingsBtnClass}
+          className={cn("shrink-0", settingsBtnClass)}
           onClick={() => refetch()}
           disabled={isFetching || !uid}
         >
@@ -765,7 +766,7 @@ const ConnectionsSettings = () => {
                 <div
                   key={toolkit.slug}
                   className={cn(
-                    "flex items-center justify-between gap-3",
+                    "grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-3 overflow-hidden",
                     settingsPanelClass,
                   )}
                 >
@@ -782,14 +783,14 @@ const ConnectionsSettings = () => {
                       )}
                     </div>
                     <div className="min-w-0">
-                      <div className="flex items-center gap-2">
+                      <div className="flex min-w-0 items-center gap-2">
                         <p className="truncate font-medium">{toolkit.name}</p>
                         {toolkit.isConnected && (
                           <Badge
                             variant="outline"
                             className={cn(
                               settingsBtnClass,
-                              "px-3 py-0.5 text-xs text-emerald-700",
+                              "hidden px-3 py-0.5 text-xs text-emerald-700 sm:inline-flex",
                             )}
                           >
                             Connected
@@ -808,7 +809,7 @@ const ConnectionsSettings = () => {
                       type="button"
                       variant="outline"
                       size="sm"
-                      className={settingsBtnClass}
+                      className={cn("shrink-0", settingsBtnClass)}
                       onClick={() => disconnect(toolkit)}
                       disabled={Boolean(pendingSlug)}
                     >
@@ -822,7 +823,8 @@ const ConnectionsSettings = () => {
                     <Button
                       type="button"
                       size="sm"
-                      className={settingsBtnClass}
+                      variant={"secondary"}
+                      className={cn("shrink-0 border", settingsBtnClass)}
                       onClick={() => connect(toolkit.slug)}
                       disabled={Boolean(pendingSlug)}
                     >
