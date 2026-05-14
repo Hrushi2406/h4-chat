@@ -15,6 +15,7 @@ import {
   SidebarMenuItem,
   SidebarProvider,
   SidebarTrigger,
+  useSidebar,
 } from "@/components/ui/sidebar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -86,6 +87,7 @@ const ThreadSidebar = () => {
   const params = useParams();
   const pathname = usePathname();
   const currentThreadId = pathname.split("/").pop() as string;
+  const { isMobile, setOpenMobile } = useSidebar();
 
   const { deleteThread } = useThreadActions();
 
@@ -98,6 +100,9 @@ const ThreadSidebar = () => {
 
   const handleThreadClick = (threadId: string) => {
     router.push(`/chat/${threadId}`);
+    if (isMobile) {
+      setOpenMobile(false);
+    }
   };
 
   const handleDeleteThread = (threadId: string, threadTitle: string) => {
