@@ -5,7 +5,14 @@ import type { Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import remarkToc from "remark-toc";
 import rehypeRaw from "rehype-raw";
-import { memo, useRef, useEffect, useLayoutEffect, useMemo, useState } from "react";
+import {
+  memo,
+  useRef,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useState,
+} from "react";
 import { motion } from "framer-motion";
 import { TextShimmer } from "@/components/ui/text-shimmer";
 import clsx from "clsx";
@@ -98,10 +105,18 @@ export const MessageList = memo(function MessageList({
   mcpServers = [],
 }: MessageListProps) {
   const scrollContainerRef = useRef<HTMLDivElement>(null);
-  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const contentRef = useRef<HTMLDivElement>(null);
   const previousThreadIdRef = useRef(threadId);
   const previousMessageSnapshotRef = useRef(getMessageSnapshot(messages));
+  const previousStatusRef = useRef(status);
   const wasNearBottomRef = useRef(true);
+  const pinToBottomUntilRef = useRef(0);
+  const scheduledScrollRef = useRef<number | null>(null);
+  const initialLoadScrollTimerRefs = useRef<number[]>([]);
+  const messageSnapshot = getMessageSnapshot(messages);
+  const messageSnapshotKey = `${messageSnapshot.count}:${messageSnapshot.firstId ?? ""}:${
+    messageSnapshot.lastId ?? ""
+  }`;
   const mcpServerNames = useMemo(
     () =>
       Object.fromEntries(
@@ -114,26 +129,59 @@ export const MessageList = memo(function MessageList({
   const showLoadingIndicator = status === "submitted";
 
   useLayoutEffect(() => {
-    if (messages.length === 0) {
+    const previousSnapshot = previousMessageSnapshotRef.current;
+    const hasChangedThread = previousThreadIdRef.current !== threadId;
+    const hasLoadedThreadMessages =
+      previousSnapshot.count === 0 && messageSnapshot.count > 0;
+    const hasSwitchedThreads =
+      messageSnapshot.count > 0 &&
+      previousSnapshot.count > 0 &&
+      (messageSnapshot.firstId !== previousSnapshot.firstId ||
+        (messageSnapshot.count <= previousSnapshot.count &&
+          messageSnapshot.lastId !== previousSnapshot.lastId));
+
+    if (!hasChangedThread && !hasLoadedThreadMessages && !hasSwitchedThreads) {
       return;
     }
 
-    wasNearBottomRef.current = true;
-    scrollToBottom("auto");
-    const animationFrame = requestAnimationFrame(() => scrollToBottom("auto"));
-    const timeout = window.setTimeout(() => scrollToBottom("auto"), 0);
+    startPinnedBottomScroll();
 
     return () => {
-      cancelAnimationFrame(animationFrame);
-      window.clearTimeout(timeout);
+      stopPinnedBottomScroll();
     };
-  }, [threadId]);
+  }, [threadId, messageSnapshotKey]);
+
+  useLayoutEffect(() => {
+    const contentElement = contentRef.current;
+
+    if (!contentElement || typeof ResizeObserver === "undefined") {
+      return;
+    }
+
+    const resizeObserver = new ResizeObserver(() => {
+      if (Date.now() <= pinToBottomUntilRef.current) {
+        scrollToBottom("auto");
+      }
+    });
+
+    resizeObserver.observe(contentElement);
+
+    return () => {
+      resizeObserver.disconnect();
+    };
+  }, []);
 
   useEffect(() => {
     const currentSnapshot = getMessageSnapshot(messages);
     const previousSnapshot = previousMessageSnapshotRef.current;
+    const previousStatus = previousStatusRef.current;
     const hasChangedThread = previousThreadIdRef.current !== threadId;
     const hasNewMessage = currentSnapshot.count > previousSnapshot.count;
+    const hasUpdatedLastMessage =
+      currentSnapshot.lastId === previousSnapshot.lastId &&
+      currentSnapshot.lastContentLength !== previousSnapshot.lastContentLength;
+    const hasStartedResponse =
+      previousStatus === "submitted" && status === "streaming";
     const hasLoadedThreadMessages =
       previousSnapshot.count === 0 && currentSnapshot.count > 0;
     const isSameThread =
@@ -148,79 +196,98 @@ export const MessageList = memo(function MessageList({
           currentSnapshot.lastId !== previousSnapshot.lastId));
     if (hasChangedThread || hasSwitchedThreads || hasLoadedThreadMessages) {
       wasNearBottomRef.current = true;
-      scrollToBottom("auto");
-      requestAnimationFrame(() => scrollToBottom("auto"));
+      startPinnedBottomScroll();
+    } else if (
+      hasStartedResponse ||
+      (status === "streaming" && hasUpdatedLastMessage && wasNearBottomRef.current)
+    ) {
+      startPinnedBottomScroll();
     } else if (hasNewMessage && (wasNearBottomRef.current || !isSameThread)) {
       scrollToBottom();
     }
 
+    previousStatusRef.current = status;
     previousThreadIdRef.current = threadId;
     previousMessageSnapshotRef.current = currentSnapshot;
-  }, [threadId, messages]);
+  }, [threadId, messages, status]);
 
   useEffect(() => {
     if (showLoadingIndicator && wasNearBottomRef.current) {
-      scrollToBottom();
+      startPinnedBottomScroll();
     }
   }, [showLoadingIndicator]);
 
-  useEffect(() => {
-    const scrollElement = getScrollElement();
-
-    scrollElement?.addEventListener("scroll", updateNearBottom, {
-      passive: true,
-    });
-
-    return () => {
-      scrollElement?.removeEventListener("scroll", updateNearBottom);
-    };
-  }, [messages.length]);
-
   const updateNearBottom = () => {
-    wasNearBottomRef.current = isNearBottom(getScrollElement());
+    wasNearBottomRef.current = isNearBottom(scrollContainerRef.current);
   };
 
   const scrollToBottom = (behavior: ScrollBehavior = "smooth") => {
-    const scrollElement = getScrollElement();
+    const scrollElement = scrollContainerRef.current;
 
-    if (scrollElement) {
-      scrollElement.scrollTo({
-        top: scrollElement.scrollHeight,
-        behavior,
-      });
+    if (!scrollElement) {
       return;
     }
 
-    messagesEndRef.current?.scrollIntoView({
+    scrollElement.scrollTo({
+      top: scrollElement.scrollHeight,
       behavior,
-      block: "end",
     });
   };
 
-  const getScrollElement = () => {
-    let element = messagesEndRef.current?.parentElement ?? null;
+  const startPinnedBottomScroll = () => {
+    wasNearBottomRef.current = true;
+    pinToBottomUntilRef.current = Date.now() + 750;
+    scrollToBottom("auto");
+    schedulePinnedBottomScroll(3);
+    schedulePinnedBottomTimer(120);
+    schedulePinnedBottomTimer(500);
+  };
 
-    while (element) {
-      const { overflowY } = window.getComputedStyle(element);
-      const canScroll = /(auto|scroll|overlay)/.test(overflowY);
-
-      if (canScroll && element.scrollHeight > element.clientHeight) {
-        return element;
-      }
-
-      element = element.parentElement;
+  const schedulePinnedBottomScroll = (remainingFrames: number) => {
+    if (scheduledScrollRef.current !== null || remainingFrames <= 0) {
+      return;
     }
 
-    return scrollContainerRef.current;
+    scheduledScrollRef.current = requestAnimationFrame(() => {
+      scheduledScrollRef.current = null;
+      scrollToBottom("auto");
+
+      if (Date.now() <= pinToBottomUntilRef.current) {
+        schedulePinnedBottomScroll(remainingFrames - 1);
+      }
+    });
+  };
+
+  const schedulePinnedBottomTimer = (delay: number) => {
+    const timer = window.setTimeout(() => {
+      scrollToBottom("auto");
+      initialLoadScrollTimerRefs.current =
+        initialLoadScrollTimerRefs.current.filter((item) => item !== timer);
+    }, delay);
+    initialLoadScrollTimerRefs.current.push(timer);
+  };
+
+  const stopPinnedBottomScroll = () => {
+    pinToBottomUntilRef.current = 0;
+
+    if (scheduledScrollRef.current !== null) {
+      cancelAnimationFrame(scheduledScrollRef.current);
+      scheduledScrollRef.current = null;
+    }
+
+    initialLoadScrollTimerRefs.current.forEach((timer) => {
+      window.clearTimeout(timer);
+    });
+    initialLoadScrollTimerRefs.current = [];
   };
 
   return (
     <div
       ref={scrollContainerRef}
       onScroll={updateNearBottom}
-      className="h-full flex-1 overflow-y-auto [overflow-anchor:none] p-4"
+      className="h-full min-h-0 flex-1 overflow-y-auto overscroll-contain [overflow-anchor:none] p-4"
     >
-      <div className="space-y-3 md:space-y-4 max-w-4xl mx-auto">
+      <div ref={contentRef} className="space-y-3 md:space-y-4 max-w-4xl mx-auto">
         {messages.map((message, index) => {
           const isLastAssistantMessage =
             message.role === "assistant" && index === messages.length - 1;
@@ -275,8 +342,8 @@ export const MessageList = memo(function MessageList({
           </motion.div>
         )}
 
-        {/* Invisible element to scroll to */}
-        <div ref={messagesEndRef} className="h-1" />
+        {/* Bottom spacer keeps the last message clear of the scroll edge. */}
+        <div className="h-1" />
       </div>
     </div>
   );
@@ -303,7 +370,12 @@ const MessageItem = memo(
     );
 
     return (
-      <div className="[content-visibility:auto] [contain-intrinsic-size:0_160px]">
+      <div
+        className={clsx(
+          !isLastAssistantMessage &&
+            "[content-visibility:auto] [contain-intrinsic-size:0_160px]",
+        )}
+      >
         <div
           className={`flex ${
             message.role === "user" ? "justify-end" : "justify-start"
@@ -753,7 +825,24 @@ const getMessageSnapshot = (messages: ThreadMessage[]) => ({
   count: messages.length,
   firstId: messages[0]?.id,
   lastId: messages.at(-1)?.id,
+  lastContentLength: messages.at(-1)
+    ? getRenderableMessageLength(messages.at(-1)!)
+    : 0,
 });
+
+const getRenderableMessageLength = (message: ThreadMessage) => {
+  const contentLength = getMessageContent(message).length;
+  const reasoningLength =
+    message.parts?.reduce((length, part) => {
+      if (part.type === "reasoning" && "text" in part) {
+        return length + (part.text?.length ?? 0);
+      }
+
+      return length;
+    }, 0) ?? 0;
+
+  return contentLength + reasoningLength;
+};
 
 const MessageTokenUsage = ({ message }: { message: ThreadMessage }) => {
   const metadata = message.metadata;

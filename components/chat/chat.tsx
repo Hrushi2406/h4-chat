@@ -92,8 +92,12 @@ export function Chat({ threadId, isNew = false }: ChatProps) {
   });
 
   const isLoading = status === "submitted" || status === "streaming";
+  const visibleMessages = useMemo(
+    () => (loadedThreadIdRef.current === threadId ? messages : []),
+    [threadId, messages]
+  );
   const totalTokenUsage = useMemo<ThreadMessageMetadata | undefined>(() => {
-    const usage = messages.reduce(
+    const usage = visibleMessages.reduce(
       (total, message) => {
         const metadata = message.metadata;
         const inputTokens = metadata?.inputTokens ?? 0;
@@ -114,7 +118,7 @@ export function Chat({ threadId, isNew = false }: ChatProps) {
     }
 
     return usage;
-  }, [messages]);
+  }, [visibleMessages]);
 
   // Clear stale messages immediately when the route changes to another thread.
   useEffect(() => {
@@ -292,8 +296,8 @@ export function Chat({ threadId, isNew = false }: ChatProps) {
   }
 
   return (
-    <div className="flex h-full flex-col">
-      {messages.length === 0 && isNewThread && (
+    <div className="flex h-full min-h-0 flex-col">
+      {visibleMessages.length === 0 && isNewThread && (
         <HomeSuggestions
           onSuggestionClick={async (suggestion) => {
             await handleSuggestionClick(suggestion);
@@ -302,11 +306,11 @@ export function Chat({ threadId, isNew = false }: ChatProps) {
       )}
 
       {/* Chat Content Area */}
-      <div className="flex-1 overflow-hidden">
+      <div className="min-h-0 flex-1 overflow-hidden">
         <MessageList
           key={threadId}
           threadId={threadId}
-          messages={messages}
+          messages={visibleMessages}
           status={status}
           toolApps={toolApps}
           mcpServers={mcpServers}

@@ -65,7 +65,7 @@ export default function ChatLayout({
         <ThreadSidebar />
         <SidebarInset className="min-h-0 flex-1">
           <Navbar />
-          <div className="flex-1 overflow-hidden">{children}</div>
+          <div className="min-h-0 flex-1 overflow-hidden">{children}</div>
         </SidebarInset>
       </div>
     </SidebarProvider>
