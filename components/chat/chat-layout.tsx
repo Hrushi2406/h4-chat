@@ -10,6 +10,7 @@ import {
   SidebarHeader,
   SidebarInset,
   SidebarMenu,
+  SidebarMenuAction,
   SidebarMenuButton,
   SidebarMenuItem,
   SidebarProvider,
@@ -145,8 +146,8 @@ const ThreadSidebar = () => {
           </div>
           <div className="py-2">
             <Button
-              className="w-full"
-              variant="outline"
+              className="w-full rounded-full border shadow-none"
+              variant="secondary"
               size="sm"
               onClick={() => router.push("/")}
             >
@@ -356,44 +357,43 @@ const ThreadItem = ({
   return (
     <SidebarMenuItem>
       <div
-        className="relative hover:bg-neutral-200 dark:hover:bg-neutral-800 rounded-md"
+        className="relative"
         data-threadid={thread.id}
       >
         {isEditing ? (
-          <div className="flex items-center gap-1 px-3 py-1.5">
+          <div className="flex h-8 items-center gap-1 rounded-md bg-sidebar-accent px-2">
             <Input
               value={editTitle}
               onChange={(e) => setEditTitle(e.target.value)}
               onKeyDown={handleKeyDown}
-              className="h-6 text-sm"
+              className="h-7 bg-background text-sm shadow-none"
               autoFocus
             />
             <Button
               variant="ghost"
-              size="sm"
-              className="h-6 w-6 p-0"
+              size="icon"
+              className="size-7 text-muted-foreground hover:text-foreground"
               onClick={handleSaveEdit}
             >
-              <Check className="h-3 w-3 text-green-600" />
+              <Check className="h-4 w-4" />
+              <span className="sr-only">Save thread title</span>
             </Button>
             <Button
               variant="ghost"
-              size="sm"
-              className="h-6 w-6 p-0"
+              size="icon"
+              className="size-7 text-muted-foreground hover:text-foreground"
               onClick={handleCancelEdit}
             >
-              <X className="h-3 w-3 text-red-600" />
+              <X className="h-4 w-4" />
+              <span className="sr-only">Cancel editing thread title</span>
             </Button>
           </div>
         ) : (
           <>
             <SidebarMenuButton
               tooltip={thread.title}
-              className={`flex items-center hover:bg-neutral-200 dark:hover:bg-neutral-800 justify-between w-full px-3 py-1.5 cursor-pointer ${
-                isActive
-                  ? "bg-neutral-200 dark:bg-neutral-800 text-foreground font-medium"
-                  : ""
-              }`}
+              isActive={isActive}
+              className="cursor-pointer pr-16"
               onClick={() => onThreadClick(thread.id)}
             >
               <div className="flex items-center gap-2 flex-1 min-w-0">
@@ -425,29 +425,29 @@ const ThreadItemActions = ({
   onDeleteThread,
 }: ThreadItemActionsProps) => {
   return (
-    <div className="absolute right-2 top-1/2 -translate-y-1/2 flex bg-neutral-200 dark:bg-neutral-800 items-center gap-1 opacity-0 [div[data-threadid]:hover_&]:opacity-100 rounded-md">
-      <Button
-        variant="ghost"
-        size="sm"
-        className="h-6 w-6 p-0"
+    <div className="absolute right-1 top-1/2 flex -translate-y-1/2 items-center gap-0.5 rounded-md bg-sidebar-accent opacity-0 transition-opacity [div[data-threadid]:focus-within_&]:opacity-100 [div[data-threadid]:hover_&]:opacity-100">
+      <SidebarMenuAction
+        type="button"
+        className="static size-7 translate-y-0 text-muted-foreground hover:text-foreground"
         onClick={(e) => {
           e.stopPropagation();
           onEditThread(thread.title);
         }}
       >
-        <Edit2 className="h-3 w-3 text-muted-foreground" />
-      </Button>
-      <Button
-        variant="ghost"
-        size="sm"
-        className="h-6 w-6 p-0 text-muted-foreground hover:text-destructive"
+        <Edit2 className="h-4 w-4" />
+        <span className="sr-only">Edit thread title</span>
+      </SidebarMenuAction>
+      <SidebarMenuAction
+        type="button"
+        className="static size-7 translate-y-0 text-muted-foreground hover:text-destructive"
         onClick={(e) => {
           e.stopPropagation();
           onDeleteThread(thread.id, thread.title);
         }}
       >
-        <Trash2 className="h-3 w-3" />
-      </Button>
+        <Trash2 className="h-4 w-4" />
+        <span className="sr-only">Delete thread</span>
+      </SidebarMenuAction>
     </div>
   );
 };
