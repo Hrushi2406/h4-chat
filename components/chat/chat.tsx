@@ -40,7 +40,6 @@ export function Chat({ threadId, isNew = false }: ChatProps) {
   const [attachments, setAttachments] = useState<Array<Attachment>>([]);
   const [isNewThread, setIsNewThread] = useState(isNew);
   const [isCreatingThread, setIsCreatingThread] = useState(false);
-  const [searchEnabled, setSearchEnabled] = useState<boolean>(false);
 
   const [input, setInput] = useState("");
   const [mcpServers, setMcpServers] = useState<BrowserMcpServer[]>([]);
@@ -282,7 +281,6 @@ export function Chat({ threadId, isNew = false }: ChatProps) {
     return {
       body: {
         modelId: selectedModel.id,
-        searchEnabled: searchEnabled,
         authToken: await auth.currentUser?.getIdToken(),
         threadId,
         mcpServers,
@@ -329,8 +327,6 @@ export function Chat({ threadId, isNew = false }: ChatProps) {
         onModelChange={handleModelChange}
         attachments={attachments}
         setAttachments={setAttachments}
-        searchEnabled={searchEnabled}
-        setSearchEnabled={setSearchEnabled}
       />
     </div>
   );

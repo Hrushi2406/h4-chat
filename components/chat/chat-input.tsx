@@ -6,7 +6,6 @@ import {
   ArrowUp,
   CloudUpload,
   FileText,
-  Globe,
   Paperclip,
   Square,
   X,
@@ -75,8 +74,6 @@ interface ChatInputProps {
   onModelChange: (model: AIModel) => void;
   attachments: Attachment[];
   setAttachments: React.Dispatch<React.SetStateAction<Attachment[]>>;
-  searchEnabled: boolean;
-  setSearchEnabled: React.Dispatch<React.SetStateAction<boolean>>;
 }
 
 export const ChatInput = ({
@@ -90,8 +87,6 @@ export const ChatInput = ({
   onModelChange,
   attachments,
   setAttachments,
-  searchEnabled,
-  setSearchEnabled,
 }: ChatInputProps) => {
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   const { uploadImages } = useStorageActions();
@@ -257,22 +252,6 @@ export const ChatInput = ({
                       tabIndex={0}
                     >
                       <Paperclip className="h-6 w-6 text-muted-foreground " />
-                    </Button>
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="outline"
-                      onClick={() => setSearchEnabled(!searchEnabled)}
-                      className={clsx(
-                        "rounded-full px-3 text-muted-foreground brder transition-all hover:bg-auto",
-                        searchEnabled &&
-                          "bg-blue-50 border-blue-200 text-blue-600 hover:bg-blue-100 hover:text-blue-600 dark:bg-blue-950/50 dark:border-blue-800 dark:text-blue-300 dark:hover:bg-blue-950 dark:hover:text-blue-200"
-                      )}
-                      aria-label="Toggle web search"
-                      tabIndex={0}
-                    >
-                      <Globe className={cn("h-5 w-5")} />
-                      Search
                     </Button>
                     <ContextWindowIndicator tokenUsage={tokenUsage} />
                   </div>

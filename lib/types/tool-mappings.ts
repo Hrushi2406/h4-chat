@@ -5,7 +5,6 @@ import {
   FileArchive,
   FileText,
   GitBranch,
-  Globe,
   HardDrive,
   Hammer,
   Image,
@@ -31,11 +30,6 @@ export const toolDisplayNames: Record<
   string,
   { loading: string; done: string; Icon: any }
 > = {
-  webSearch: {
-    loading: "Searching the web...",
-    done: "Searched the web",
-    Icon: Globe,
-  },
   getWeather: {
     loading: "Getting weather...",
     done: "Got weather",

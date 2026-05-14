@@ -5,7 +5,6 @@ import {
   type ToolSet,
 } from "ai";
 import { Geo, geolocation } from "@vercel/functions";
-import { z } from "zod";
 import { getModelById } from "@/lib/available-models";
 import { createComposioSession, isComposioConfigured } from "@/lib/composio";
 import { verifyFirebaseIdToken } from "@/lib/firebase-auth-server";
@@ -19,12 +18,12 @@ import {
   COMPOSIO_TOOLKIT_EXAMPLES,
   COMPOSIO_TOOL_NAME_PATTERN,
 } from "@/lib/types/composio-tool-slugs";
+import { IUser } from "@/lib/types/user";
 
 export async function POST(req: Request) {
   const {
     messages,
     modelId = "deepseek/deepseek-v4-flash",
-    searchEnabled = false,
     userInfo,
     authToken,
     threadId,
@@ -51,7 +50,6 @@ export async function POST(req: Request) {
   );
   const systemPrompt = getSystemPrompt(
     geo,
-    searchEnabled,
     Boolean(composioTools),
     mcpContext?.servers,
     userInfo
@@ -62,25 +60,6 @@ export async function POST(req: Request) {
   const tools = {
     ...composioTools,
     ...mcpContext?.tools,
-    webSearch: {
-      description: `Search the web for current information, facts, recent events, or detailed explanations.
-  
-      Use this tool when:
-      - User asks about current events or recent news
-      - Questions require up-to-date information
-      - User asks for specific facts that might not be in your training data
-      - User requests recent developments on any topic
-      - Questions about current stock prices, weather, or time-sensitive data
-      
-      The tool provides both instant answers and web search results with sources.`,
-      inputSchema: z.object({
-        query: z.string(),
-      }),
-      execute: async ({ query }) => {
-        const results = await webSearch(query);
-        return results;
-      },
-    },
   } satisfies ToolSet;
 
   const result = streamText({
@@ -134,7 +113,6 @@ About the origin of user's request:
 
 const getSystemPrompt = (
   geo: Geo,
-  searchEnabled: boolean,
   composioEnabled: boolean,
   mcpServers:
     | Array<{
@@ -159,10 +137,6 @@ const getSystemPrompt = (
     - Avoid repetition, filler, and unnecessary background.
     - Include a follow-up question only when it is needed to move the conversation forward.
     - Suggest next steps only when they are useful and specific.
-    - ${
-      searchEnabled &&
-      `Use the webSearch tool for any information that requires current data. You MUST use this tool when answering questions about recent events, facts, or information that might not be in your training data.`
-    }
     - ${
       composioEnabled &&
       `You can use connected-app tools through Composio for email, calendar, drive, docs, spreadsheets, project management, developer workflows, CRM, payments, commerce, design, Google Workspace, social media, ads, SEO, media generation, and fitness tasks.
@@ -280,57 +254,3 @@ const normalizeRequestHeaders = (value: unknown) => {
 
   return Object.keys(headers).length > 0 ? headers : undefined;
 };
-
-// Google Custom Search API integration
-import axios from "axios";
-import { IUser } from "@/lib/types/user";
-
-interface SearchResult {
-  title: string;
-  link: string;
-  snippet: string;
-  source: string;
-}
-
-/**
- * Performs a web search using Google Custom Search JSON API
- * @param query The search query
- * @returns Array of search results
- */
-async function webSearch(query: string): Promise<SearchResult[]> {
-  try {
-    const GOOGLE_API_KEY = process.env.GOOGLE_SEARCH_API_KEY;
-    const GOOGLE_CSE_ID = process.env.GOOGLE_CSE_ID;
-
-    if (!GOOGLE_API_KEY || !GOOGLE_CSE_ID) {
-      console.error("Missing Google API Key or CSE ID");
-      return [];
-    }
-
-    const response = await axios.get(
-      "https://www.googleapis.com/customsearch/v1",
-      {
-        params: {
-          key: GOOGLE_API_KEY,
-          cx: GOOGLE_CSE_ID,
-          q: query,
-          num: 5, // Number of results to return
-        },
-      }
-    );
-
-    if (!response.data.items || response.data.items.length === 0) {
-      return [];
-    }
-
-    return response.data.items.map((item: any) => ({
-      title: item.title,
-      link: item.link,
-      snippet: item.snippet,
-      source: item.displayLink,
-    }));
-  } catch (error) {
-    console.error("Web search error:", error);
-    return [];
-  }
-}
