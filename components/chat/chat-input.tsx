@@ -143,11 +143,11 @@ export const ChatInput = ({
         }
       } catch {
         setSelectedFiles((previousFiles) =>
-          previousFiles.filter((file) => !acceptedFiles.includes(file))
+          previousFiles.filter((file) => !acceptedFiles.includes(file)),
         );
       }
     },
-    [uploadImages, uid, threadId, setAttachments]
+    [uploadImages, uid, threadId, setAttachments],
   );
 
   const handlePaste = useCallback(
@@ -161,7 +161,7 @@ export const ChatInput = ({
       e.preventDefault();
       void handleFileUpload(imageFiles);
     },
-    [handleFileUpload]
+    [handleFileUpload],
   );
 
   const handleRemoveFile = (index: number) => {
@@ -197,12 +197,12 @@ export const ChatInput = ({
   });
 
   return (
-    <div className="p-2 pt-3 ">
-      <div className="max-w-4xl mx-auto">
-        <div className="flex items-end gap-3">
+    <div className="w-full min-w-0 p-2 pt-3">
+      <div className="mx-auto w-full min-w-0 max-w-4xl">
+        <div className="flex min-w-0 items-end gap-3">
           <div
             className={cn(
-              "flex-1 relative border-2 rounded-3xl focus-within:border-primary/50 focus-within:ring-2 focus-within:ring-primary/20 transition-all duration-200"
+              "relative min-w-0 flex-1 border-2 rounded-3xl focus-within:border-primary/50 focus-within:ring-2 focus-within:ring-primary/20 transition-all duration-200",
             )}
             {...getRootProps()}
           >
@@ -240,8 +240,8 @@ export const ChatInput = ({
                   />
                 </div>
 
-                <div className="flex items-center justify-between gap-r">
-                  <div className="flex-2 flex items-center gap-2 px-2 py-0.5 justify-end rounded-full max-w-max">
+                <div className="flex min-w-0 items-center justify-between gap-2">
+                  <div className="flex max-w-max shrink-0 items-center justify-end gap-2 rounded-full px-2 py-0.5">
                     <Button
                       type="button"
                       size="sm"
@@ -256,14 +256,14 @@ export const ChatInput = ({
                     <ContextWindowIndicator tokenUsage={tokenUsage} />
                   </div>
 
-                  <div className="flex-1 flex justify-end flex-shrink-0 ">
+                  <div className="flex min-w-0 flex-1 justify-end overflow-hidden">
                     <ModelSelector
                       selectedModel={selectedModel}
                       onModelChange={onModelChange}
                     />
                   </div>
 
-                  <div className="flex-shrink-0 ml-1 fex-1 flex justify-end">
+                  <div className="ml-0 flex shrink-0 justify-end">
                     <motion.div
                       whileHover={{ scale: 1.05 }}
                       whileTap={{ scale: 0.95 }}
@@ -279,7 +279,7 @@ export const ChatInput = ({
                           uploadImages.isPending
                         }
                         className={clsx(
-                          "h-10 w-10 rounded-full transition-colors disabled:opacity-50"
+                          "h-10 w-10 rounded-full transition-colors disabled:opacity-50",
                         )}
                       >
                         {isLoading ? (
@@ -302,7 +302,7 @@ export const ChatInput = ({
 
 const formatTokenCount = (
   tokenCount: number,
-  { precision = false }: { precision?: boolean } = {}
+  { precision = false }: { precision?: boolean } = {},
 ) => {
   if (tokenCount >= 1_000) {
     if (precision) {
@@ -340,9 +340,9 @@ const ContextWindowIndicator = ({
       <TooltipTrigger asChild>
         <div
           className={cn(
-            "flex h-8 items-center gap-1.5 rounded-full border bg-background px-2 text-[11px] font-medium text-muted-foreground shadow-xs",
+            "flex h-8 items-center gap-0 rounded-full border bg-background px-1.5 text-[11px] font-medium text-muted-foreground shadow-xs sm:gap-1.5 sm:px-2",
             isNearLimit &&
-              "border-amber-300 bg-amber-50 text-amber-700 dark:border-amber-500/70 dark:bg-amber-950/30 dark:text-amber-300"
+              "border-amber-300 bg-amber-50 text-amber-700 dark:border-amber-500/70 dark:bg-amber-950/30 dark:text-amber-300",
           )}
           role="progressbar"
           tabIndex={0}
@@ -377,19 +377,17 @@ const ContextWindowIndicator = ({
               strokeDashoffset={strokeDashoffset}
               className={cn(
                 "text-primary transition-[stroke-dashoffset]",
-                isNearLimit && "text-amber-500"
+                isNearLimit && "text-amber-500",
               )}
             />
           </svg>
-          <span className="tabular-nums">
+          <span className="hidden tabular-nums sm:inline">
             {displayedTokenCount}/200K
           </span>
         </div>
       </TooltipTrigger>
       <TooltipContent side="top" className="space-y-1 text-center">
-        <div className="font-medium">
-          {displayedTokenCount}/200K
-        </div>
+        <div className="font-medium">{displayedTokenCount}/200K</div>
         <div>
           {isFull
             ? "Chat token usage is at 200K"

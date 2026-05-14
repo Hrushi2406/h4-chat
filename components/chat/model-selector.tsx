@@ -26,7 +26,7 @@ export const ModelSelector = ({
         if (model) onModelChange(model);
       }}
     >
-      <SelectTrigger className="text-muted-foreground h-10 border-0 rounded-full bg-background hover:bg-accent/50 transition-colors focus:ring-0 focus:outline-none shadow-none">
+      <SelectTrigger className="h-10 w-fit max-w-full shrink-0 rounded-full border-0 bg-background text-muted-foreground shadow-none transition-colors hover:bg-accent/50 focus:outline-none focus:ring-0">
         <SelectValue placeholder="Select Model">
           <div className="flex items-center gap-2">
             {(() => {

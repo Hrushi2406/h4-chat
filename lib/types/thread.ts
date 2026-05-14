@@ -242,27 +242,22 @@ const compactToolPayload = (value: unknown) => {
   };
 };
 
-const stringifyForStoragePreview = (value: unknown) => {
-  if (typeof value === "string") {
-    return value;
-  }
-
+const stringifyForStoragePreview = (value: unknown): string => {
+  if (typeof value === "string") return value;
   try {
-    return JSON.stringify(value);
+    const json = JSON.stringify(value);
+    if (json !== undefined) return json;
   } catch {
-    return String(value);
+    /* non-serializable */
   }
+  return value === undefined ? "" : String(value);
 };
 
-const truncateString = (value: string, maxLength: number) => {
-  if (value.length <= maxLength) {
-    return { value, truncated: false };
-  }
-
+const truncateString = (value: string | undefined, maxLength: number) => {
+  const v = value ?? "";
+  if (v.length <= maxLength) return { value: v, truncated: false };
   return {
-    value: `${value.slice(0, maxLength)}\n\n[truncated ${
-      value.length - maxLength
-    } characters]`,
+    value: `${v.slice(0, maxLength)}\n\n[truncated ${v.length - maxLength} characters]`,
     truncated: true,
   };
 };

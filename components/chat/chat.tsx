@@ -294,7 +294,7 @@ export function Chat({ threadId, isNew = false }: ChatProps) {
   }
 
   return (
-    <div className="flex h-full min-h-0 flex-col">
+    <div className="flex h-full min-h-0 min-w-0 flex-col">
       {visibleMessages.length === 0 && isNewThread && (
         <HomeSuggestions
           onSuggestionClick={async (suggestion) => {
@@ -477,12 +477,12 @@ const HomeSuggestions = ({
 
   return (
     <motion.div
-      className="flex h-full flex-col items-center justify-center px-6 py-10 text-center"
+      className="flex h-full w-full min-w-0 flex-col items-center justify-center px-4 py-10 text-center sm:px-6"
       initial={{ opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.25, ease: "easeOut" }}
     >
-      <div className="w-full max-w-4xl space-y-7">
+      <div className="w-full min-w-0 max-w-4xl space-y-7">
         <div className="space-y-2">
           <motion.p
             key={activePrompt}
@@ -499,11 +499,11 @@ const HomeSuggestions = ({
           </h1>
         </div>
 
-        <div className="flex min-h-[280px] flex-col items-center justify-start gap-7">
+        <div className="flex min-h-[280px] w-full min-w-0 flex-col items-center justify-start gap-7">
           {arePromptsReady && (
             <>
               <motion.div
-                className="mx-auto flex max-w-3xl flex-wrap justify-center gap-3"
+                className="mx-auto flex w-full min-w-0 max-w-3xl flex-wrap justify-center gap-3"
                 variants={pillContainerVariants}
                 initial={shouldReduceMotion ? false : "hidden"}
                 animate="visible"
@@ -511,7 +511,7 @@ const HomeSuggestions = ({
                 {suggestions.map((suggestion) => (
                   <motion.button
                     key={suggestion.label}
-                    className="inline-flex max-w-full cursor-pointer items-center gap-2 rounded-full bg-secondary/70 px-5 py-3 text-sm text-muted-foreground transition-all hover:bg-secondary hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:text-base"
+                    className="inline-flex max-w-full min-w-0 cursor-pointer items-center justify-center gap-2 rounded-full bg-secondary/70 px-4 py-3 text-center text-sm text-muted-foreground transition-all hover:bg-secondary hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:justify-start sm:px-5 sm:text-left sm:text-base"
                     variants={pillVariants}
                     whileTap={{ scale: 0.99 }}
                     tabIndex={0}
@@ -535,7 +535,9 @@ const HomeSuggestions = ({
                         aria-hidden="true"
                       />
                     )}
-                    <span className="truncate">{suggestion.label}</span>
+                    <span className="min-w-0 truncate text-center sm:text-left">
+                      {suggestion.label}
+                    </span>
                   </motion.button>
                 ))}
               </motion.div>
