@@ -9,8 +9,15 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
+  applicationName: "Saaki AI",
   title: "Saaki AI",
   description: "Fast & personalized AI chat assistant for your conversations",
+  manifest: "/manifest.webmanifest",
+  appleWebApp: {
+    capable: true,
+    title: "Saaki AI",
+    statusBarStyle: "black-translucent",
+  },
   // icons: {
   //   icon: "/favicon.ico",
   // },

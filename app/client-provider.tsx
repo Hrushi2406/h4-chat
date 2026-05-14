@@ -11,6 +11,7 @@ import { useEffect } from "react";
 import { userQueryOptions } from "@/lib/hooks/user/use-user";
 import { connectionsQueryOptions } from "@/lib/hooks/connections/use-connections";
 import { usePathname } from "next/navigation";
+import { PwaServiceWorkerRegistrar } from "@/components/pwa-service-worker-registrar";
 
 interface ClientProviderProps {
   children: React.ReactNode;
@@ -20,6 +21,7 @@ export const ClientProvider = ({ children }: ClientProviderProps) => {
   return (
     <QueryClientProvider client={queryClient}>
       <ThemeProvider attribute="class" defaultTheme="dark" enableSystem>
+        <PwaServiceWorkerRegistrar />
         <AuthProvider>{children}</AuthProvider>
         <Toaster richColors />
       </ThemeProvider>
