@@ -61,7 +61,7 @@ export default function ChatLayout({
   const pathname = usePathname();
 
   return (
-    <SidebarProvider className="h-screen min-h-0 overflow-hidden">
+    <SidebarProvider className="h-mobile-viewport min-h-0 overflow-hidden">
       <div className="flex h-full min-h-0 w-full overflow-hidden">
         <ThreadSidebar />
         <SidebarInset className="min-h-0 min-w-0 flex-1">

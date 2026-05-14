@@ -115,10 +115,27 @@
 }
 
 @layer base {
+  html,
+  body {
+    height: 100%;
+    overflow: hidden;
+  }
+
   * {
     @apply border-border outline-ring/50;
   }
   body {
     @apply bg-background text-foreground;
+  }
+}
+
+@layer utilities {
+  .h-mobile-viewport {
+    height: 100vh;
+    height: 100dvh;
+  }
+
+  .pb-mobile-safe {
+    padding-bottom: max(0.5rem, env(safe-area-inset-bottom));
   }
 }

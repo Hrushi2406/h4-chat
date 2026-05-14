@@ -197,7 +197,7 @@ export const ChatInput = ({
   });
 
   return (
-    <div className="w-full min-w-0 p-2 pt-3">
+    <div className="w-full min-w-0 p-2 pt-3 pb-mobile-safe">
       <div className="mx-auto w-full min-w-0 max-w-4xl">
         <div className="flex min-w-0 items-end gap-3">
           <div
