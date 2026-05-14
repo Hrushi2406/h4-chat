@@ -4,7 +4,6 @@ import ReactMarkdown from "react-markdown";
 import type { Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import remarkToc from "remark-toc";
-import rehypeRaw from "rehype-raw";
 import {
   memo,
   useRef,
@@ -47,7 +46,6 @@ type ToolAppIcon = {
 };
 
 const markdownRemarkPlugins = [remarkGfm, remarkToc];
-const markdownRehypePlugins = [rehypeRaw];
 const scrollBottomThreshold = 120;
 const streamingRenderThrottleMs = 80;
 const virtualMessageGap = 16;
@@ -786,7 +784,6 @@ const MarkdownPart = memo(({ text }: { text: string }) => (
     <div className="text-sm md:text-base prose prose-sm prose-neutral md:prose-base max-w-none leading-loose prose-headings:text-foreground prose-p:text-[#364153] prose-strong:text-foreground prose-li:text-[#364153] prose-th:text-[#364153] prose-td:text-[#364153] prose-a:text-primary prose-code:text-foreground prose-pre:bg-secondary dark:prose-invert dark:prose-p:text-[#d1d5dc] dark:prose-li:text-[#d1d5dc] dark:prose-th:text-[#d1d5dc] dark:prose-td:text-[#d1d5dc]">
       <ReactMarkdown
         remarkPlugins={markdownRemarkPlugins}
-        rehypePlugins={markdownRehypePlugins}
         components={markdownComponents}
       >
         {text}

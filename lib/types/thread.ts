@@ -158,9 +158,114 @@ export const normalizeThreadMessage = (
   };
 };
 
+const MAX_STORED_TEXT_CHARS = 100_000;
+const MAX_STORED_TOOL_FIELD_CHARS = 2_000;
+const TOOL_PAYLOAD_KEYS = new Set([
+  "args",
+  "data",
+  "input",
+  "output",
+  "result",
+  "results",
+  "response",
+  "responses",
+  "content",
+  "schema",
+  "schemas",
+]);
+
 export const serializeThreadMessageForFirestore = (
   message: ThreadMessage
-): ThreadMessage => sanitizeFirestoreValue(normalizeThreadMessage(message), true);
+): ThreadMessage =>
+  sanitizeFirestoreValue(compactThreadMessage(normalizeThreadMessage(message)), true);
+
+const compactThreadMessage = (message: ThreadMessage): ThreadMessage => {
+  const compactContent = truncateString(message.content, MAX_STORED_TEXT_CHARS);
+
+  return {
+    ...message,
+    content: compactContent.value,
+    parts: getArrayLikeParts(message.parts).map(compactMessagePart),
+    ...(compactContent.truncated ? { truncated: true } : {}),
+  } as ThreadMessage;
+};
+
+const compactMessagePart = (part: UIMessage["parts"][number]) => {
+  if (part.type === "text") {
+    const text = truncateString(part.text, MAX_STORED_TEXT_CHARS);
+
+    return {
+      ...part,
+      text: text.value,
+      ...(text.truncated ? { truncated: true } : {}),
+    };
+  }
+
+  if (part.type === "file" && part.url?.startsWith("data:")) {
+    const url = truncateString(part.url, MAX_STORED_TOOL_FIELD_CHARS);
+
+    return {
+      ...part,
+      url: url.value,
+      ...(url.truncated ? { truncated: true } : {}),
+    };
+  }
+
+  if (part.type === "dynamic-tool" || part.type.startsWith("tool-")) {
+    return compactToolPart(part);
+  }
+
+  return part;
+};
+
+const compactToolPart = (part: UIMessage["parts"][number]) => {
+  const source = part as Record<string, unknown>;
+
+  return Object.fromEntries(
+    Object.entries(source).map(([key, value]) => {
+      if (TOOL_PAYLOAD_KEYS.has(key.toLowerCase())) {
+        return [key, compactToolPayload(value)];
+      }
+
+      return [key, value];
+    })
+  ) as UIMessage["parts"][number];
+};
+
+const compactToolPayload = (value: unknown) => {
+  const serialized = stringifyForStoragePreview(value);
+  const truncated = truncateString(serialized, MAX_STORED_TOOL_FIELD_CHARS);
+
+  return {
+    preview: truncated.value,
+    truncated: truncated.truncated,
+  };
+};
+
+const stringifyForStoragePreview = (value: unknown) => {
+  if (typeof value === "string") {
+    return value;
+  }
+
+  try {
+    return JSON.stringify(value);
+  } catch {
+    return String(value);
+  }
+};
+
+const truncateString = (value: string, maxLength: number) => {
+  if (value.length <= maxLength) {
+    return { value, truncated: false };
+  }
+
+  return {
+    value: `${value.slice(0, maxLength)}\n\n[truncated ${
+      value.length - maxLength
+    } characters]`,
+    truncated: true,
+  };
+};
 
 const sanitizeFirestoreValue = <T,>(value: T, insideArray = false): T => {
   if (value === undefined) {
