@@ -26,8 +26,8 @@ const SettingsLayout = ({ children }: { children: React.ReactNode }) => {
   }
 
   return (
-    <SidebarInset>
-      <div className="flex flex-col gap-4 bg-secondary min-h-screen">
+    <SidebarInset className="h-mobile-viewport min-h-0 overflow-y-auto overscroll-contain">
+      <div className="flex min-h-full flex-col gap-4 bg-secondary">
         {children}
       </div>
     </SidebarInset>

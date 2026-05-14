@@ -105,6 +105,13 @@ const ThreadSidebar = () => {
     }
   };
 
+  const handleNewThreadClick = () => {
+    router.push("/");
+    if (isMobile) {
+      setOpenMobile(false);
+    }
+  };
+
   const handleDeleteThread = (threadId: string, threadTitle: string) => {
     setThreadToDelete({ id: threadId, title: threadTitle });
     setDeleteDialogOpen(true);
@@ -154,7 +161,7 @@ const ThreadSidebar = () => {
               className="w-full rounded-full border shadow-none"
               variant="secondary"
               size="sm"
-              onClick={() => router.push("/")}
+              onClick={handleNewThreadClick}
             >
               <Plus className="h-4 w-4" />
               New Thread
