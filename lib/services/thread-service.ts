@@ -1,4 +1,8 @@
 import {
+  onAuthStateChanged,
+  signInAnonymously,
+} from "firebase/auth";
+import {
   collection,
   doc,
   addDoc,
@@ -22,6 +26,7 @@ import {
   ThreadMessage,
   generateDefaultThread,
   getMessageContent,
+  normalizeThreadMessage,
   serializeThreadMessageForFirestore,
 } from "@/lib/types/thread";
 import { v4 } from "uuid";
@@ -33,6 +38,28 @@ export interface ThreadsPage {
   threads: Thread[];
   nextCursor: ThreadCursor | null;
 }
+
+const normalizeThreadData = (thread: Thread): Thread => ({
+  ...thread,
+  messages: (thread.messages ?? []).map(normalizeThreadMessage),
+});
+
+const ensureFirebaseAuthUser = async () => {
+  if (auth.currentUser) {
+    return;
+  }
+
+  await new Promise<void>((resolve) => {
+    const unsubscribe = onAuthStateChanged(auth, () => {
+      unsubscribe();
+      resolve();
+    });
+  });
+
+  if (!auth.currentUser) {
+    await signInAnonymously(auth);
+  }
+};
 
 const removeUndefinedValues = <T>(value: T): T => {
   if (value === undefined) {
@@ -139,8 +166,8 @@ class ThreadService {
       );
 
       const querySnapshot = await getDocs(q);
-      const threads: Thread[] = querySnapshot.docs.map(
-        (doc) => doc.data() as Thread
+      const threads: Thread[] = querySnapshot.docs.map((doc) =>
+        normalizeThreadData(doc.data() as Thread)
       );
       const nextCursor =
         querySnapshot.docs.length === pageSize
@@ -174,7 +201,7 @@ class ThreadService {
         return null;
       }
 
-      const data = docSnap.data() as Thread;
+      const data = normalizeThreadData(docSnap.data() as Thread);
 
       if (data.userId !== uid) {
         console.warn("Unauthorized access to thread:", { threadId });
@@ -288,12 +315,16 @@ class ThreadService {
 
   async getSharedThread({ shareId }: { shareId: string }): Promise<Thread> {
     try {
+      await ensureFirebaseAuthUser();
+
       const q = query(
         collection(db, colThreads),
         where("shareId", "==", shareId)
       );
       const querySnapshot = await getDocs(q);
-      const threads = querySnapshot.docs.map((doc) => doc.data() as Thread);
+      const threads = querySnapshot.docs.map((doc) =>
+        normalizeThreadData(doc.data() as Thread)
+      );
 
       if (threads.length === 0) throw new Error("Thread not found");
       return threads[0];

@@ -11,6 +11,7 @@ import {
   Inbox,
   ListTodo,
   Loader2,
+  MessageCircle,
   Plus,
   PlugZap,
   RefreshCw,
@@ -293,6 +294,7 @@ const toolkitIcons: Record<string, React.ElementType> = {
   googledrive: HardDrive,
   notion: FileText,
   linear: ListTodo,
+  whatsapp: MessageCircle,
 };
 
 const slugifyMcpId = (value: string) =>

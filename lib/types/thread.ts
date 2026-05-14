@@ -33,6 +33,7 @@ export interface Thread {
   createdAt: Date;
   updatedAt: Date;
   userId?: string;
+  shareId?: string;
   messageCount: number;
   lastMessagePreview?: string;
 }

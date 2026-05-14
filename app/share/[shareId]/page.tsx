@@ -1,39 +1,32 @@
 "use client";
 
-import { use, useEffect, useState } from "react";
-import { Chat } from "@/components/chat/chat";
+import { useEffect, useState } from "react";
 import { Thread } from "@/lib/types/thread";
 import threadService from "@/lib/services/thread-service";
-import { useRouter } from "next/navigation";
-import { toast } from "sonner";
+import { useParams, useRouter } from "next/navigation";
 import { MessageList } from "@/components/chat/message-list";
-import Navbar from "@/components/ui/navbar";
 import { Button } from "@/components/ui/button";
 import { Settings2, Plus } from "lucide-react";
 import Link from "next/link";
 
-interface SharedChatPageProps {
-  params: Promise<{
-    shareId: string;
-  }>;
-}
-
-export default function SharedChatPage({ params }: SharedChatPageProps) {
-  const { shareId } = use(params);
+export default function SharedChatPage() {
+  const params = useParams<{ shareId: string }>();
+  const shareId = params.shareId;
   const router = useRouter();
   const [threadData, setThreadData] = useState<Thread>();
+  const [error, setError] = useState<string>();
 
   useEffect(() => {
     if (!shareId) return;
 
     const fetchThread = async () => {
       try {
+        setError(undefined);
         const thread = await threadService.getSharedThread({ shareId });
         setThreadData(thread);
       } catch (error) {
         console.error("Failed to get shared thread: ", { shareId }, error);
-        toast.error("Shared thread not found");
-        router.push("/");
+        setError("This shared thread could not be found.");
       }
     };
     fetchThread();
@@ -43,10 +36,8 @@ export default function SharedChatPage({ params }: SharedChatPageProps) {
     router.push("/");
   };
 
-  if (!threadData) return <div>Loading...</div>;
-
   return (
-    <div className="min-h-screen">
+    <div className="flex h-screen min-h-0 flex-col">
       <header className="flex h-12 shrink-0 items-center gap-2 px-4 md:px-6 border-b">
         <div className="flex items-center justify-between flex-1">
           <h1 className="text-lg font-semibold">Saaki AI</h1>
@@ -76,15 +67,23 @@ export default function SharedChatPage({ params }: SharedChatPageProps) {
         </div>
       </header>
 
-      <div className="mx-auto max-w-4xl ">
-        <div className="flex-1 overflow-y-auto">
+      {error ? (
+        <main className="flex flex-1 items-center justify-center px-4 text-center text-sm text-muted-foreground">
+          {error}
+        </main>
+      ) : !threadData ? (
+        <main className="flex flex-1 items-center justify-center px-4 text-sm text-muted-foreground">
+          Loading shared thread...
+        </main>
+      ) : (
+        <main className="min-h-0 flex-1">
           <MessageList
             threadId={threadData.id}
             messages={threadData.messages}
             status={"ready"}
           />
-        </div>
-      </div>
+        </main>
+      )}
     </div>
   );
 }

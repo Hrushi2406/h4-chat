@@ -10,6 +10,7 @@ import { TextShimmer } from "@/components/ui/text-shimmer";
 import { useEffect } from "react";
 import { userQueryOptions } from "@/lib/hooks/user/use-user";
 import { connectionsQueryOptions } from "@/lib/hooks/connections/use-connections";
+import { usePathname } from "next/navigation";
 
 interface ClientProviderProps {
   children: React.ReactNode;
@@ -29,6 +30,8 @@ export const ClientProvider = ({ children }: ClientProviderProps) => {
 const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const { uid } = useAuth();
   const queryClient = useQueryClient();
+  const pathname = usePathname();
+  const isPublicSharePage = pathname.startsWith("/share/");
 
   useEffect(() => {
     if (!uid) return;
@@ -37,7 +40,7 @@ const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     void queryClient.prefetchQuery(connectionsQueryOptions(uid));
   }, [queryClient, uid]);
 
-  if (!uid)
+  if (!uid && !isPublicSharePage)
     return (
       <div className="flex flex-col items-center justify-center min-h-screen gap-4">
         <img
