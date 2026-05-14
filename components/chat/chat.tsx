@@ -295,24 +295,24 @@ export function Chat({ threadId, isNew = false }: ChatProps) {
 
   return (
     <div className="flex h-full min-h-0 min-w-0 flex-col">
-      {visibleMessages.length === 0 && isNewThread && (
-        <HomeSuggestions
-          onSuggestionClick={async (suggestion) => {
-            await handleSuggestionClick(suggestion);
-          }}
-        />
-      )}
-
       {/* Chat Content Area */}
       <div className="min-h-0 flex-1 overflow-hidden">
-        <MessageList
-          key={threadId}
-          threadId={threadId}
-          messages={visibleMessages}
-          status={status}
-          toolApps={toolApps}
-          mcpServers={mcpServers}
-        />
+        {visibleMessages.length === 0 && isNewThread ? (
+          <HomeSuggestions
+            onSuggestionClick={async (suggestion) => {
+              await handleSuggestionClick(suggestion);
+            }}
+          />
+        ) : (
+          <MessageList
+            key={threadId}
+            threadId={threadId}
+            messages={visibleMessages}
+            status={status}
+            toolApps={toolApps}
+            mcpServers={mcpServers}
+          />
+        )}
       </div>
 
       {/* Chat Input */}
@@ -477,12 +477,12 @@ const HomeSuggestions = ({
 
   return (
     <motion.div
-      className="flex h-full w-full min-w-0 flex-col items-center justify-center px-4 py-10 text-center sm:px-6"
+      className="flex h-full min-h-0 w-full min-w-0 flex-col items-center justify-start overflow-y-auto px-4 pb-4 pt-6 text-center sm:justify-center sm:px-6 sm:py-10"
       initial={{ opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.25, ease: "easeOut" }}
     >
-      <div className="w-full min-w-0 max-w-4xl space-y-7">
+      <div className="w-full min-w-0 max-w-4xl space-y-5 sm:space-y-7">
         <div className="space-y-2">
           <motion.p
             key={activePrompt}
@@ -493,17 +493,17 @@ const HomeSuggestions = ({
           >
             {PROMPT_MOODS[activePrompt]}
           </motion.p>
-          <h1 className="text-3xl font-medium tracking-tight text-foreground sm:text-4xl">
+          <h1 className="text-2xl font-medium leading-tight tracking-tight text-foreground sm:text-4xl">
             {greeting}
             {userName ? `, ${userName}` : ""}
           </h1>
         </div>
 
-        <div className="flex min-h-[280px] w-full min-w-0 flex-col items-center justify-start gap-7">
+        <div className="flex w-full min-w-0 flex-col items-center justify-start gap-4 sm:min-h-[280px] sm:gap-7">
           {arePromptsReady && (
             <>
               <motion.div
-                className="mx-auto flex w-full min-w-0 max-w-3xl flex-wrap justify-center gap-3"
+                className="mx-auto flex w-full min-w-0 max-w-3xl flex-wrap justify-center gap-3 sm:gap-3"
                 variants={pillContainerVariants}
                 initial={shouldReduceMotion ? false : "hidden"}
                 animate="visible"
@@ -511,7 +511,7 @@ const HomeSuggestions = ({
                 {suggestions.map((suggestion) => (
                   <motion.button
                     key={suggestion.label}
-                    className="inline-flex max-w-full min-w-0 cursor-pointer items-center justify-center gap-2 rounded-full bg-secondary/70 px-4 py-3 text-center text-sm text-muted-foreground transition-all hover:bg-secondary hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:justify-start sm:px-5 sm:text-left sm:text-base"
+                    className="inline-flex max-w-full min-w-0 cursor-pointer items-center justify-center gap-2 rounded-full bg-secondary/70 px-4 py-2.5 text-center text-sm text-muted-foreground transition-all hover:bg-secondary hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:justify-start sm:px-5 sm:py-3 sm:text-left sm:text-base"
                     variants={pillVariants}
                     whileTap={{ scale: 0.99 }}
                     tabIndex={0}
