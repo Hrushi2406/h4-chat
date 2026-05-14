@@ -43,11 +43,22 @@ export const useThreads = () => {
 };
 
 export const useThread = (threadId: string, isNew?: boolean) => {
+  const qc = useQueryClient();
   const { uid } = useAuth();
+  const queryKey = threadKeys.detail(threadId);
 
   return useQuery({
-    queryKey: threadKeys.detail(threadId),
-    queryFn: () => threadService.getThread({ threadId, userId: uid }),
+    queryKey,
+    queryFn: () => {
+      const cachedThread = qc.getQueryData<Thread | null>(queryKey);
+
+      if (cachedThread !== undefined) {
+        return cachedThread;
+      }
+
+      return threadService.getThread({ threadId, userId: uid });
+    },
+    initialData: () => qc.getQueryData<Thread | null>(queryKey),
     enabled: !!threadId && !!uid && !isNew,
   });
 };
