@@ -5,6 +5,7 @@ import { Moon, Sun } from "lucide-react";
 import { useTheme } from "next-themes";
 
 import { Button } from "@/components/ui/button";
+import { navToolbarSecondaryBtnClass } from "@/lib/utils";
 import {
   Tooltip,
   TooltipContent,
@@ -28,16 +29,16 @@ export function ThemeToggle() {
         <Button
           type="button"
           variant="secondary"
-          size="icon"
-          className="rounded-full border shadow-none"
+          size="sm"
+          className={navToolbarSecondaryBtnClass}
           aria-label={label}
           disabled={!mounted}
           onClick={() => setTheme(isDark ? "light" : "dark")}
         >
           {mounted && isDark ? (
-            <Sun className="h-4 w-4" />
+            <Sun className="size-4 shrink-0" strokeWidth={2} />
           ) : (
-            <Moon className="h-4 w-4" />
+            <Moon className="size-4 shrink-0" strokeWidth={2} />
           )}
         </Button>
       </TooltipTrigger>
