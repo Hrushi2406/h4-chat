@@ -80,6 +80,9 @@ importers:
       '@tanstack/react-query':
         specifier: ^5.100.7
         version: 5.100.7(react@19.2.5)
+      '@tanstack/react-virtual':
+        specifier: 3.13.24
+        version: 3.13.24(react-dom@19.2.5(react@19.2.5))(react@19.2.5)
       '@vercel/functions':
         specifier: ^3.5.0
         version: 3.5.0

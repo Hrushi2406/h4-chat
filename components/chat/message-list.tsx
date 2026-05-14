@@ -13,6 +13,7 @@ import {
   useMemo,
   useState,
 } from "react";
+import { useVirtualizer } from "@tanstack/react-virtual";
 import { motion } from "framer-motion";
 import { TextShimmer } from "@/components/ui/text-shimmer";
 import clsx from "clsx";
@@ -48,6 +49,8 @@ type ToolAppIcon = {
 const markdownRemarkPlugins = [remarkGfm, remarkToc];
 const markdownRehypePlugins = [rehypeRaw];
 const scrollBottomThreshold = 120;
+const streamingRenderThrottleMs = 80;
+const virtualMessageGap = 16;
 
 const markdownComponents = {
   code: ({ children, className }) => {
@@ -127,6 +130,28 @@ export const MessageList = memo(function MessageList({
 
   // Show loading indicator only when status is "submitted" (before streaming starts)
   const showLoadingIndicator = status === "submitted";
+  const loadingIndicatorIndex = messages.length;
+  const bottomSpacerIndex = messages.length + (showLoadingIndicator ? 1 : 0);
+  const rowCount = bottomSpacerIndex + 1;
+  const virtualizer = useVirtualizer({
+    count: rowCount,
+    getScrollElement: () => scrollContainerRef.current,
+    estimateSize: (index) => {
+      if (index === bottomSpacerIndex) return 4;
+      if (index === loadingIndicatorIndex && showLoadingIndicator) return 220;
+      return messages[index]?.role === "user" ? 96 : 180;
+    },
+    getItemKey: (index) => {
+      if (index === bottomSpacerIndex) return "bottom-spacer";
+      if (index === loadingIndicatorIndex && showLoadingIndicator) {
+        return "loading-indicator";
+      }
+
+      return messages[index]?.id ?? index;
+    },
+    overscan: 8,
+  });
+  const virtualItems = virtualizer.getVirtualItems();
 
   useLayoutEffect(() => {
     const previousSnapshot = previousMessageSnapshotRef.current;
@@ -287,69 +312,157 @@ export const MessageList = memo(function MessageList({
       onScroll={updateNearBottom}
       className="h-full min-h-0 flex-1 overflow-y-auto overscroll-contain [overflow-anchor:none] p-4"
     >
-      <div ref={contentRef} className="space-y-3 md:space-y-4 max-w-4xl mx-auto">
-        {messages.map((message, index) => {
-          const isLastAssistantMessage =
-            message.role === "assistant" && index === messages.length - 1;
+      <div ref={contentRef} className="max-w-4xl mx-auto">
+        <div
+          className="relative w-full"
+          style={{ height: `${virtualizer.getTotalSize()}px` }}
+        >
+          {virtualItems.map((virtualItem) => {
+            const index = virtualItem.index;
+            const message = messages[index];
+            const isLastAssistantMessage =
+              message?.role === "assistant" && index === messages.length - 1;
+            const isStreaming =
+              isLastAssistantMessage &&
+              (status === "streaming" || status === "submitted");
 
-          return (
-            <MessageItem
-              key={message.id}
-              message={message}
-              toolApps={toolApps}
-              mcpServerNames={mcpServerNames}
-              isLastAssistantMessage={isLastAssistantMessage}
-              isStreaming={
-                isLastAssistantMessage &&
-                (status === "streaming" || status === "submitted")
-              }
-            />
-          );
-        })}
-
-        {/* Loading indicator with TextShimmer - only show when status is "submitted" */}
-        {showLoadingIndicator && (
-          <motion.div
-            initial={{
-              opacity: 0,
-              y: 10,
-            }}
-            animate={{
-              opacity: 1,
-              y: 0,
-            }}
-            exit={{
-              opacity: 0,
-              y: -10,
-            }}
-            transition={{
-              duration: 0.2,
-              ease: "easeOut",
-            }}
-            className="flex justify-start "
-          >
-            <div
-              className={`max-w-[75%] ${heightClass} py-3 text-foreground rounded-lg`}
-            >
-              <TextShimmer
-                className="text-sm md:text-base leading-loose  [--base-color:theme(colors.blue.600)] [--base-gradient-color:theme(colors.blue.200)] dark:[--base-color:theme(colors.blue.700)] dark:[--base-gradient-color:theme(colors.blue.400)]"
-                duration={1.5}
-                spread={1.5}
+            return (
+              <div
+                key={virtualItem.key}
+                data-index={index}
+                ref={virtualizer.measureElement}
+                className="absolute left-0 top-0 w-full"
+                style={{
+                  transform: `translateY(${virtualItem.start}px)`,
+                  paddingBottom:
+                    index === bottomSpacerIndex ? 0 : virtualMessageGap,
+                }}
               >
-                Generating response...
-              </TextShimmer>
-            </div>
-          </motion.div>
-        )}
-
-        {/* Bottom spacer keeps the last message clear of the scroll edge. */}
-        <div className="h-1" />
+                {message ? (
+                  isStreaming ? (
+                    <ActiveMessageItem
+                      message={message}
+                      toolApps={toolApps}
+                      mcpServerNames={mcpServerNames}
+                      isLastAssistantMessage={isLastAssistantMessage}
+                      isStreaming={isStreaming}
+                    />
+                  ) : (
+                    <CompletedMessageItem
+                      message={message}
+                      toolApps={toolApps}
+                      mcpServerNames={mcpServerNames}
+                      isLastAssistantMessage={isLastAssistantMessage}
+                    />
+                  )
+                ) : index === loadingIndicatorIndex && showLoadingIndicator ? (
+                  <LoadingMessage />
+                ) : (
+                  <div className="h-1" />
+                )}
+              </div>
+            );
+          })}
+        </div>
       </div>
     </div>
   );
 });
 
-const MessageItem = memo(
+const CompletedMessageItem = memo(
+  ({
+    message,
+    toolApps,
+    mcpServerNames,
+    isLastAssistantMessage,
+  }: {
+    message: ThreadMessage;
+    toolApps: ToolAppIcon[];
+    mcpServerNames: Record<string, string>;
+    isLastAssistantMessage: boolean;
+  }) => (
+    <MessageItemContent
+      message={message}
+      toolApps={toolApps}
+      mcpServerNames={mcpServerNames}
+      isLastAssistantMessage={isLastAssistantMessage}
+      isStreaming={false}
+    />
+  ),
+  (prevProps, nextProps) =>
+    prevProps.message === nextProps.message &&
+    prevProps.toolApps === nextProps.toolApps &&
+    prevProps.mcpServerNames === nextProps.mcpServerNames &&
+    prevProps.isLastAssistantMessage === nextProps.isLastAssistantMessage,
+);
+
+CompletedMessageItem.displayName = "CompletedMessageItem";
+
+const ActiveMessageItem = ({
+  message,
+  toolApps,
+  mcpServerNames,
+  isLastAssistantMessage,
+  isStreaming,
+}: {
+  message: ThreadMessage;
+  toolApps: ToolAppIcon[];
+  mcpServerNames: Record<string, string>;
+  isLastAssistantMessage: boolean;
+  isStreaming: boolean;
+}) => {
+  const renderedMessage = useThrottledValue(
+    message,
+    streamingRenderThrottleMs,
+    isStreaming,
+  );
+
+  return (
+    <MessageItemContent
+      message={renderedMessage}
+      toolApps={toolApps}
+      mcpServerNames={mcpServerNames}
+      isLastAssistantMessage={isLastAssistantMessage}
+      isStreaming={isStreaming}
+    />
+  );
+};
+
+const LoadingMessage = () => (
+  <motion.div
+    initial={{
+      opacity: 0,
+      y: 10,
+    }}
+    animate={{
+      opacity: 1,
+      y: 0,
+    }}
+    exit={{
+      opacity: 0,
+      y: -10,
+    }}
+    transition={{
+      duration: 0.2,
+      ease: "easeOut",
+    }}
+    className="flex justify-start"
+  >
+    <div
+      className={`max-w-[75%] ${heightClass} py-3 text-foreground rounded-lg`}
+    >
+      <TextShimmer
+        className="text-sm md:text-base leading-loose [--base-color:theme(colors.blue.600)] [--base-gradient-color:theme(colors.blue.200)] dark:[--base-color:theme(colors.blue.700)] dark:[--base-gradient-color:theme(colors.blue.400)]"
+        duration={1.5}
+        spread={1.5}
+      >
+        Generating response...
+      </TextShimmer>
+    </div>
+  </motion.div>
+);
+
+const MessageItemContent = memo(
   ({
     message,
     toolApps,
@@ -417,7 +530,7 @@ const MessageItem = memo(
     prevProps.isStreaming === nextProps.isStreaming,
 );
 
-MessageItem.displayName = "MessageItem";
+MessageItemContent.displayName = "MessageItemContent";
 
 const AssistantMessage = memo(
   ({
@@ -761,6 +874,50 @@ const UserMessage = memo(
 );
 
 UserMessage.displayName = "UserMessage";
+
+const useThrottledValue = <T,>(
+  value: T,
+  delayMs: number,
+  enabled: boolean,
+) => {
+  const [throttledValue, setThrottledValue] = useState(value);
+  const latestValueRef = useRef(value);
+  const timerRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    latestValueRef.current = value;
+
+    if (!enabled) {
+      if (timerRef.current !== null) {
+        window.clearTimeout(timerRef.current);
+        timerRef.current = null;
+      }
+
+      setThrottledValue(value);
+      return;
+    }
+
+    if (timerRef.current !== null) {
+      return;
+    }
+
+    timerRef.current = window.setTimeout(() => {
+      timerRef.current = null;
+      setThrottledValue(latestValueRef.current);
+    }, delayMs);
+  }, [delayMs, enabled, value]);
+
+  useEffect(
+    () => () => {
+      if (timerRef.current !== null) {
+        window.clearTimeout(timerRef.current);
+      }
+    },
+    [],
+  );
+
+  return enabled ? throttledValue : value;
+};
 
 const ReasoningBlock = ({
   text,

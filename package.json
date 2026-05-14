@@ -33,6 +33,7 @@
     "@radix-ui/react-toggle-group": "^1.1.11",
     "@radix-ui/react-tooltip": "^1.2.8",
     "@tanstack/react-query": "^5.100.7",
+    "@tanstack/react-virtual": "3.13.24",
     "@vercel/functions": "^3.5.0",
     "ai": "^6.0.172",
     "axios": "^1.15.2",
