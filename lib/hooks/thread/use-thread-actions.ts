@@ -11,6 +11,47 @@ import { toast } from "sonner";
 import type { ThreadCursor, ThreadsPage } from "@/lib/services/thread-service";
 
 type ThreadsInfiniteData = InfiniteData<ThreadsPage, ThreadCursor | null>;
+type NativeShareResult = "shared" | "cancelled" | "failed";
+
+const shareViaNativeSheet = async (
+  shareUrl: string
+): Promise<NativeShareResult> => {
+  if (typeof navigator === "undefined" || typeof navigator.share !== "function") {
+    return "failed";
+  }
+  try {
+    if (typeof navigator.canShare === "function" && !navigator.canShare({ url: shareUrl })) {
+      return "failed";
+    }
+    await navigator.share({ title: "Saaki AI", url: shareUrl });
+    return "shared";
+  } catch (error) {
+    return error instanceof DOMException && error.name === "AbortError"
+      ? "cancelled"
+      : "failed";
+  }
+};
+
+const copyToClipboard = async (value: string) => {
+  if (!navigator.clipboard?.writeText) return false;
+  try {
+    await navigator.clipboard.writeText(value);
+    return true;
+  } catch {
+    return false;
+  }
+};
+
+const isInstalledApp = () => {
+  if (typeof window === "undefined") return false;
+  const navigatorWithStandalone = window.navigator as Navigator & {
+    standalone?: boolean;
+  };
+  return (
+    window.matchMedia("(display-mode: standalone)").matches ||
+    navigatorWithStandalone.standalone === true
+  );
+};
 
 const upsertThreadInList = (
   data: ThreadsInfiniteData | undefined,
@@ -204,10 +245,25 @@ export const useThreadActions = () => {
           return { ...oldData, shareId: shareId };
         }
       );
-      // Copy share URL to clipboard
       const shareUrl = `${window.location.origin}/share/${shareId}`;
-      await navigator.clipboard.writeText(shareUrl);
-      toast.success("Share link copied to clipboard");
+      if (!isInstalledApp()) {
+        if (await copyToClipboard(shareUrl)) {
+          toast.success("Share link copied to clipboard");
+          return;
+        }
+        window.prompt("Copy share link", shareUrl);
+        toast.info("Clipboard permission blocked, copied link is shown in prompt");
+        return;
+      }
+      const nativeShare = await shareViaNativeSheet(shareUrl);
+      if (nativeShare === "shared") return toast.success("Share sheet opened");
+      if (nativeShare === "cancelled") return;
+      if (await copyToClipboard(shareUrl)) {
+        toast.success("Share link copied to clipboard");
+        return;
+      }
+      window.prompt("Copy share link", shareUrl);
+      toast.info("Clipboard permission blocked, copied link is shown in prompt");
     },
     onError: (error) => handleError(error, "Failed to share thread"),
   });
