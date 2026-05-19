@@ -358,13 +358,18 @@ export const getToolDisplayName = (
   toolPart?: unknown,
   mcpServerNames: Record<string, string> = {},
 ): ToolDisplay => {
+  const isCalling = isToolCalling(status);
+  const isError = isToolError(status);
+
   if (isMcpToolName(toolName)) {
     const details = getMcpToolDetails(toolName, mcpServerNames);
 
     return {
-      displayName: isToolCalling(status)
+      displayName: isCalling
         ? `Using ${details.serverName}`
-        : `Used ${details.serverName}`,
+        : isError
+          ? `Failed ${details.serverName}`
+          : `Used ${details.serverName}`,
       toolLabel: details.toolName,
       Icon: PlugZap,
       tooltip: [
@@ -393,7 +398,8 @@ export const getToolDisplayName = (
       toolContext,
       appSlugs,
       composioTool,
-      isToolCalling(status),
+      isCalling,
+      isError,
     );
 
     return {
@@ -415,9 +421,17 @@ export const getToolDisplayName = (
       source: "native",
     };
 
-  if (isToolCalling(status)) {
+  if (isCalling) {
     return {
       displayName: tool.loading,
+      Icon: tool.Icon,
+      tooltip: `Tool: ${toolName}`,
+      source: "native",
+    };
+  }
+  if (isError) {
+    return {
+      displayName: `Failed ${tool.done.toLowerCase()}`,
       Icon: tool.Icon,
       tooltip: `Tool: ${toolName}`,
       source: "native",
@@ -436,6 +450,9 @@ const isToolCalling = (status: string) =>
   status === "call" ||
   status === "input-streaming" ||
   status === "input-available";
+
+const isToolError = (status: string) =>
+  status === "output-error" || status === "error" || status === "failed";
 
 const isMcpToolName = (toolName: string) => toolName.toLowerCase().startsWith("mcp_");
 
@@ -749,6 +766,7 @@ const getComposioLabel = (
   appSlugs: string[],
   display: (typeof composioToolDisplay)[number],
   calling: boolean,
+  error: boolean,
 ) => {
   const displaySlugs = getDisplayAppSlugs(appSlugs);
   const appLabel =
@@ -759,7 +777,8 @@ const getComposioLabel = (
         : formatAppSlug(display.appSlug);
 
   if (toolName === COMPOSIO_META_TOOLS.SEARCH_TOOLS) {
-    return `${calling ? "Finding" : "Found"} ${
+    const verb = calling ? "Finding" : error ? "Failed to find" : "Found";
+    return `${verb} ${
       displaySlugs.length === 0 || displaySlugs.includes("composio")
         ? "app tools"
         : `${appLabel} tools`
@@ -767,7 +786,8 @@ const getComposioLabel = (
   }
 
   if (toolName === COMPOSIO_META_TOOLS.GET_TOOL_SCHEMAS) {
-    return `${calling ? "Loading" : "Loaded"} ${
+    const verb = calling ? "Loading" : error ? "Failed to load" : "Loaded";
+    return `${verb} ${
       displaySlugs.length === 0 || displaySlugs.includes("composio")
         ? "tool details"
         : `${appLabel} tool details`
@@ -776,7 +796,7 @@ const getComposioLabel = (
 
   if (toolName === COMPOSIO_META_TOOLS.MANAGE_CONNECTIONS) {
     const action = getConnectionAction(context.raw);
-    return `${calling ? action.loading : action.done} ${appLabel}`;
+    return `${calling ? action.loading : error ? `Failed to ${action.loading.toLowerCase()}` : action.done} ${appLabel}`;
   }
 
   if (toolName === COMPOSIO_META_TOOLS.MULTI_EXECUTE_TOOL) {
@@ -784,7 +804,7 @@ const getComposioLabel = (
       context.toolSlugContext,
       context.searchText,
     );
-    return `${calling ? (action?.loading ?? "Using") : (action?.done ?? "Used")} ${appLabel}`;
+    return `${calling ? (action?.loading ?? "Using") : error ? `Failed to ${(action?.loading ?? "use").toLowerCase()}` : (action?.done ?? "Used")} ${appLabel}`;
   }
 
   if (toolName === COMPOSIO_META_TOOLS.REMOTE_BASH_TOOL) {
@@ -792,9 +812,13 @@ const getComposioLabel = (
     return action
       ? calling
         ? action.loading
+        : error
+          ? `Failed to ${action.loading.toLowerCase()}`
         : action.done
       : calling
         ? "Running Sandbox command"
+        : error
+          ? "Failed to run Sandbox command"
         : "Ran Sandbox command";
   }
 
@@ -803,9 +827,13 @@ const getComposioLabel = (
     return action
       ? calling
         ? action.loading
+        : error
+          ? `Failed to ${action.loading.toLowerCase()}`
         : action.done
       : calling
         ? "Processing Sandbox data"
+        : error
+          ? "Failed to process Sandbox data"
         : "Processed Sandbox data";
   }
 
@@ -815,10 +843,14 @@ const getComposioLabel = (
   );
 
   if (action) {
-    return `${calling ? action.loading : action.done} ${appLabel}`;
+    return `${calling ? action.loading : error ? `Failed to ${action.loading.toLowerCase()}` : action.done} ${appLabel}`;
   }
 
-  return calling ? display.fallbackLoading : display.fallbackDone;
+  return calling
+    ? display.fallbackLoading
+    : error
+      ? `Failed to ${display.fallbackLoading.toLowerCase()}`
+      : display.fallbackDone;
 };
 
 const getConnectionAction = (context: string) => {

@@ -1,3 +1,4 @@
+import type { ToolSet } from "ai";
 import { Composio } from "@composio/core";
 import { VercelProvider } from "@composio/vercel";
 
@@ -121,6 +122,69 @@ export const createComposioSession = async (
       maxAccountsPerToolkit: 3,
     },
   });
+};
+
+export const getWrappedComposioTools = (tools: ToolSet): ToolSet =>
+  Object.fromEntries(
+    Object.entries(tools).map(([toolName, tool]) => [
+      toolName,
+      wrapComposioTool(toolName, tool),
+    ])
+  );
+
+const wrapComposioTool = (toolName: string, tool: ToolSet[string]) => {
+  if (
+    !tool ||
+    typeof tool !== "object" ||
+    !("execute" in tool) ||
+    typeof tool.execute !== "function"
+  ) {
+    return tool;
+  }
+  const executableTool = tool as ToolSet[string] & {
+    execute: (...args: unknown[]) => unknown;
+  };
+
+  return {
+    ...executableTool,
+    execute: async (...args: unknown[]) => {
+      try {
+        return await executableTool.execute(...args);
+      } catch (error) {
+        const message = getComposioErrorMessage(error);
+        console.error(`Composio tool ${toolName} failed:`, message, error);
+        return {
+          ok: false,
+          error: "tool_execution_failed",
+          tool: toolName,
+          message,
+          fallback:
+            "Tool execution failed. Continue with best-effort reasoning and ask for clarification only if required.",
+        };
+      }
+    },
+  };
+};
+
+const getComposioErrorMessage = (error: unknown) => {
+  if (error instanceof Error && error.message.trim()) {
+    return error.message.trim();
+  }
+
+  if (typeof error === "string" && error.trim()) {
+    return error.trim();
+  }
+
+  try {
+    const serialized = JSON.stringify(error);
+    if (serialized && serialized !== "{}") {
+      return serialized;
+    }
+  } catch {
+    /* ignore serialization issues */
+  }
+
+  return "Unknown tool error";
 };
 
 export const isSupportedComposioToolkit = (

@@ -673,6 +673,8 @@ const ToolPart = memo(
     const toolName = part.toolName ?? part.type.replace(/^tool-/, "");
     const isCalling =
       toolStatus === "input-streaming" || toolStatus === "input-available";
+    const isError = isToolErrorState(toolStatus);
+    const toolError = getToolErrorText(part);
     const { displayName, Icon, tooltip, appSlugs, source, toolLabel } = getToolDisplayName(
       toolName,
       toolStatus,
@@ -689,6 +691,8 @@ const ToolPart = memo(
             className={`inline-flex items-center gap-2 mr-2 text-sm rounded-full my-2 transition-all duration-300 ease-in-out ${
               isCalling
                 ? "px-0 py-0"
+                : isError
+                  ? "px-3 py-1.5 bg-red-50 dark:bg-red-950/50 text-red-700 dark:text-red-300 border border-red-200 dark:border-red-800"
                 : "px-3 py-1.5 bg-blue-50 dark:bg-blue-950/50 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800"
             }`}
           >
@@ -735,7 +739,7 @@ const ToolPart = memo(
           align="start"
           className="max-w-80 whitespace-pre-wrap text-left leading-relaxed"
         >
-          {tooltip}
+          {toolError ? `${tooltip}\nError: ${toolError}` : tooltip}
         </TooltipContent>
       </Tooltip>
     );
@@ -786,6 +790,47 @@ const getToolLogos = (appSlugs: string[] = [], toolApps: ToolAppIcon[]) =>
   appSlugs
     .map((slug) => toolApps.find((app) => app.slug === slug)?.logo)
     .filter((logo): logo is string => !!logo);
+
+const isToolErrorState = (status?: string) =>
+  status === "output-error" || status === "error" || status === "failed";
+
+const getToolErrorText = (part: Record<string, unknown>) => {
+  const directError = asReadableText(part.error) ?? asReadableText(part.errorText);
+  if (directError) {
+    return directError;
+  }
+
+  if (part.output && typeof part.output === "object") {
+    const output = part.output as Record<string, unknown>;
+    return (
+      asReadableText(output.message) ??
+      asReadableText(output.error) ??
+      asReadableText(output.details)
+    );
+  }
+
+  if (part.result && typeof part.result === "object") {
+    const result = part.result as Record<string, unknown>;
+    return asReadableText(result.message) ?? asReadableText(result.error);
+  }
+
+  return undefined;
+};
+
+const asReadableText = (value: unknown) => {
+  if (typeof value === "string" && value.trim()) {
+    return value.trim();
+  }
+
+  if (value && typeof value === "object" && "message" in value) {
+    const message = (value as { message?: unknown }).message;
+    if (typeof message === "string" && message.trim()) {
+      return message.trim();
+    }
+  }
+
+  return undefined;
+};
 
 const MarkdownPart = memo(({ text }: { text: string }) => (
   <div className="min-w-0 w-full overflow-x-auto">

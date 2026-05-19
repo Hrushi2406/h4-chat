@@ -6,7 +6,11 @@ import {
 } from "ai";
 import { Geo, geolocation } from "@vercel/functions";
 import { getModelById } from "@/lib/available-models";
-import { createComposioSession, isComposioConfigured } from "@/lib/composio";
+import {
+  createComposioSession,
+  getWrappedComposioTools,
+  isComposioConfigured,
+} from "@/lib/composio";
 import { verifyFirebaseIdToken } from "@/lib/firebase-auth-server";
 import {
   closeMcpClients,
@@ -163,6 +167,7 @@ const getSystemPrompt = (
     ${name && `User's name is ${name}`}
     ${occupation && `User's occupation is ${occupation}`}
     ${userPreferences && `User's preferences are ${userPreferences}`}
+    If a tool call fails, do not retry the same failing tool repeatedly. Briefly explain the failure, continue with a best-effort direct answer, and only ask for user input when necessary.
     ${requestHints}
     `;
 };
@@ -177,7 +182,7 @@ async function getComposioTools(
 
   try {
     const session = await createComposioSession(userId, { callbackUrl });
-    return session.tools();
+    return getWrappedComposioTools(await session.tools());
   } catch (error) {
     console.error("Failed to load Composio tools:", error);
     return undefined;
