@@ -75,11 +75,11 @@ export default function SharedChatPage() {
           <div className="flex min-w-0 items-center gap-2">
             <img
               src="/saaki-chat-transparent.png"
-              alt="Saaki AI"
+              alt="Sakhi AI"
               className="h-7 w-7 shrink-0 object-contain"
             />
             <div className="min-w-0">
-              <h1 className="truncate text-lg font-semibold">Saaki AI</h1>
+              <h1 className="truncate text-lg font-semibold">Sakhi AI</h1>
               <p className="truncate text-xs text-muted-foreground md:hidden">
                 Shared chat
               </p>
@@ -130,7 +130,7 @@ export default function SharedChatPage() {
         <main className="flex min-h-0 flex-1 flex-col items-center justify-center gap-4 px-4">
           <img
             src="/saaki-chat-transparent.png"
-            alt="Saaki AI"
+            alt="Sakhi AI"
             className="h-12 w-12 object-contain"
           />
           <TextShimmer className="text-sm font-medium leading-loose [--base-color:theme(colors.blue.400)] [--base-gradient-color:theme(colors.blue.600)] dark:[--base-color:theme(colors.blue.700)] dark:[--base-gradient-color:theme(colors.blue.400)]">

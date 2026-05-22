@@ -33,7 +33,7 @@ const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const { uid } = useAuth();
   const queryClient = useQueryClient();
   const pathname = usePathname();
-  const isPublicSharePage = pathname.startsWith("/share/");
+  const isPublicPage = pathname === "/" || pathname.startsWith("/share/");
 
   useEffect(() => {
     if (!uid) return;
@@ -42,16 +42,16 @@ const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     void queryClient.prefetchQuery(connectionsQueryOptions(uid));
   }, [queryClient, uid]);
 
-  if (!uid && !isPublicSharePage)
+  if (!uid && !isPublicPage)
     return (
       <div className="flex flex-col items-center justify-center min-h-screen gap-4">
         <img
           src="/saaki-chat-transparent.png"
-          alt="Saaki AI"
+          alt="Sakhi AI"
           className="h-16 w-16 object-contain animate-bounce"
         />
         <TextShimmer className="text-2xl font-semibold leading-loose  [--base-color:theme(colors.blue.400)] [--base-gradient-color:theme(colors.blue.600)] dark:[--base-color:theme(colors.blue.700)] dark:[--base-gradient-color:theme(colors.blue.400)]">
-          Saaki Chat
+          Sakhi Chat
         </TextShimmer>
       </div>
     );

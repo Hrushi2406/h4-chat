@@ -23,7 +23,7 @@ export default function Navbar() {
       <SidebarTrigger className="-ml-1" />
 
       <div className="flex items-center justify-between flex-1">
-        <h1 className="text-lg font-semibold">Saaki AI</h1>
+        <h1 className="text-lg font-semibold">Sakhi AI</h1>
         <div className="flex items-center gap-2">
           <PwaInstallButton />
           <ThemeToggle />

@@ -148,7 +148,7 @@ const ThreadSidebar = () => {
           <div className="flex items-center gap-2">
             <img
               src="/saaki-chat-transparent.png"
-              alt="Saaki AI"
+              alt="Sakhi AI"
               className="h-7 w-7 object-contain"
             />
             <h2 className="font-semibold">Threads</h2>

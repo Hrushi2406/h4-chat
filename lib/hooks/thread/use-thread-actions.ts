@@ -23,7 +23,7 @@ const shareViaNativeSheet = async (
     if (typeof navigator.canShare === "function" && !navigator.canShare({ url: shareUrl })) {
       return "failed";
     }
-    await navigator.share({ title: "Saaki AI", url: shareUrl });
+    await navigator.share({ title: "Sakhi AI", url: shareUrl });
     return "shared";
   } catch (error) {
     return error instanceof DOMException && error.name === "AbortError"

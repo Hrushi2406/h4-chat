@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Inter } from "next/font/google";
+import { Inter, STIX_Two_Text } from "next/font/google";
 import "./globals.css";
 import { ClientProvider } from "./client-provider";
 
@@ -8,14 +8,20 @@ const inter = Inter({
   variable: "--font-inter",
 });
 
+const stix = STIX_Two_Text({
+  subsets: ["latin"],
+  variable: "--font-stix",
+  style: "italic",
+});
+
 export const metadata: Metadata = {
-  applicationName: "Saaki AI",
-  title: "Saaki AI",
+  applicationName: "Sakhi AI",
+  title: "Sakhi AI",
   description: "Fast & personalized AI chat assistant for your conversations",
   manifest: "/manifest.webmanifest",
   appleWebApp: {
     capable: true,
-    title: "Saaki AI",
+    title: "Sakhi AI",
     statusBarStyle: "black-translucent",
   },
   icons: {
@@ -31,7 +37,9 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" suppressHydrationWarning>
-      <body className={`${inter.variable} font-sans antialiased`}>
+      <body
+        className={`${inter.variable} ${stix.variable} font-sans antialiased`}
+      >
         <ClientProvider>{children}</ClientProvider>
       </body>
     </html>

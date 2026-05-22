@@ -2,8 +2,8 @@ import type { MetadataRoute } from "next";
 
 export default function manifest(): MetadataRoute.Manifest {
   return {
-    name: "Saaki AI",
-    short_name: "Saaki AI",
+    name: "Sakhi AI",
+    short_name: "Sakhi AI",
     description: "Fast & personalized AI chat assistant for your conversations",
     start_url: "/",
     scope: "/",

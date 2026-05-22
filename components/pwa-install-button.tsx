@@ -102,14 +102,14 @@ export function PwaInstallButton() {
       }
 
       if (installFallback === "ios") {
-        toast.info("Add Saaki AI to your Home Screen", {
+        toast.info("Add Sakhi AI to your Home Screen", {
           description:
             "Use the browser share menu, then choose Add to Home Screen.",
         });
       }
 
       if (installFallback === "mobile") {
-        toast.info("Install Saaki AI from your browser menu", {
+        toast.info("Install Sakhi AI from your browser menu", {
           description:
             "Open the browser menu and choose Install app or Add to Home screen.",
         });

@@ -8,6 +8,7 @@
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --font-sans: var(--font-inter);
+  --font-serif: var(--font-stix);
   --font-mono: ui-monospace, SFMono-Regular, "Roboto Mono", "Cascadia Code",
     "Ubuntu Mono", Menlo, Monaco, Consolas, monospace;
   --color-sidebar-ring: var(--sidebar-ring);
@@ -137,5 +138,140 @@
 
   .pb-mobile-safe {
     padding-bottom: max(0.5rem, env(safe-area-inset-bottom));
+  }
+
+  @keyframes pill-border-flow {
+    0% {
+      background-position: 0% 50%;
+    }
+    100% {
+      background-position: 300% 50%;
+    }
+  }
+
+  .pill-border-animate {
+    background-image: linear-gradient(
+      90deg,
+      rgb(59 130 246),
+      rgb(96 165 250),
+      rgb(37 99 235),
+      rgb(59 130 246)
+    );
+    background-size: 300% 100%;
+    animation: pill-border-flow 2.5s linear infinite;
+  }
+
+  @keyframes hero-glow-breathe {
+    0%,
+    100% {
+      opacity: 0.75;
+      transform: scale(1);
+    }
+    50% {
+      opacity: 1;
+      transform: scale(1.04);
+    }
+  }
+
+  @keyframes hero-bar-wave {
+    0%,
+    100% {
+      transform: scaleY(1);
+    }
+    50% {
+      transform: scaleY(0.72);
+    }
+  }
+
+  @keyframes scroll-hint-bounce {
+    0%,
+    100% {
+      transform: translateY(0);
+      opacity: 0.35;
+    }
+    50% {
+      transform: translateY(6px);
+      opacity: 0.7;
+    }
+  }
+
+  .hero-glow-animate {
+    animation: hero-glow-breathe 8s ease-in-out infinite;
+  }
+
+  .hero-bar-animate {
+    transform-origin: bottom;
+    animation: hero-bar-wave 4.5s ease-in-out infinite;
+  }
+
+  .scroll-hint-animate {
+    animation: scroll-hint-bounce 2.4s ease-in-out infinite;
+  }
+
+  @property --pill-glow-x {
+    syntax: "<percentage>";
+    inherits: false;
+    initial-value: 92%;
+  }
+
+  @property --pill-glow-y {
+    syntax: "<percentage>";
+    inherits: false;
+    initial-value: 82%;
+  }
+
+  @keyframes pill-glow-travel {
+    0% {
+      --pill-glow-x: 92%;
+      --pill-glow-y: 82%;
+    }
+    25% {
+      --pill-glow-x: 8%;
+      --pill-glow-y: 82%;
+    }
+    50% {
+      --pill-glow-x: 8%;
+      --pill-glow-y: 18%;
+    }
+    75% {
+      --pill-glow-x: 92%;
+      --pill-glow-y: 18%;
+    }
+    100% {
+      --pill-glow-x: 92%;
+      --pill-glow-y: 82%;
+    }
+  }
+
+  .pill-glow-travel-fill {
+    background: radial-gradient(
+      ellipse 90% 80% at var(--pill-glow-x) var(--pill-glow-y),
+      rgba(59, 130, 246, 0.34) 0%,
+      transparent 62%
+    );
+    animation: pill-glow-travel 3.5s linear infinite;
+  }
+
+  .pill-glow-travel-border {
+    background: radial-gradient(
+      ellipse 100% 95% at var(--pill-glow-x) var(--pill-glow-y),
+      rgba(96, 165, 250, 0.65) 0%,
+      rgba(59, 130, 246, 0.22) 38%,
+      transparent 58%
+    );
+    animation: pill-glow-travel 3.5s linear infinite;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .hero-glow-animate,
+    .hero-bar-animate,
+    .scroll-hint-animate,
+    .pill-border-animate,
+    .pill-glow-travel-fill,
+    .pill-glow-travel-border {
+      animation: none;
+      --pill-glow-x: 92%;
+      --pill-glow-y: 82%;
+    }
   }
 }

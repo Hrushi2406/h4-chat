@@ -47,7 +47,7 @@ const AuthContainer = () => {
     <Card className="w-full max-w-md">
       <CardHeader>
         <CardTitle className="text-xl font-semibold">
-          Welcome to Saaki Chat
+          Welcome to Sakhi Chat
         </CardTitle>
         <CardDescription>
           Sign In to access settings (we'll increase your limits)

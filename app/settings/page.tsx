@@ -306,7 +306,7 @@ const CustomizationSettings = () => {
           </Button>
         </div>
         <div className="space-y-2">
-          <Label htmlFor="display-name">What should Saaki Chat call you?</Label>
+          <Label htmlFor="display-name">What should Sakhi Chat call you?</Label>
           <div className="flex flex-col gap-1">
             <Input
               id="display-name"

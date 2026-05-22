@@ -1,4 +1,4 @@
-const APP_NAME = "Saaki AI";
+const APP_NAME = "Sakhi AI";
 const DEFAULT_SHARED_TITLE = `Shared chat | ${APP_NAME}`;
 const DEFAULT_SHARED_DESCRIPTION = `Someone shared a chat with you on ${APP_NAME}.`;
 
