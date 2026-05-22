@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Inter, STIX_Two_Text } from "next/font/google";
+import { Analytics } from "@vercel/analytics/next";
 import "./globals.css";
 import { ClientProvider } from "./client-provider";
 
@@ -41,6 +42,7 @@ export default function RootLayout({
         className={`${inter.variable} ${stix.variable} font-sans antialiased`}
       >
         <ClientProvider>{children}</ClientProvider>
+        <Analytics />
       </body>
     </html>
   );
