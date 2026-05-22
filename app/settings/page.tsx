@@ -105,7 +105,7 @@ function SettingsPageInner() {
         <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-4">
           <div className="flex min-w-0 justify-start sm:flex-1 sm:basis-0">
             <Button variant="outline" className={settingsBtnClass} asChild>
-              <Link href="/">
+              <Link href="/chat">
                 <ChevronLeft className="w-4 h-4 " />
                 Back to chat
               </Link>

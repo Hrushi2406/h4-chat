@@ -15,7 +15,7 @@ export default function Navbar() {
   const router = useRouter();
 
   const handleNewThread = () => {
-    router.push("/");
+    router.push("/chat");
   };
 
   return (

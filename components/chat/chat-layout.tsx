@@ -41,7 +41,7 @@ import {
   Share,
 } from "lucide-react";
 import Link from "next/link";
-import { useRouter, useParams, usePathname } from "next/navigation";
+import { useRouter, usePathname } from "next/navigation";
 import { useThreads } from "@/lib/hooks/thread/use-threads";
 import { useThreadActions } from "@/lib/hooks/thread/use-thread-actions";
 import { useState, useMemo } from "react";
@@ -59,8 +59,6 @@ export default function ChatLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const pathname = usePathname();
-
   return (
     <SidebarProvider className="h-mobile-viewport min-h-0 overflow-hidden">
       <div className="flex h-full min-h-0 w-full overflow-hidden">
@@ -84,7 +82,6 @@ const ThreadSidebar = () => {
     isFetchingNextPage,
   } = useThreads();
   const router = useRouter();
-  const params = useParams();
   const pathname = usePathname();
   const currentThreadId = pathname.split("/").pop() as string;
   const { isMobile, setOpenMobile } = useSidebar();
@@ -106,7 +103,7 @@ const ThreadSidebar = () => {
   };
 
   const handleNewThreadClick = () => {
-    router.push("/");
+    router.push("/chat");
     if (isMobile) {
       setOpenMobile(false);
     }
@@ -125,7 +122,7 @@ const ThreadSidebar = () => {
 
       // Navigate to chat home if currently viewing deleted thread
       if (currentThreadId === threadToDelete.id) {
-        router.push("/");
+        router.push("/chat");
       }
 
       setDeleteDialogOpen(false);

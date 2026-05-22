@@ -65,7 +65,7 @@ export default function SharedChatPage() {
   }, []);
 
   const handleNewThread = () => {
-    router.push("/");
+    router.push("/chat");
   };
 
   return (

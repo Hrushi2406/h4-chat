@@ -10,10 +10,8 @@ export default function ChatPage() {
   const [threadId, setThreadId] = useState<string>(v4());
   const [key, setKey] = useState<string>(threadId);
 
-  console.log("key: ", key);
-
   useEffect(() => {
-    if (pathname === "/") {
+    if (pathname === "/chat") {
       const newThreadId = v4();
       setThreadId(newThreadId);
       setKey(newThreadId);
