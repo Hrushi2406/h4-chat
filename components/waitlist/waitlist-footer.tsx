@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { motion, useReducedMotion } from "framer-motion";
 
 const ease = [0.22, 1, 0.36, 1] as const;
@@ -54,16 +55,21 @@ export const WaitlistFooter = () => {
       <div className="pointer-events-none absolute inset-x-0 top-0 h-32 bg-gradient-to-b from-[#0a0a0a] to-transparent" />
 
       <div className="relative mx-auto flex w-full flex-col items-center justify-end px-3 pb-6 pt-[clamp(7rem,28vw,15rem)] sm:px-4 sm:pb-8">
-        <motion.p
+        <motion.div
           initial={shouldReduceMotion ? false : { opacity: 0, y: 24 }}
           whileInView={{ opacity: 1, y: 0 }}
           viewport={{ once: true, margin: "-40px" }}
           transition={{ duration: 0.8, ease }}
-          className="relative z-10 w-full select-none whitespace-nowrap text-center font-serif text-[clamp(4.5rem,22.5vw,15rem)] font-light leading-[0.9] tracking-[-0.05em] text-white"
-          aria-label="Sakhi"
+          className="relative z-10 w-full"
         >
-          Sakhi
-        </motion.p>
+          <Link
+            href="/chat"
+            className="block w-full cursor-pointer whitespace-nowrap text-center font-serif text-[clamp(4.5rem,22.5vw,15rem)] font-light leading-[0.9] tracking-[-0.05em] text-white transition-opacity hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/40 focus-visible:ring-offset-2 focus-visible:ring-offset-[#0a0a0a]"
+            aria-label="Start a new chat"
+          >
+            Sakhi
+          </Link>
+        </motion.div>
         <motion.p
           initial={shouldReduceMotion ? false : { opacity: 0 }}
           whileInView={{ opacity: 1 }}
