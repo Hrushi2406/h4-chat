@@ -14,6 +14,7 @@ import {
   Package,
   Play,
   PlugZap,
+  Receipt,
   Sun,
 } from "lucide-react";
 import { COMPOSIO_META_TOOLS } from "@/lib/types/composio-tool-slugs";
@@ -144,6 +145,13 @@ const composioToolDisplay: Array<{
     fallbackLoading: "Working with Stripe",
     fallbackDone: "Used Stripe",
     Icon: PlugZap,
+  },
+  {
+    match: (context) => includesAny(context, ["SPLITWISE"]),
+    appSlug: "splitwise",
+    fallbackLoading: "Working with Splitwise",
+    fallbackDone: "Used Splitwise",
+    Icon: Receipt,
   },
   {
     match: (context) => includesAny(context, ["GOOGLESLIDES", "GOOGLE SLIDES"]),
@@ -1076,6 +1084,7 @@ const appLabels: Record<string, string> = {
   sandbox: "Sandbox",
   salesforce: "Salesforce",
   shopify: "Shopify",
+  splitwise: "Splitwise",
   strava: "Strava",
   stripe: "Stripe",
   todoist: "Todoist",

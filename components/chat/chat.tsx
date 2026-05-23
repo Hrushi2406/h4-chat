@@ -359,6 +359,7 @@ const CONNECTED_APP_PROMPTS: Record<string, string> = {
   salesforce: "Summarize Salesforce records and next steps",
   confluence: "Find Confluence pages and extract action items",
   stripe: "Review Stripe customers and payments",
+  splitwise: "Review Splitwise expenses and balances",
   googleslides: "Outline a Google Slides deck",
   googletasks: "Organize my Google Tasks",
   googlemeet: "Find Google Meet notes and follow-ups",
