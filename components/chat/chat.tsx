@@ -383,6 +383,7 @@ const CONNECTED_APP_PROMPTS: Record<string, string> = {
   facebook: "Review Facebook pages and activity",
   linkedin: "Draft and review LinkedIn content",
   ahrefs: "Analyze SEO data in Ahrefs",
+  firecrawl: "Scrape a website and extract clean content",
   gemini: "Use Gemini for a generation task",
   composio_search: "Search available Composio tools",
   browser_tool: "Browse a website and extract what matters",

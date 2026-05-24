@@ -7,12 +7,14 @@ import {
   CalendarDays,
   ChevronLeft,
   FileText,
+  Flame,
   Globe,
   HardDrive,
   Image,
   Inbox,
   ListTodo,
   Loader2,
+  LogOut,
   MessageCircle,
   Plus,
   PlugZap,
@@ -42,6 +44,7 @@ import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { useAuth } from "@/lib/hooks/auth/use-auth";
+import { useAuthActions } from "@/lib/hooks/auth/use-auth-actions";
 import { auth } from "@/lib/clients/firebase";
 import { getApiErrorMessage, readJsonResponse } from "@/lib/api-response";
 import {
@@ -190,10 +193,28 @@ export default function SettingsPage() {
 
 const AccountSettings = () => {
   const { data: user } = useUser();
+  const { signOutUser } = useAuthActions();
 
   return (
     <div className="space-y-4">
-      <h2 className="text-xl font-semibold">Account Settings</h2>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <h2 className="text-xl font-semibold">Account Settings</h2>
+        <Button
+          type="button"
+          variant="secondary"
+          size="sm"
+          className={cn(settingsBtnClass, "h-7 px-2.5 text-xs")}
+          onClick={() => signOutUser.mutate()}
+          disabled={signOutUser.isPending}
+        >
+          {signOutUser.isPending ? (
+            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+          ) : (
+            <LogOut className="h-3.5 w-3.5" />
+          )}
+          Log out
+        </Button>
+      </div>
       <div className="grid gap-4">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
           <div className="h-12 w-12 rounded-full overflow-hidden">
@@ -376,6 +397,7 @@ const toolkitIcons: Record<string, React.ElementType> = {
   splitwise: Receipt,
   canva: Image,
   whatsapp: MessageCircle,
+  firecrawl: Flame,
   browser_tool: Globe,
 };
 
