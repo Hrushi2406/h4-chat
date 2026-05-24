@@ -9,6 +9,10 @@ import {
 import { blurBackground } from "@/lib/utils";
 import { getBrandLogo } from "@/lib/brand-logos";
 
+const selectableModels = availableModels.filter(
+  (model) => model.provider === "deepseek"
+);
+
 interface ModelSelectorProps {
   selectedModel: AIModel;
   onModelChange: (model: AIModel) => void;
@@ -22,7 +26,7 @@ export const ModelSelector = ({
     <Select
       value={selectedModel.id}
       onValueChange={(value) => {
-        const model = availableModels.find((m) => m.id === value);
+        const model = selectableModels.find((m) => m.id === value);
         if (model) onModelChange(model);
       }}
     >
@@ -41,7 +45,7 @@ export const ModelSelector = ({
         </SelectValue>
       </SelectTrigger>
       <SelectContent className={blurBackground}>
-        {availableModels.map((model) => {
+        {selectableModels.map((model) => {
           const brandLogo = getBrandLogo(model.provider);
           const LogoComponent = brandLogo?.component;
           return (

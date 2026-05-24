@@ -388,6 +388,29 @@ const CONNECTED_APP_PROMPTS: Record<string, string> = {
   browser_tool: "Browse a website and extract what matters",
 };
 
+const INSTAGRAM_HOME_PROMPTS: PromptSuggestion[] = [
+  {
+    label: "Review recent Instagram activity",
+    appName: "Instagram",
+    logo: "https://logos.composio.dev/api/instagram",
+  },
+  {
+    label: "Audit my Instagram profile",
+    appName: "Instagram",
+    logo: "https://logos.composio.dev/api/instagram",
+  },
+  {
+    label: "Generate carousel ideas for my niche",
+    appName: "Instagram",
+    logo: "https://logos.composio.dev/api/instagram",
+  },
+  {
+    label: "Turn this idea into a Reel script",
+    appName: "Instagram",
+    logo: "https://logos.composio.dev/api/instagram",
+  },
+];
+
 const DEFAULT_PROMPTS = [
   "Turn my rough idea into a plan",
   "Help me write a sharper landing page",
@@ -437,6 +460,8 @@ const HomeSuggestions = ({
 
   const suggestions = useMemo<PromptSuggestion[]>(() => {
     const appPrompts = connectedApps.flatMap<PromptSuggestion>((app) => {
+      if (app.slug === "instagram") return [];
+
       const label = CONNECTED_APP_PROMPTS[app.slug];
       if (!label) return [];
 
@@ -450,7 +475,10 @@ const HomeSuggestions = ({
     });
 
     const genericPrompts = DEFAULT_PROMPTS.map((label) => ({ label }));
-    return [...appPrompts, ...genericPrompts].slice(0, 8);
+    return [...INSTAGRAM_HOME_PROMPTS, ...appPrompts, ...genericPrompts].slice(
+      0,
+      8
+    );
   }, [connectedApps]);
 
   const pillContainerVariants: Variants = {
