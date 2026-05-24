@@ -610,7 +610,7 @@ const MessageItemContent = memo(
           </div>
         </div>
         {message.role === "assistant" && (
-          <MessageMetadataRow message={message} />
+          <MessageMetadataRow message={message} showCopy={!isStreaming} />
         )}
       </div>
     );
@@ -1289,10 +1289,16 @@ const getRenderableMessageLength = (message: ThreadMessage) => {
   return contentLength + reasoningLength;
 };
 
-const MessageMetadataRow = ({ message }: { message: ThreadMessage }) => (
+const MessageMetadataRow = ({
+  message,
+  showCopy,
+}: {
+  message: ThreadMessage;
+  showCopy: boolean;
+}) => (
   <div className="flex items-center justify-start gap-1 text-muted-foreground/70">
     <MessageTokenUsage message={message} />
-    <MessageCopyButton message={message} />
+    {showCopy && <MessageCopyButton message={message} />}
   </div>
 );
 
