@@ -6,6 +6,7 @@ import remarkGfm from "remark-gfm";
 import remarkToc from "remark-toc";
 import {
   memo,
+  useCallback,
   useRef,
   useEffect,
   useLayoutEffect,
@@ -27,18 +28,22 @@ import {
 import {
   ArrowDown,
   ArrowUp,
+  Check,
   FileText,
   ChevronDown,
   ChevronRight,
+  Copy,
   ListTree,
   Zap,
 } from "lucide-react";
 import CodeBlock from "./code-block";
+import { Button } from "@/components/ui/button";
 import {
   Tooltip,
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { toast } from "sonner";
 
 type ToolAppIcon = {
   slug: string;
@@ -546,31 +551,42 @@ const MessageItemContent = memo(
       () => getMessageAttachments(message),
       [message],
     );
+    const shouldDockUserCopyButton =
+      message.role === "user" && shouldDockCopyButton(content, attachments.length);
 
     return (
       <div
         className={clsx(
-          "min-w-0",
+          "group/message min-w-0",
           !isLastAssistantMessage &&
             "[content-visibility:auto] [contain-intrinsic-size:0_160px]",
         )}
       >
         <div
-          className={`flex min-w-0 w-full ${
-            message.role === "user" ? "justify-end" : "justify-start"
-          }`}
+          className={clsx(
+            "flex min-w-0 w-full",
+            message.role === "user"
+              ? "items-end justify-end gap-1"
+              : "justify-start",
+          )}
         >
+          {message.role === "user" && !shouldDockUserCopyButton && (
+            <div className="opacity-100 md:opacity-0 md:transition-opacity md:group-hover/message:opacity-100 md:group-focus-within/message:opacity-100">
+              <MessageCopyButton message={message} />
+            </div>
+          )}
           <div
             className={clsx(
               "min-w-0 leading-7",
               message.role === "user"
                 ? "max-w-[min(100%,92%)] md:max-w-[75%]"
                 : "w-full max-w-full md:w-auto md:max-w-[75%]",
+              shouldDockUserCopyButton && "relative pb-2 pr-8",
               message.role === "user" &&
                 attachments.length === 0 &&
                 userMessageStyle(content),
               message.role === "assistant" && [
-                "text-foreground rounded-lg py-3",
+                "text-foreground rounded-lg pt-3 pb-1",
                 isLastAssistantMessage && heightClass,
               ],
             )}
@@ -585,9 +601,17 @@ const MessageItemContent = memo(
             ) : (
               <UserMessage content={content} attachments={attachments} />
             )}
+            {shouldDockUserCopyButton && (
+              <MessageCopyButton
+                message={message}
+                className="absolute bottom-1 right-1 h-6 w-6 text-current/65 hover:bg-black/5 hover:text-current dark:hover:bg-white/10"
+              />
+            )}
           </div>
         </div>
-        <MessageTokenUsage message={message} />
+        {message.role === "assistant" && (
+          <MessageMetadataRow message={message} />
+        )}
       </div>
     );
   },
@@ -998,6 +1022,138 @@ const UserMessage = memo(
 
 UserMessage.displayName = "UserMessage";
 
+const MessageCopyButton = ({
+  message,
+  className,
+}: {
+  message: ThreadMessage;
+  className?: string;
+}) => {
+  const [hasCopied, setHasCopied] = useState(false);
+  const copyTimerRef = useRef<number | null>(null);
+  const copyText = useMemo(() => getCopyableMessageText(message), [message]);
+
+  useEffect(
+    () => () => {
+      if (copyTimerRef.current !== null) {
+        window.clearTimeout(copyTimerRef.current);
+      }
+    },
+    [],
+  );
+
+  const handleCopy = useCallback(async () => {
+    if (!copyText) {
+      toast.error("Nothing to copy");
+      return;
+    }
+
+    const copied = await copyTextToClipboard(copyText);
+
+    if (!copied) {
+      toast.error("Copy failed. Please copy manually.");
+      return;
+    }
+
+    setHasCopied(true);
+    toast.success("Message copied");
+
+    if (copyTimerRef.current !== null) {
+      window.clearTimeout(copyTimerRef.current);
+    }
+
+    copyTimerRef.current = window.setTimeout(() => {
+      setHasCopied(false);
+      copyTimerRef.current = null;
+    }, 1600);
+  }, [copyText]);
+
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          className={clsx(
+            "h-7 w-7 text-muted-foreground hover:text-foreground",
+            className,
+          )}
+          onClick={handleCopy}
+          disabled={!copyText}
+          aria-label={hasCopied ? "Message copied" : "Copy message"}
+        >
+          {hasCopied ? (
+            <Check className="h-3.5 w-3.5" aria-hidden="true" />
+          ) : (
+            <Copy className="h-3.5 w-3.5" aria-hidden="true" />
+          )}
+        </Button>
+      </TooltipTrigger>
+      <TooltipContent side="top">
+        {hasCopied ? "Copied" : "Copy message"}
+      </TooltipContent>
+    </Tooltip>
+  );
+};
+
+const copyTextToClipboard = async (text: string) => {
+  if (typeof window === "undefined") {
+    return false;
+  }
+
+  if (navigator.clipboard?.writeText && window.isSecureContext) {
+    try {
+      await navigator.clipboard.writeText(text);
+      return true;
+    } catch {
+      // Installed PWAs can still reject clipboard writes; keep a legacy path.
+    }
+  }
+
+  return copyTextWithTextareaFallback(text);
+};
+
+const copyTextWithTextareaFallback = (text: string) => {
+  if (typeof document === "undefined") {
+    return false;
+  }
+
+  const textArea = document.createElement("textarea");
+  textArea.value = text;
+  textArea.setAttribute("readonly", "");
+  textArea.style.position = "fixed";
+  textArea.style.top = "0";
+  textArea.style.left = "-9999px";
+  textArea.style.opacity = "0";
+
+  document.body.appendChild(textArea);
+  textArea.focus();
+  textArea.select();
+  textArea.setSelectionRange(0, textArea.value.length);
+
+  try {
+    return document.execCommand("copy");
+  } catch {
+    return false;
+  } finally {
+    document.body.removeChild(textArea);
+  }
+};
+
+const getCopyableMessageText = (message: ThreadMessage) => {
+  const content = getMessageContent(message).trim();
+  if (content) {
+    return content;
+  }
+
+  const attachments = getMessageAttachments(message)
+    .map((attachment) => attachment.url)
+    .filter(Boolean);
+
+  return attachments.join("\n");
+};
+
 const useThrottledValue = <T,>(
   value: T,
   delayMs: number,
@@ -1133,6 +1289,13 @@ const getRenderableMessageLength = (message: ThreadMessage) => {
   return contentLength + reasoningLength;
 };
 
+const MessageMetadataRow = ({ message }: { message: ThreadMessage }) => (
+  <div className="flex items-center justify-start gap-1 text-muted-foreground/70">
+    <MessageTokenUsage message={message} />
+    <MessageCopyButton message={message} />
+  </div>
+);
+
 const MessageTokenUsage = ({ message }: { message: ThreadMessage }) => {
   const metadata = message.metadata;
   const inputTokens = metadata?.inputTokens ?? 0;
@@ -1144,35 +1307,28 @@ const MessageTokenUsage = ({ message }: { message: ThreadMessage }) => {
   }
 
   return (
-    <div
-      className={clsx(
-        "mt-1 flex text-[11px] leading-none text-muted-foreground/70",
-        message.role === "user" ? "justify-end" : "justify-start",
-      )}
-    >
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <span className="inline-flex items-center gap-1.5 rounded-full px-1.5 py-1 tabular-nums">
-            <span>{formatTokenCount(totalTokens)} tokens</span>
-            <span
-              className="inline-flex items-center gap-0.5"
-              aria-label={`${formatTokenCount(inputTokens)} input tokens`}
-            >
-              <ArrowDown className="h-3 w-3" aria-hidden="true" />
-              {formatTokenCount(inputTokens)}
-            </span>
-            <span
-              className="inline-flex items-center gap-0.5"
-              aria-label={`${formatTokenCount(outputTokens)} output tokens`}
-            >
-              <ArrowUp className="h-3 w-3" aria-hidden="true" />
-              {formatTokenCount(outputTokens)}
-            </span>
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <span className="inline-flex items-center gap-1.5 rounded-full px-1.5 py-1 text-[11px] leading-none tabular-nums">
+          <span>{formatTokenCount(totalTokens)} tokens</span>
+          <span
+            className="inline-flex items-center gap-0.5"
+            aria-label={`${formatTokenCount(inputTokens)} input tokens`}
+          >
+            <ArrowDown className="h-3 w-3" aria-hidden="true" />
+            {formatTokenCount(inputTokens)}
           </span>
-        </TooltipTrigger>
-        <TooltipContent side="top">{formatTokenUsage(metadata)}</TooltipContent>
-      </Tooltip>
-    </div>
+          <span
+            className="inline-flex items-center gap-0.5"
+            aria-label={`${formatTokenCount(outputTokens)} output tokens`}
+          >
+            <ArrowUp className="h-3 w-3" aria-hidden="true" />
+            {formatTokenCount(outputTokens)}
+          </span>
+        </span>
+      </TooltipTrigger>
+      <TooltipContent side="top">{formatTokenUsage(metadata)}</TooltipContent>
+    </Tooltip>
   );
 };
 
@@ -1199,3 +1355,6 @@ const userMessageStyle = (content: string) => {
     content.length <= 50 ? "rounded-full" : "rounded-2xl",
   );
 };
+
+const shouldDockCopyButton = (content: string, attachmentCount: number) =>
+  attachmentCount > 0 || content.includes("\n") || content.length > 50;

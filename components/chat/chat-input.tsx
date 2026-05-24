@@ -238,10 +238,10 @@ export const ChatInput = ({
                     placeholder={
                       isDragActive
                         ? "Drop files here..."
-                        : "Type your message, attach files, or paste an image..."
+                        : "Type your message..."
                     }
-                    className="w-full min-h-[48px] max-h-[200px] resize-none rounded-2xl border-0 bg-transparent text-base leading-relaxed transition-all duration-200 focus:ring-0 focus:border-0 focus:outline-none focus-visible:ring-0 shadow-none"
-                    rows={1}
+                    className="w-full min-h-[72px] max-h-[200px] resize-none rounded-2xl border-0 bg-transparent text-base leading-relaxed transition-all duration-200 focus:ring-0 focus:border-0 focus:outline-none focus-visible:ring-0 shadow-none"
+                    rows={2}
                   />
                 </div>
 
