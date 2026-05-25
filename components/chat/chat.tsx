@@ -401,12 +401,12 @@ const INSTAGRAM_HOME_PROMPTS: PromptSuggestion[] = [
     logo: "https://logos.composio.dev/api/instagram",
   },
   {
-    label: "Generate carousel ideas for my niche",
+    label: "Generate a new reel idea based on my last working reel",
     appName: "Instagram",
     logo: "https://logos.composio.dev/api/instagram",
   },
   {
-    label: "Turn this idea into a Reel script",
+    label: "Generate sub topics that I could create based on the content that is working",
     appName: "Instagram",
     logo: "https://logos.composio.dev/api/instagram",
   },

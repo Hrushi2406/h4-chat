@@ -15,6 +15,8 @@ import {
   FormEvent,
   KeyboardEvent,
   useCallback,
+  useLayoutEffect,
+  useRef,
   useState,
 } from "react";
 import { motion } from "framer-motion";
@@ -38,6 +40,7 @@ import {
 } from "@/components/ui/tooltip";
 
 const CONTEXT_WINDOW_TOKENS = 200_000;
+const CHAT_INPUT_MAX_HEIGHT = 200;
 const DROPZONE_ACCEPT = ALLOWED_FILE_TYPES as unknown as Record<
   string,
   string[]
@@ -97,11 +100,32 @@ export const ChatInput = ({
   setAttachments,
 }: ChatInputProps) => {
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
   const { uploadFiles } = useStorageActions();
   const { uid } = useAuth();
   const pathname = usePathname();
   const threadId = pathname.split("/").pop();
   const hasAttachments = attachments.length > 0;
+
+  const resizeTextarea = useCallback((textarea: HTMLTextAreaElement) => {
+    textarea.style.height = "auto";
+
+    const nextHeight = Math.min(textarea.scrollHeight, CHAT_INPUT_MAX_HEIGHT);
+    textarea.style.height = `${nextHeight}px`;
+    textarea.style.overflowY =
+      textarea.scrollHeight > CHAT_INPUT_MAX_HEIGHT ? "auto" : "hidden";
+  }, []);
+
+  useLayoutEffect(() => {
+    if (textareaRef.current) {
+      resizeTextarea(textareaRef.current);
+    }
+  }, [input, resizeTextarea]);
+
+  const handleTextareaChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    handleInputChange(e);
+    resizeTextarea(e.currentTarget);
+  };
 
   const handleKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === "Enter" && !e.shiftKey) {
@@ -231,8 +255,9 @@ export const ChatInput = ({
                 {/* Textarea */}
                 <div className="relative">
                   <Textarea
+                    ref={textareaRef}
                     value={input}
-                    onChange={handleInputChange}
+                    onChange={handleTextareaChange}
                     onKeyDown={handleKeyDown}
                     onPaste={handlePaste}
                     placeholder={
@@ -240,8 +265,8 @@ export const ChatInput = ({
                         ? "Drop files here..."
                         : "Type your message..."
                     }
-                    className="w-full min-h-[72px] max-h-[200px] resize-none rounded-2xl border-0 bg-transparent text-base leading-relaxed transition-all duration-200 focus:ring-0 focus:border-0 focus:outline-none focus-visible:ring-0 shadow-none"
-                    rows={2}
+                    className="w-full min-h-11 max-h-[200px] resize-none overflow-y-hidden rounded-2xl border-0 bg-transparent text-base leading-relaxed transition-all duration-200 focus:ring-0 focus:border-0 focus:outline-none focus-visible:ring-0 shadow-none"
+                    rows={1}
                   />
                 </div>
 
