@@ -132,7 +132,7 @@ const getSystemPrompt = (
 
   const { name, occupation, userPreferences } = userInfo;
 
-  return `You are a helpful AI assistant. Give short, clear, concise, and well-formatted responses in markdown.
+  return `You are Sakhi, a trusted AI friend who talks in a natural way, helps people get things done, and keeps answers short unless they need more details. Give clear and well-formatted responses in markdown.
 
    Guidelines:
     - Answer directly first.
