@@ -32,6 +32,14 @@ interface ChatProps {
   isNew?: boolean;
 }
 
+let newThreadDraft = "";
+
+const readNewThreadDraft = () => newThreadDraft;
+
+const writeNewThreadDraft = (draft: string) => {
+  newThreadDraft = draft;
+};
+
 export function Chat({ threadId, isNew = false }: ChatProps) {
   const [selectedModel, setSelectedModel] = useState<AIModel>(
     getDefaultModel()
@@ -151,6 +159,11 @@ export function Chat({ threadId, isNew = false }: ChatProps) {
   }, [threadId, threadData, isNewThread, setMessages]);
 
   useEffect(() => {
+    if (!isNewThread) return;
+    setInput(readNewThreadDraft());
+  }, [isNewThread]);
+
+  useEffect(() => {
     const syncMcpServers = () => {
       setMcpServers(getBrowserMcpServers().filter((server) => server.enabled));
     };
@@ -168,10 +181,16 @@ export function Chat({ threadId, isNew = false }: ChatProps) {
   const handleInputChangeWithClearSuggestions = (
     e: React.ChangeEvent<HTMLTextAreaElement>
   ) => {
-    setInput(e.target.value);
+    const nextInput = e.target.value;
+    setInput(nextInput);
+
+    if (isNewThread) {
+      writeNewThreadDraft(nextInput);
+    }
   };
 
   const handleSuggestionClick = async (suggestion: string) => {
+    writeNewThreadDraft("");
     const msg = generateDefaultUserMessage(suggestion);
     enqueueThreadWrite(() => persistUserMessageBeforeSend(suggestion, msg)).catch(
       (error) => {
@@ -258,6 +277,9 @@ export function Chat({ threadId, isNew = false }: ChatProps) {
     const msg = generateDefaultUserMessage(submittedInput, submittedAttachments);
 
     setInput("");
+    if (isNewThread) {
+      writeNewThreadDraft("");
+    }
     setAttachments([]);
 
     enqueueThreadWrite(() =>
