@@ -46,20 +46,20 @@ export async function POST(req: Request) {
   const verifiedUserId = await verifyFirebaseIdToken(authToken);
   const composioTools = await getComposioTools(
     verifiedUserId,
-    getChatCallbackUrl(req, threadId)
+    getChatCallbackUrl(req, threadId),
   );
   const mcpContext = await createMcpToolContext(
     verifiedUserId,
-    normalizeRequestMcpServers(mcpServers)
+    normalizeRequestMcpServers(mcpServers),
   );
   const systemPrompt = getSystemPrompt(
     geo,
     Boolean(composioTools),
     mcpContext?.servers,
-    userInfo
+    userInfo,
   );
   const closeMcpClientsOnce = createCloseMcpClientsOnce(
-    mcpContext?.clients ?? []
+    mcpContext?.clients ?? [],
   );
   const tools = {
     ...composioTools,
@@ -126,7 +126,7 @@ const getSystemPrompt = (
         toolNames: string[];
       }>
     | undefined,
-  userInfo: Partial<IUser>
+  userInfo: Partial<IUser>,
 ) => {
   const requestHints = getRequestPromptFromHints(geo);
 
@@ -146,7 +146,7 @@ const getSystemPrompt = (
       `You can use connected-app tools through Composio for email, calendar, drive, docs, spreadsheets, project management, developer workflows, CRM, payments, commerce, personal finance, design, Google Workspace, social media, ads, SEO, browser automation, media generation, and fitness tasks.
       Composio tool names are canonical uppercase slugs using the ${COMPOSIO_TOOL_NAME_PATTERN} pattern, for example ${COMPOSIO_TOOLKIT_EXAMPLES.join(", ")}. Do not invent Composio tool names.
       For discovery, call ${COMPOSIO_META_TOOLS.SEARCH_TOOLS} first. Use returned tool slugs as-is. If you need exact input fields, call ${COMPOSIO_META_TOOLS.GET_TOOL_SCHEMAS} with tool_slugs from search results.
-      For authorization or connection status, call ${COMPOSIO_META_TOOLS.MANAGE_CONNECTIONS} with valid toolkit slugs such as gmail, googlecalendar, googledrive, notion, linear, github, googledocs, googlesheets, outlook, hubspot, salesforce, confluence, stripe, splitwise, shopify, pexels, figma, canva, instagram, whatsapp, youtube, metaads, googleads, reddit, facebook, linkedin, ahrefs, firecrawl, gemini, composio_search, or browser_tool, then provide the Connect Link in chat and continue once the user confirms.
+      For authorization or connection status, call ${COMPOSIO_META_TOOLS.MANAGE_CONNECTIONS} with valid toolkit slugs such as gmail, googlecalendar, googledrive, notion, linear, github, googledocs, googlesheets, outlook, hubspot, salesforce, confluence, stripe, splitwise, shopify, pexels, figma, canva, instagram, whatsapp, youtube, metaads, googleads, reddit, facebook, linkedin, ahrefs, firecrawl, gemini, composio_search, or browser_tool, then provide the Connect Link in chat. After the user returns from authorization, the app may send a short “Connected” message automatically; continue the original task from the conversation history.
       Execute selected app actions with ${COMPOSIO_META_TOOLS.MULTI_EXECUTE_TOOL} when actions are independent. Ask before taking irreversible actions such as sending email, deleting files, or creating/updating external records unless the user already gave explicit instructions.`
     }
     - ${
@@ -157,8 +157,10 @@ const getSystemPrompt = (
         .map(
           (server) =>
             `- ${server.name} (${server.id}): ${server.toolNames.join(", ")}${
-              server.instructions ? `\n  Server instructions: ${server.instructions}` : ""
-            }`
+              server.instructions
+                ? `\n  Server instructions: ${server.instructions}`
+                : ""
+            }`,
         )
         .join("\n")}
       Before using MCP tools that place orders, submit payments, modify carts, or make external changes, ask for explicit user confirmation unless the user's message already provides unambiguous approval.`
@@ -174,7 +176,7 @@ const getSystemPrompt = (
 
 async function getComposioTools(
   userId?: string,
-  callbackUrl?: string
+  callbackUrl?: string,
 ): Promise<ToolSet | undefined> {
   if (!userId || !isComposioConfigured()) {
     return undefined;
@@ -192,10 +194,14 @@ async function getComposioTools(
 function getChatCallbackUrl(req: Request, threadId?: string) {
   const origin = new URL(req.url).origin;
 
-  return threadId ? `${origin}/chat/${threadId}` : origin;
+  return threadId
+    ? `${origin}/chat/${threadId}?composioAuth=complete`
+    : `${origin}/chat?composioAuth=complete`;
 }
 
-const createCloseMcpClientsOnce = (clients: Parameters<typeof closeMcpClients>[0]) => {
+const createCloseMcpClientsOnce = (
+  clients: Parameters<typeof closeMcpClients>[0],
+) => {
   let didClose = false;
 
   return async () => {
@@ -254,7 +260,7 @@ const normalizeRequestHeaders = (value: unknown) => {
 
       return acc;
     },
-    {}
+    {},
   );
 
   return Object.keys(headers).length > 0 ? headers : undefined;

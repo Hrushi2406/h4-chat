@@ -21,7 +21,11 @@ import { ChatRequestOptions, DefaultChatTransport } from "ai";
 import { useUser } from "@/lib/hooks/user/use-user";
 import { auth } from "@/lib/clients/firebase";
 import { motion, useReducedMotion, type Variants } from "framer-motion";
-import { useConnections } from "@/lib/hooks/connections/use-connections";
+import {
+  connectionKeys,
+  useConnections,
+} from "@/lib/hooks/connections/use-connections";
+import { useQueryClient } from "@tanstack/react-query";
 import {
   BrowserMcpServer,
   getBrowserMcpServers,
@@ -54,10 +58,13 @@ export function Chat({ threadId, isNew = false }: ChatProps) {
   const threadWriteQueueRef = useRef<Promise<void>>(Promise.resolve());
   const loadedThreadIdRef = useRef<string | null>(null);
   const previousThreadIdRef = useRef(threadId);
+  const composioAuthResumeStartedRef = useRef(false);
 
   const { uid } = useAuth();
   const { data: user } = useUser();
-  const { data: toolApps = [] } = useConnections(uid);
+  const queryClient = useQueryClient();
+  const { data: toolApps = [], refetch: refetchConnections } =
+    useConnections(uid);
 
   const { createThread, addMessageToThread } = useThreadActions();
 
@@ -254,6 +261,70 @@ export function Chat({ threadId, isNew = false }: ChatProps) {
 
     await saveMessageToThread(message);
   };
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (!threadId || !uid || isNewThread || status !== "ready") return;
+    if (visibleMessages.length === 0) return;
+    if (composioAuthResumeStartedRef.current) return;
+
+    const url = new URL(window.location.href);
+    if (url.searchParams.get("composioAuth") !== "complete") return;
+
+    const storageKey = `composio-auth-resumed:${threadId}`;
+    if (sessionStorage.getItem(storageKey)) {
+      url.searchParams.delete("composioAuth");
+      window.history.replaceState({}, "", `${url.pathname}${url.search}${url.hash}`);
+      return;
+    }
+
+    composioAuthResumeStartedRef.current = true;
+    sessionStorage.setItem(storageKey, "true");
+
+    const resumeAfterComposioAuth = async () => {
+      try {
+        url.searchParams.delete("composioAuth");
+        url.searchParams.delete("status");
+        url.searchParams.delete("connected_account_id");
+        window.history.replaceState(
+          {},
+          "",
+          `${url.pathname}${url.search}${url.hash}`
+        );
+
+        const text = "Connected. Please continue with my previous request.";
+        const message = generateDefaultUserMessage(text);
+
+        enqueueThreadWrite(() => persistUserMessageBeforeSend(text, message)).catch(
+          (error) => {
+            console.error("Failed to save Composio resume message:", error);
+          }
+        );
+
+        await sendMessage({ text }, await getChatRequestOptions());
+
+        void queryClient.invalidateQueries({
+          queryKey: connectionKeys.list(uid),
+        });
+        void refetchConnections();
+      } catch (error) {
+        console.error("Failed to resume chat after Composio auth:", error);
+        sessionStorage.removeItem(storageKey);
+        composioAuthResumeStartedRef.current = false;
+      }
+    };
+
+    void resumeAfterComposioAuth();
+  }, [
+    isNewThread,
+    queryClient,
+    refetchConnections,
+    sendMessage,
+    status,
+    threadId,
+    uid,
+    visibleMessages.length,
+  ]);
 
   const handleStop = () => {
     stop();
