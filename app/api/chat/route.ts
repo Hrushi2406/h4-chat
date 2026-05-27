@@ -52,9 +52,13 @@ export async function POST(req: Request) {
     verifiedUserId,
     normalizeRequestMcpServers(mcpServers),
   );
+  const messagesWithFileUrls = appendUnsupportedFileUrlsToMessages(messages, model);
+  const needsComposioFileRule =
+    Boolean(composioTools) && messagesWithFileUrls !== messages;
   const systemPrompt = getSystemPrompt(
     geo,
     Boolean(composioTools),
+    needsComposioFileRule,
     mcpContext?.servers,
     userInfo,
   );
@@ -69,7 +73,7 @@ export async function POST(req: Request) {
   const result = streamText({
     model: model.id,
     system: systemPrompt,
-    messages: await convertToModelMessages(messages.slice(-10), {
+    messages: await convertToModelMessages(messagesWithFileUrls.slice(-10), {
       tools,
       ignoreIncompleteToolCalls: true,
     }),
@@ -118,6 +122,7 @@ About the origin of user's request:
 const getSystemPrompt = (
   geo: Geo,
   composioEnabled: boolean,
+  needsComposioFileRule: boolean,
   mcpServers:
     | Array<{
         id: string;
@@ -150,6 +155,10 @@ const getSystemPrompt = (
       Execute selected app actions with ${COMPOSIO_META_TOOLS.MULTI_EXECUTE_TOOL} when actions are independent. Ask before taking irreversible actions such as sending email, deleting files, or creating/updating external records unless the user already gave explicit instructions.`
     }
     - ${
+      needsComposioFileRule &&
+      `For uploaded file URLs unsupported by this model, use Composio tools to inspect/analyze the file before answering; never guess file contents without tool results.`
+    }
+    - ${
       mcpServers?.length &&
       `You can use configured MCP server tools when they are relevant.
       MCP tool names are namespaced as mcp_<server>_<tool>. Available MCP servers:
@@ -173,6 +182,103 @@ const getSystemPrompt = (
     ${requestHints}
     `;
 };
+
+function appendUnsupportedFileUrlsToMessages(
+  messages: unknown,
+  model: NonNullable<ReturnType<typeof getModelById>>,
+) {
+  if (!Array.isArray(messages)) {
+    return [];
+  }
+
+  const unsupportedFiles = messages.flatMap((message) => {
+    if (typeof message !== "object" || message === null) {
+      return [];
+    }
+
+    const parts = (message as { parts?: unknown }).parts;
+
+    if (!Array.isArray(parts)) {
+      return [];
+    }
+
+    return parts.flatMap((part) => {
+      if (typeof part !== "object" || part === null) {
+        return [];
+      }
+
+      const filePart = part as {
+        type?: unknown;
+        url?: unknown;
+        filename?: unknown;
+        mediaType?: unknown;
+      };
+      const mediaType =
+        typeof filePart.mediaType === "string" ? filePart.mediaType : undefined;
+
+      if (
+        filePart.type !== "file" ||
+        typeof filePart.url !== "string" ||
+        isFileTypeSupportedByModel(mediaType, model)
+      ) {
+        return [];
+      }
+
+      return [
+        `- ${typeof filePart.filename === "string" ? filePart.filename : "uploaded file"}${
+          mediaType ? ` (${mediaType})` : ""
+        }: ${filePart.url}`,
+      ];
+    });
+  });
+
+  if (unsupportedFiles.length === 0) {
+    return messages;
+  }
+
+  const fileContext = `Uploaded file URLs for this message:\n${unsupportedFiles.join(
+    "\n",
+  )}`;
+
+  return messages.map((message, index) => {
+    if (index !== messages.length - 1 || typeof message !== "object" || message === null) {
+      return message;
+    }
+
+    const parts = Array.isArray((message as { parts?: unknown }).parts)
+      ? [...((message as { parts: unknown[] }).parts), { type: "text", text: fileContext }]
+      : [{ type: "text", text: fileContext }];
+
+    return { ...message, parts };
+  });
+}
+
+function isFileTypeSupportedByModel(
+  mediaType: string | undefined,
+  model: NonNullable<ReturnType<typeof getModelById>>,
+) {
+  if (!mediaType) {
+    return model.capabilities.documentInput;
+  }
+
+  if (mediaType.startsWith("image/")) {
+    return model.capabilities.imageInput;
+  }
+
+  if (mediaType === "application/pdf") {
+    return model.capabilities.pdfInput;
+  }
+
+  if (
+    mediaType === "text/csv" ||
+    mediaType === "application/csv" ||
+    mediaType === "text/comma-separated-values"
+  ) {
+    return model.capabilities.csvInput;
+  }
+
+  return model.capabilities.documentInput;
+}
 
 async function getComposioTools(
   userId?: string,

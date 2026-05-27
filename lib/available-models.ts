@@ -1,3 +1,11 @@
+export interface AIModelCapabilities {
+  toolUse: boolean;
+  imageInput: boolean;
+  pdfInput: boolean;
+  csvInput: boolean;
+  documentInput: boolean;
+}
+
 export interface AIModel {
   id: string;
   name: string;
@@ -5,7 +13,24 @@ export interface AIModel {
   provider: string;
   maxTokens?: number;
   isDefault?: boolean;
+  capabilities: AIModelCapabilities;
 }
+
+const textOnlyToolModel: AIModelCapabilities = {
+  toolUse: true,
+  imageInput: false,
+  pdfInput: false,
+  csvInput: false,
+  documentInput: false,
+};
+
+const multimodalToolModel: AIModelCapabilities = {
+  toolUse: true,
+  imageInput: true,
+  pdfInput: true,
+  csvInput: true,
+  documentInput: true,
+};
 
 export const availableModels: AIModel[] = [
   {
@@ -14,6 +39,7 @@ export const availableModels: AIModel[] = [
     description: "Latest OpenAI flagship for reasoning, tools, and vision",
     provider: "openai",
     maxTokens: 1000000,
+    capabilities: multimodalToolModel,
   },
   {
     id: "openai/gpt-5.4",
@@ -21,6 +47,7 @@ export const availableModels: AIModel[] = [
     description: "Long-context OpenAI model for complex work",
     provider: "openai",
     maxTokens: 1050000,
+    capabilities: multimodalToolModel,
   },
   {
     id: "openai/gpt-5.4-mini",
@@ -28,6 +55,7 @@ export const availableModels: AIModel[] = [
     description: "Fast OpenAI model for everyday chat and coding",
     provider: "openai",
     maxTokens: 400000,
+    capabilities: multimodalToolModel,
   },
   {
     id: "openai/gpt-5.4-nano",
@@ -35,6 +63,7 @@ export const availableModels: AIModel[] = [
     description: "Smallest recent OpenAI model for low-latency work",
     provider: "openai",
     maxTokens: 400000,
+    capabilities: multimodalToolModel,
   },
   {
     id: "anthropic/claude-opus-4.7",
@@ -42,6 +71,7 @@ export const availableModels: AIModel[] = [
     description: "Latest Anthropic model for deep reasoning and vision",
     provider: "anthropic",
     maxTokens: 1000000,
+    capabilities: multimodalToolModel,
   },
   {
     id: "anthropic/claude-sonnet-4.6",
@@ -49,6 +79,7 @@ export const availableModels: AIModel[] = [
     description: "Balanced Anthropic model for reasoning and tool use",
     provider: "anthropic",
     maxTokens: 1000000,
+    capabilities: multimodalToolModel,
   },
   {
     id: "anthropic/claude-haiku-4.5",
@@ -56,6 +87,7 @@ export const availableModels: AIModel[] = [
     description: "Fast Anthropic model for low-latency reasoning and vision",
     provider: "anthropic",
     maxTokens: 200000,
+    capabilities: multimodalToolModel,
   },
   {
     id: "google/gemini-3.1-pro-preview",
@@ -63,6 +95,7 @@ export const availableModels: AIModel[] = [
     description: "Recent Google Pro model with long context and vision",
     provider: "google",
     maxTokens: 1000000,
+    capabilities: multimodalToolModel,
   },
   {
     id: "google/gemini-3-flash",
@@ -70,6 +103,7 @@ export const availableModels: AIModel[] = [
     description: "Fast Google model for long-context responses",
     provider: "google",
     maxTokens: 1000000,
+    capabilities: multimodalToolModel,
   },
   {
     id: "google/gemini-3.1-flash-lite-preview",
@@ -77,6 +111,7 @@ export const availableModels: AIModel[] = [
     description: "Recent lightweight Google model for speed",
     provider: "google",
     maxTokens: 1000000,
+    capabilities: multimodalToolModel,
   },
   {
     id: "deepseek/deepseek-v4-flash",
@@ -85,6 +120,7 @@ export const availableModels: AIModel[] = [
     provider: "deepseek",
     maxTokens: 1000000,
     isDefault: true,
+    capabilities: textOnlyToolModel,
   },
   {
     id: "deepseek/deepseek-v4-pro",
@@ -92,6 +128,7 @@ export const availableModels: AIModel[] = [
     description: "Higher-quality DeepSeek V4 model for reasoning and long context",
     provider: "deepseek",
     maxTokens: 1000000,
+    capabilities: textOnlyToolModel,
   },
   {
     id: "google/gemma-4-31b-it",
@@ -99,6 +136,7 @@ export const availableModels: AIModel[] = [
     description: "Open Google model for general chat, tool use, files, and vision",
     provider: "google",
     maxTokens: 262144,
+    capabilities: multimodalToolModel,
   },
   {
     id: "moonshotai/kimi-k2.6",
@@ -106,6 +144,7 @@ export const availableModels: AIModel[] = [
     description: "Open-weight Moonshot model for coding, reasoning, and agents",
     provider: "moonshotai",
     maxTokens: 262000,
+    capabilities: textOnlyToolModel,
   },
   {
     id: "minimax/minimax-m2.7",
@@ -113,6 +152,7 @@ export const availableModels: AIModel[] = [
     description: "Open model for agentic coding, reasoning, files, and vision",
     provider: "minimax",
     maxTokens: 204800,
+    capabilities: multimodalToolModel,
   },
   {
     id: "xai/grok-4.3",
@@ -120,6 +160,7 @@ export const availableModels: AIModel[] = [
     description: "Latest xAI model in the Gateway catalog",
     provider: "xai",
     maxTokens: 1000000,
+    capabilities: multimodalToolModel,
   },
   {
     id: "xai/grok-4.20-reasoning",
@@ -127,6 +168,7 @@ export const availableModels: AIModel[] = [
     description: "Large-context xAI reasoning model",
     provider: "xai",
     maxTokens: 2000000,
+    capabilities: textOnlyToolModel,
   },
 ];
 
