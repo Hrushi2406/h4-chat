@@ -812,8 +812,16 @@ const ToolIcon = ({
 
 const getToolLogos = (appSlugs: string[] = [], toolApps: ToolAppIcon[]) =>
   appSlugs
-    .map((slug) => toolApps.find((app) => app.slug === slug)?.logo)
+    .map((slug) => toolApps.find((app) => app.slug === slug)?.logo ?? getFallbackAppLogo(slug))
     .filter((logo): logo is string => !!logo);
+
+const getFallbackAppLogo = (slug: string) => {
+  if (!slug || slug === "composio" || slug === "sandbox") {
+    return undefined;
+  }
+
+  return `https://logos.composio.dev/api/${encodeURIComponent(slug)}`;
+};
 
 const isToolErrorState = (status?: string) =>
   status === "output-error" || status === "error" || status === "failed";

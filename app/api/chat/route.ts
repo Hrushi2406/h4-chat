@@ -52,7 +52,10 @@ export async function POST(req: Request) {
     verifiedUserId,
     normalizeRequestMcpServers(mcpServers),
   );
-  const messagesWithFileUrls = appendUnsupportedFileUrlsToMessages(messages, model);
+  const messagesWithFileUrls = appendUnsupportedFileUrlsToMessages(
+    messages,
+    model,
+  );
   const needsComposioFileRule =
     Boolean(composioTools) && messagesWithFileUrls !== messages;
   const systemPrompt = getSystemPrompt(
@@ -152,7 +155,9 @@ const getSystemPrompt = (
       Composio tool names are canonical uppercase slugs using the ${COMPOSIO_TOOL_NAME_PATTERN} pattern, for example ${COMPOSIO_TOOLKIT_EXAMPLES.join(", ")}. Do not invent Composio tool names.
       For discovery, call ${COMPOSIO_META_TOOLS.SEARCH_TOOLS} first. Use returned tool slugs as-is. If you need exact input fields, call ${COMPOSIO_META_TOOLS.GET_TOOL_SCHEMAS} with tool_slugs from search results.
       For authorization or connection status, call ${COMPOSIO_META_TOOLS.MANAGE_CONNECTIONS} with valid toolkit slugs such as gmail, googlecalendar, googledrive, notion, linear, github, googledocs, googlesheets, outlook, hubspot, salesforce, confluence, stripe, splitwise, shopify, pexels, figma, canva, instagram, whatsapp, youtube, metaads, googleads, reddit, facebook, linkedin, ahrefs, firecrawl, gemini, composio_search, or browser_tool, then provide the Connect Link in chat. After the user returns from authorization, the app may send a short “Connected” message automatically; continue the original task from the conversation history.
-      Execute selected app actions with ${COMPOSIO_META_TOOLS.MULTI_EXECUTE_TOOL} when actions are independent. Ask before taking irreversible actions such as sending email, deleting files, or creating/updating external records unless the user already gave explicit instructions.`
+      Execute selected app actions with ${COMPOSIO_META_TOOLS.MULTI_EXECUTE_TOOL} when actions are independent.
+      Drafting/discussing a message is not permission to send it.
+      Before sending any external message or reply, ask for explicit confirmation unless the user clearly says to send/reply now.`
     }
     - ${
       needsComposioFileRule &&
@@ -172,7 +177,8 @@ const getSystemPrompt = (
             }`,
         )
         .join("\n")}
-      Before using MCP tools that place orders, submit payments, modify carts, or make external changes, ask for explicit user confirmation unless the user's message already provides unambiguous approval.`
+      Drafting/discussing a message is not permission to send it.
+      Before sending any external message or reply, ask for explicit confirmation unless the user clearly says to send/reply now.`
     }
 
     ${name && `User's name is ${name}`}
@@ -241,12 +247,19 @@ function appendUnsupportedFileUrlsToMessages(
   )}`;
 
   return messages.map((message, index) => {
-    if (index !== messages.length - 1 || typeof message !== "object" || message === null) {
+    if (
+      index !== messages.length - 1 ||
+      typeof message !== "object" ||
+      message === null
+    ) {
       return message;
     }
 
     const parts = Array.isArray((message as { parts?: unknown }).parts)
-      ? [...((message as { parts: unknown[] }).parts), { type: "text", text: fileContext }]
+      ? [
+          ...(message as { parts: unknown[] }).parts,
+          { type: "text", text: fileContext },
+        ]
       : [{ type: "text", text: fileContext }];
 
     return { ...message, parts };

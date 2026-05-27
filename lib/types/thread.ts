@@ -1,5 +1,6 @@
 import type { FileUIPart, UIMessage } from "ai";
 import { v4 } from "uuid";
+import { getToolStorageMetadata } from "@/lib/types/tool-mappings";
 
 export interface Attachment {
   id?: string;
@@ -220,8 +221,9 @@ const compactMessagePart = (part: UIMessage["parts"][number]) => {
 
 const compactToolPart = (part: UIMessage["parts"][number]) => {
   const source = part as Record<string, unknown>;
-
-  return Object.fromEntries(
+  const toolName = getToolPartName(source);
+  const state = typeof source.state === "string" ? source.state : "";
+  const compacted = Object.fromEntries(
     Object.entries(source).map(([key, value]) => {
       if (TOOL_PAYLOAD_KEYS.has(key.toLowerCase())) {
         return [key, compactToolPayload(value)];
@@ -229,17 +231,72 @@ const compactToolPart = (part: UIMessage["parts"][number]) => {
 
       return [key, value];
     })
-  ) as UIMessage["parts"][number];
+  );
+
+  return {
+    ...compacted,
+    toolDisplay: getToolStorageMetadata(toolName, state, part),
+  } as unknown as UIMessage["parts"][number];
+};
+
+const getToolPartName = (source: Record<string, unknown>) => {
+  if (typeof source.toolName === "string" && source.toolName.trim()) {
+    return source.toolName;
+  }
+
+  if (typeof source.type === "string") {
+    return source.type.replace(/^tool-/, "");
+  }
+
+  return "tool";
 };
 
 const compactToolPayload = (value: unknown) => {
-  const serialized = stringifyForStoragePreview(value);
+  const existingPreview = getExistingCompactPreview(value);
+  const serialized = existingPreview?.preview ?? stringifyForStoragePreview(value);
   const truncated = truncateString(serialized, MAX_STORED_TOOL_FIELD_CHARS);
 
   return {
     preview: truncated.value,
-    truncated: truncated.truncated,
+    truncated: truncated.truncated || Boolean(existingPreview?.truncated),
   };
+};
+
+const getExistingCompactPreview = (value: unknown) => {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return undefined;
+  }
+
+  const source = value as Record<string, unknown>;
+  if (typeof source.preview !== "string") {
+    return undefined;
+  }
+
+  let preview = source.preview;
+  let truncated = Boolean(source.truncated);
+
+  for (let i = 0; i < 10; i += 1) {
+    const parsed = parseJsonObject(preview);
+    if (!parsed || typeof parsed.preview !== "string") {
+      break;
+    }
+
+    preview = parsed.preview;
+    truncated = truncated || Boolean(parsed.truncated);
+  }
+
+  return { preview, truncated };
+};
+
+const parseJsonObject = (value: string): Record<string, unknown> | undefined => {
+  try {
+    const parsed = JSON.parse(value);
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed)
+      ? (parsed as Record<string, unknown>)
+      : undefined;
+  } catch {
+    return undefined;
+  }
 };
 
 const stringifyForStoragePreview = (value: unknown): string => {

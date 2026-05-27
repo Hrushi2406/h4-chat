@@ -368,6 +368,29 @@ const composioToolDisplay: Array<{
   },
 ];
 
+export const getToolStorageMetadata = (
+  toolName: string,
+  status: string,
+  toolPart?: unknown,
+  mcpServerNames: Record<string, string> = {},
+) => {
+  const { displayName, tooltip, appSlugs, source, toolLabel } = getToolDisplayName(
+    toolName,
+    status,
+    toolPart,
+    mcpServerNames,
+  );
+
+  return {
+    displayName,
+    tooltip,
+    appSlugs: appSlugs ?? [],
+    appNames: (appSlugs ?? []).map(formatAppSlug),
+    source,
+    ...(toolLabel ? { toolLabel } : {}),
+  };
+};
+
 export const getToolDisplayName = (
   toolName: string,
   status: string,
@@ -398,6 +421,7 @@ export const getToolDisplayName = (
   }
 
   const normalizedToolName = toolName.toUpperCase();
+  const storedDisplay = getStoredToolDisplay(toolPart);
   const toolContext = getToolContext(normalizedToolName, toolPart);
   const appSlugs = getComposioAppSlugs(normalizedToolName, toolContext);
   const context = [
@@ -422,7 +446,9 @@ export const getToolDisplayName = (
       displayName: label,
       Icon: getToolIcon(normalizedToolName, toolContext, composioTool.Icon),
       tooltip: getComposioTooltip(label, toolName, toolContext, appSlugs),
-      appSlugs: getDisplayAppSlugs(appSlugs),
+      appSlugs: storedDisplay?.appSlugs?.length
+        ? storedDisplay.appSlugs
+        : getDisplayAppSlugs(appSlugs),
       source: "composio",
     };
   }
@@ -614,12 +640,27 @@ const collectContext = (
   commandParts: string[],
   depth = 0,
 ) => {
-  if (depth > 4 || contextParts.join(" ").length > 6000) {
+  if (depth > 10 || contextParts.join(" ").length > 6000) {
     return;
   }
 
   if (typeof value === "string" || typeof value === "number") {
-    contextParts.push(String(value));
+    const text = String(value);
+    contextParts.push(text);
+
+    const parsed = typeof value === "string" ? parseJsonObject(value) : undefined;
+    if (parsed) {
+      collectContext(
+        parsed,
+        contextParts,
+        toolSlugs,
+        toolkitSlugs,
+        searchParts,
+        commandParts,
+        depth + 1,
+      );
+    }
+
     return;
   }
 
@@ -673,6 +714,40 @@ const collectContext = (
       depth + 1,
     );
   });
+};
+
+const parseJsonObject = (value: string): Record<string, unknown> | undefined => {
+  const trimmed = value.trim();
+  if (!trimmed.startsWith("{") || trimmed.length > 20_000) {
+    return undefined;
+  }
+
+  try {
+    const parsed = JSON.parse(trimmed);
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed)
+      ? (parsed as Record<string, unknown>)
+      : undefined;
+  } catch {
+    return undefined;
+  }
+};
+
+const getStoredToolDisplay = (toolPart: unknown) => {
+  if (!toolPart || typeof toolPart !== "object") {
+    return undefined;
+  }
+
+  const display = (toolPart as { toolDisplay?: unknown }).toolDisplay;
+  if (!display || typeof display !== "object") {
+    return undefined;
+  }
+
+  const source = display as Record<string, unknown>;
+  const appSlugs = Array.isArray(source.appSlugs)
+    ? source.appSlugs.filter((slug): slug is string => typeof slug === "string")
+    : undefined;
+
+  return { appSlugs };
 };
 
 const isToolSlugKey = (key: string) =>
@@ -742,7 +817,10 @@ const getComposioAppSlugs = (
   ];
 
   if (toolName.startsWith("COMPOSIO_") && slugs.length === 0) {
-    slugs.push("composio");
+    const inferredApp = composioToolDisplay.find(
+      ({ appSlug, match }) => appSlug !== "composio" && match(context.raw),
+    )?.appSlug;
+    slugs.push(inferredApp ?? "composio");
   } else {
     const toolkitFromToolName = getToolkitSlugFromToolSlug(toolName);
     if (toolkitFromToolName) {
