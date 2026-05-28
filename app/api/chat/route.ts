@@ -80,7 +80,7 @@ export async function POST(req: Request) {
       tools,
       ignoreIncompleteToolCalls: true,
     }),
-    stopWhen: stepCountIs(50),
+    stopWhen: stepCountIs(100),
     onError: async (error) => {
       console.log("error: ", error);
       await closeMcpClientsOnce();
