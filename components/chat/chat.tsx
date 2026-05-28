@@ -3,7 +3,7 @@
 import { useChat } from "@ai-sdk/react";
 import { MessageList } from "@/components/chat/message-list";
 import { ChatInput } from "@/components/chat/chat-input";
-import { useState, useEffect, useMemo, useRef } from "react";
+import { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { getDefaultModel, type AIModel } from "@/lib/available-models";
 import { useThreadActions } from "@/lib/hooks/thread/use-thread-actions";
 import { useThread } from "@/lib/hooks/thread/use-threads";
@@ -36,6 +36,12 @@ interface ChatProps {
   isNew?: boolean;
 }
 
+type QueuedChatMessage = {
+  id: string;
+  text: string;
+  attachments: Attachment[];
+};
+
 let newThreadDraft = "";
 
 const readNewThreadDraft = () => newThreadDraft;
@@ -54,11 +60,14 @@ export function Chat({ threadId, isNew = false }: ChatProps) {
   const [isCreatingThread, setIsCreatingThread] = useState(false);
 
   const [input, setInput] = useState("");
+  const [queuedMessages, setQueuedMessages] = useState<QueuedChatMessage[]>([]);
+  const [isSendingQueuedMessage, setIsSendingQueuedMessage] = useState(false);
   const [mcpServers, setMcpServers] = useState<BrowserMcpServer[]>([]);
   const threadWriteQueueRef = useRef<Promise<void>>(Promise.resolve());
   const loadedThreadIdRef = useRef<string | null>(null);
   const previousThreadIdRef = useRef(threadId);
   const composioAuthResumeStartedRef = useRef(false);
+  const pendingQueuedMessageIdRef = useRef<string | null>(null);
 
   const { uid } = useAuth();
   const { data: user } = useUser();
@@ -334,18 +343,102 @@ export function Chat({ threadId, isNew = false }: ChatProps) {
     setSelectedModel(model);
   };
 
-  const handleChatSubmit = async (
-    e: React.FormEvent<HTMLFormElement>
-  ) => {
-    e.preventDefault();
+  const submitMessage = useCallback(
+    async (text: string, submittedAttachments: Attachment[]) => {
+      const submittedTitle =
+        text || submittedAttachments[0]?.name || "File attachment";
+      const msg = generateDefaultUserMessage(text, submittedAttachments);
 
+      enqueueThreadWrite(() =>
+        persistUserMessageBeforeSend(submittedTitle, msg)
+      ).catch((error) => {
+        console.error("Failed to save user message:", error);
+      });
+
+      await sendMessage(
+        {
+          text,
+          files: attachmentsToFileParts(submittedAttachments),
+        },
+        await getChatRequestOptions()
+      );
+    },
+    [sendMessage, selectedModel.id, threadId, mcpServers, user]
+  );
+
+  const sendQueuedMessage = useCallback(
+    async (queuedMessageId: string) => {
+      const queuedMessage = queuedMessages.find(
+        (message) => message.id === queuedMessageId
+      );
+
+      if (!queuedMessage || isSendingQueuedMessage) return;
+
+      setIsSendingQueuedMessage(true);
+      setQueuedMessages((messages) =>
+        messages.filter((message) => message.id !== queuedMessageId)
+      );
+
+      try {
+        await submitMessage(queuedMessage.text, queuedMessage.attachments);
+      } catch (error) {
+        console.error("Failed to send queued message:", error);
+        setQueuedMessages((messages) => [queuedMessage, ...messages]);
+      } finally {
+        setIsSendingQueuedMessage(false);
+      }
+    },
+    [isSendingQueuedMessage, queuedMessages, submitMessage]
+  );
+
+  useEffect(() => {
+    if (
+      status !== "ready" ||
+      isCreatingThread ||
+      queuedMessages.length === 0 ||
+      isSendingQueuedMessage
+    ) {
+      return;
+    }
+
+    const queuedMessageId = pendingQueuedMessageIdRef.current ?? queuedMessages[0].id;
+    pendingQueuedMessageIdRef.current = null;
+    void sendQueuedMessage(queuedMessageId);
+  }, [isCreatingThread, isSendingQueuedMessage, queuedMessages, sendQueuedMessage, status]);
+
+  const handleQueuedMessageChange = (queuedMessageId: string, text: string) => {
+    setQueuedMessages((messages) =>
+      messages.map((message) =>
+        message.id === queuedMessageId ? { ...message, text } : message
+      )
+    );
+  };
+
+  const handleQueuedMessageDelete = (queuedMessageId: string) => {
+    if (pendingQueuedMessageIdRef.current === queuedMessageId) {
+      pendingQueuedMessageIdRef.current = null;
+    }
+
+    setQueuedMessages((messages) =>
+      messages.filter((message) => message.id !== queuedMessageId)
+    );
+  };
+
+  const handleQueuedMessageSendNow = (queuedMessageId: string) => {
+    pendingQueuedMessageIdRef.current = queuedMessageId;
+
+    if (isLoading) {
+      stop();
+      return;
+    }
+
+    void sendQueuedMessage(queuedMessageId);
+  };
+
+  const prepareSubmittedMessage = () => {
     const submittedInput = input.trim();
     const submittedAttachments = attachments;
-    if (!submittedInput && submittedAttachments.length === 0) return;
-
-    const submittedTitle =
-      submittedInput || submittedAttachments[0]?.name || "File attachment";
-    const msg = generateDefaultUserMessage(submittedInput, submittedAttachments);
+    if (!submittedInput && submittedAttachments.length === 0) return null;
 
     setInput("");
     if (isNewThread) {
@@ -353,19 +446,49 @@ export function Chat({ threadId, isNew = false }: ChatProps) {
     }
     setAttachments([]);
 
-    enqueueThreadWrite(() =>
-      persistUserMessageBeforeSend(submittedTitle, msg)
-    ).catch((error) => {
-      console.error("Failed to save user message:", error);
-    });
+    return {
+      id: crypto.randomUUID(),
+      text: submittedInput,
+      attachments: submittedAttachments,
+    } satisfies QueuedChatMessage;
+  };
 
-    sendMessage(
-      {
-        text: submittedInput,
-        files: attachmentsToFileParts(submittedAttachments),
-      },
-      await getChatRequestOptions()
-    ).catch((error) => {
+  const handleChatSubmit = async (
+    e: React.FormEvent<HTMLFormElement>
+  ) => {
+    e.preventDefault();
+
+    const submittedMessage = prepareSubmittedMessage();
+    if (!submittedMessage) return;
+
+    if (isLoading || isCreatingThread) {
+      setQueuedMessages((messages) => [...messages, submittedMessage]);
+      return;
+    }
+
+    submitMessage(submittedMessage.text, submittedMessage.attachments).catch((error) => {
+      console.error("Failed to send message:", error);
+    });
+  };
+
+  const handleInstantChatSubmit = async (
+    e: React.FormEvent<HTMLFormElement>
+  ) => {
+    e.preventDefault();
+
+    const submittedMessage = prepareSubmittedMessage();
+    if (!submittedMessage) return;
+
+    if (isLoading || isCreatingThread) {
+      pendingQueuedMessageIdRef.current = submittedMessage.id;
+      setQueuedMessages((messages) => [submittedMessage, ...messages]);
+      if (isLoading) {
+        stop();
+      }
+      return;
+    }
+
+    submitMessage(submittedMessage.text, submittedMessage.attachments).catch((error) => {
       console.error("Failed to send message:", error);
     });
   };
@@ -415,11 +538,16 @@ export function Chat({ threadId, isNew = false }: ChatProps) {
         isLoading={isLoading || isCreatingThread}
         handleInputChange={handleInputChangeWithClearSuggestions}
         handleSubmit={handleChatSubmit}
+        handleInstantSubmit={handleInstantChatSubmit}
         onStop={handleStop}
         selectedModel={selectedModel}
         onModelChange={handleModelChange}
         attachments={attachments}
         setAttachments={setAttachments}
+        queuedMessages={queuedMessages}
+        onQueuedMessageChange={handleQueuedMessageChange}
+        onQueuedMessageSendNow={handleQueuedMessageSendNow}
+        onQueuedMessageDelete={handleQueuedMessageDelete}
       />
     </div>
   );

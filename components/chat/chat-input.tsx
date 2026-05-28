@@ -5,9 +5,12 @@ import { Textarea } from "@/components/ui/textarea";
 import {
   ArrowUp,
   CloudUpload,
+  CornerDownLeft,
   FileText,
   Paperclip,
+  Pencil,
   Square,
+  Trash2,
   X,
 } from "lucide-react";
 import {
@@ -74,17 +77,28 @@ const getClipboardImageFiles = (clipboardData: DataTransfer): File[] => {
     .filter((file): file is File => Boolean(file));
 };
 
+type QueuedChatMessage = {
+  id: string;
+  text: string;
+  attachments: Attachment[];
+};
+
 interface ChatInputProps {
   input: string;
   tokenUsage?: ThreadMessageMetadata;
   isLoading: boolean;
   handleInputChange: (e: React.ChangeEvent<HTMLTextAreaElement>) => void;
   handleSubmit: (e: FormEvent<HTMLFormElement>) => void;
+  handleInstantSubmit?: (e: FormEvent<HTMLFormElement>) => void;
   onStop: () => void;
   selectedModel: AIModel;
   onModelChange: (model: AIModel) => void;
   attachments: Attachment[];
   setAttachments: React.Dispatch<React.SetStateAction<Attachment[]>>;
+  queuedMessages?: QueuedChatMessage[];
+  onQueuedMessageChange?: (queuedMessageId: string, text: string) => void;
+  onQueuedMessageSendNow?: (queuedMessageId: string) => void;
+  onQueuedMessageDelete?: (queuedMessageId: string) => void;
 }
 
 export const ChatInput = ({
@@ -93,11 +107,16 @@ export const ChatInput = ({
   isLoading,
   handleInputChange,
   handleSubmit,
+  handleInstantSubmit,
   onStop,
   selectedModel,
   onModelChange,
   attachments,
   setAttachments,
+  queuedMessages = [],
+  onQueuedMessageChange,
+  onQueuedMessageSendNow,
+  onQueuedMessageDelete,
 }: ChatInputProps) => {
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -130,11 +149,12 @@ export const ChatInput = ({
   const handleKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
-      if (
-        (input.trim() || hasAttachments) &&
-        !isLoading &&
-        !uploadFiles.isPending
-      ) {
+      if ((input.trim() || hasAttachments) && !uploadFiles.isPending) {
+        if ((e.metaKey || e.ctrlKey) && handleInstantSubmit) {
+          handleInstantFormSubmit(e as any);
+          return;
+        }
+
         handleFormSubmit(e as any);
       }
     }
@@ -217,6 +237,12 @@ export const ChatInput = ({
     setSelectedFiles([]);
   };
 
+  const handleInstantFormSubmit = (e: FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    (handleInstantSubmit ?? handleSubmit)(e);
+    setSelectedFiles([]);
+  };
+
   const { getRootProps, getInputProps, isDragActive, open } = useDropzone({
     accept: DROPZONE_ACCEPT,
     onDrop: handleFileUpload,
@@ -228,6 +254,71 @@ export const ChatInput = ({
   return (
     <div className="w-full min-w-0 p-2 pt-3 pb-mobile-safe">
       <div className="mx-auto w-full min-w-0 max-w-4xl">
+        {queuedMessages.length > 0 && (
+          <div className="mx-auto w-[90%] overflow-hidden rounded-t-2xl border border-b-0 bg-background/95 px-2 py-1 shadow-sm backdrop-blur max-sm:w-full">
+            {queuedMessages.map((queuedMessage, index) => (
+              <div
+                key={queuedMessage.id}
+                className="flex items-start gap-1 border-b px-1 py-1 last:border-b-0"
+              >
+                <Textarea
+                  value={queuedMessage.text}
+                  onChange={(event) =>
+                    onQueuedMessageChange?.(
+                      queuedMessage.id,
+                      event.target.value,
+                    )
+                  }
+                  id={`queued-message-${queuedMessage.id}`}
+                  aria-label={`Queued message ${index + 1}`}
+                  className="min-h-8 flex-1 resize-none rounded-none border-0 bg-transparent px-1 py-1 text-sm shadow-none focus-visible:ring-0"
+                  rows={1}
+                />
+                {queuedMessage.attachments.length > 0 && (
+                  <div className="max-w-28 truncate pt-2 text-xs text-muted-foreground">
+                    {queuedMessage.attachments
+                      .map((attachment) => attachment.name)
+                      .join(", ")}
+                  </div>
+                )}
+                <Button
+                  type="button"
+                  size="icon"
+                  variant="ghost"
+                  onClick={() => onQueuedMessageSendNow?.(queuedMessage.id)}
+                  className="h-8 w-8 shrink-0 rounded-full text-muted-foreground hover:text-foreground"
+                  aria-label="Send queued message now"
+                >
+                  <CornerDownLeft className="h-4 w-4" />
+                </Button>
+                <Button
+                  type="button"
+                  size="icon"
+                  variant="ghost"
+                  onClick={() =>
+                    document
+                      .getElementById(`queued-message-${queuedMessage.id}`)
+                      ?.focus()
+                  }
+                  className="h-8 w-8 shrink-0 rounded-full text-muted-foreground"
+                  aria-label="Edit queued message"
+                >
+                  <Pencil className="h-4 w-4" />
+                </Button>
+                <Button
+                  type="button"
+                  size="icon"
+                  variant="ghost"
+                  onClick={() => onQueuedMessageDelete?.(queuedMessage.id)}
+                  className="h-8 w-8 shrink-0 rounded-full text-muted-foreground hover:text-destructive"
+                  aria-label="Delete queued message"
+                >
+                  <Trash2 className="h-4 w-4" />
+                </Button>
+              </div>
+            ))}
+          </div>
+        )}
         <div className="flex min-w-0 items-end gap-3">
           <div
             className={cn(
@@ -300,10 +391,14 @@ export const ChatInput = ({
                       transition={{ duration: 0.1 }}
                     >
                       <Button
-                        type={isLoading ? "button" : "submit"}
+                        type={isLoading && !input.trim() && !hasAttachments ? "button" : "submit"}
                         size="icon"
-                        variant={isLoading ? "ghost" : "default"}
-                        onClick={isLoading ? handleStopGeneration : undefined}
+                        variant={isLoading && !input.trim() && !hasAttachments ? "ghost" : "default"}
+                        onClick={
+                          isLoading && !input.trim() && !hasAttachments
+                            ? handleStopGeneration
+                            : undefined
+                        }
                         disabled={
                           (!input.trim() && !hasAttachments && !isLoading) ||
                           uploadFiles.isPending
@@ -311,8 +406,15 @@ export const ChatInput = ({
                         className={clsx(
                           "h-10 w-10 rounded-full transition-colors disabled:opacity-50",
                         )}
+                        aria-label={
+                          isLoading && !input.trim() && !hasAttachments
+                            ? "Stop response"
+                            : isLoading
+                              ? "Queue message"
+                              : "Send message"
+                        }
                       >
-                        {isLoading ? (
+                        {isLoading && !input.trim() && !hasAttachments ? (
                           <Square className="h-10 w-10 animate-[spin_2s_linear_infinite] fill-current" />
                         ) : (
                           <ArrowUp className="h-3 w-3" />
