@@ -10,7 +10,7 @@ import { TextShimmer } from "@/components/ui/text-shimmer";
 import { useEffect } from "react";
 import { userQueryOptions } from "@/lib/hooks/user/use-user";
 import { connectionsQueryOptions } from "@/lib/hooks/connections/use-connections";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { PwaServiceWorkerRegistrar } from "@/components/pwa-service-worker-registrar";
 
 interface ClientProviderProps {
@@ -30,9 +30,11 @@ export const ClientProvider = ({ children }: ClientProviderProps) => {
 };
 
 const AuthProvider = ({ children }: { children: React.ReactNode }) => {
-  const { uid } = useAuth();
+  const { uid, isAnon } = useAuth();
   const queryClient = useQueryClient();
   const pathname = usePathname();
+  const router = useRouter();
+  const shouldRedirectHomeToChat = pathname === "/" && uid && isAnon === false;
   const isPublicPage = pathname === "/" || pathname.startsWith("/share/");
 
   useEffect(() => {
@@ -41,6 +43,14 @@ const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     void queryClient.prefetchQuery(userQueryOptions(uid));
     void queryClient.prefetchQuery(connectionsQueryOptions(uid));
   }, [queryClient, uid]);
+
+  useEffect(() => {
+    if (shouldRedirectHomeToChat) {
+      router.replace("/chat");
+    }
+  }, [router, shouldRedirectHomeToChat]);
+
+  if (shouldRedirectHomeToChat) return null;
 
   if (!uid && !isPublicPage)
     return (

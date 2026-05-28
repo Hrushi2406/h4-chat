@@ -14,6 +14,8 @@ export const useAuth = () => {
     const unsubscribe = onAuthStateChanged(auth, (user) => {
       if (user) {
         setUid(user.uid);
+        setIsAnon(user.isAnonymous);
+        localStorage.setItem("isAnon", String(user.isAnonymous));
       } else {
         signInAnon.mutate();
         localStorage.setItem("isAnon", "true");
