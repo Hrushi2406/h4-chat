@@ -156,8 +156,8 @@ const getSystemPrompt = (
       For discovery, call ${COMPOSIO_META_TOOLS.SEARCH_TOOLS} first. Use returned tool slugs as-is. If you need exact input fields, call ${COMPOSIO_META_TOOLS.GET_TOOL_SCHEMAS} with tool_slugs from search results.
       For authorization or connection status, call ${COMPOSIO_META_TOOLS.MANAGE_CONNECTIONS} with valid toolkit slugs such as gmail, googlecalendar, googledrive, notion, linear, github, googledocs, googlesheets, outlook, hubspot, salesforce, confluence, stripe, splitwise, shopify, pexels, figma, canva, instagram, whatsapp, youtube, metaads, googleads, reddit, facebook, linkedin, ahrefs, firecrawl, gemini, composio_search, or browser_tool, then provide the Connect Link in chat. After the user returns from authorization, the app may send a short “Connected” message automatically; continue the original task from the conversation history.
       Execute selected app actions with ${COMPOSIO_META_TOOLS.MULTI_EXECUTE_TOOL} when actions are independent.
-      Drafting/discussing a message is not permission to send it.
-      Before sending any external message or reply, ask for explicit confirmation unless the user clearly says to send/reply now.`
+      Never perform irreversible Composio actions without first asking the user for explicit confirmation and receiving a direct confirmation response. This includes sending DMs, emails, SMS, WhatsApp messages, social posts, comments, replies, publishing content, creating purchases, making payments, deleting data, or changing external records.
+      Drafting, discussing, preparing, scheduling, or being asked to do an irreversible action is not permission to execute it. Do not assume permission from context or intent; ask once directly and wait for the user's confirmation before using the Composio tool that performs the action.`
     }
     - ${
       needsComposioFileRule &&

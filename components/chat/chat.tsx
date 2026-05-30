@@ -343,28 +343,28 @@ export function Chat({ threadId, isNew = false }: ChatProps) {
     setSelectedModel(model);
   };
 
-  const submitMessage = useCallback(
-    async (text: string, submittedAttachments: Attachment[]) => {
-      const submittedTitle =
-        text || submittedAttachments[0]?.name || "File attachment";
-      const msg = generateDefaultUserMessage(text, submittedAttachments);
+  const submitMessage = async (
+    text: string,
+    submittedAttachments: Attachment[]
+  ) => {
+    const submittedTitle =
+      text || submittedAttachments[0]?.name || "File attachment";
+    const msg = generateDefaultUserMessage(text, submittedAttachments);
 
-      enqueueThreadWrite(() =>
-        persistUserMessageBeforeSend(submittedTitle, msg)
-      ).catch((error) => {
-        console.error("Failed to save user message:", error);
-      });
+    enqueueThreadWrite(() =>
+      persistUserMessageBeforeSend(submittedTitle, msg)
+    ).catch((error) => {
+      console.error("Failed to save user message:", error);
+    });
 
-      await sendMessage(
-        {
-          text,
-          files: attachmentsToFileParts(submittedAttachments),
-        },
-        await getChatRequestOptions()
-      );
-    },
-    [sendMessage, selectedModel.id, threadId, mcpServers, user]
-  );
+    await sendMessage(
+      {
+        text,
+        files: attachmentsToFileParts(submittedAttachments),
+      },
+      await getChatRequestOptions()
+    );
+  };
 
   const sendQueuedMessage = useCallback(
     async (queuedMessageId: string) => {
