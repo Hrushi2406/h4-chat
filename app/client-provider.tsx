@@ -5,8 +5,6 @@ import { ThemeProvider } from "next-themes";
 import { Toaster } from "@/components/ui/sonner";
 import { queryClient } from "@/lib/clients/query-client";
 import { useAuth } from "@/lib/hooks/auth/use-auth";
-import AuthDialog from "@/components/auth/auth-dialog";
-import { TextShimmer } from "@/components/ui/text-shimmer";
 import { useEffect } from "react";
 import { userQueryOptions } from "@/lib/hooks/user/use-user";
 import { connectionsQueryOptions } from "@/lib/hooks/connections/use-connections";
@@ -30,12 +28,11 @@ export const ClientProvider = ({ children }: ClientProviderProps) => {
 };
 
 const AuthProvider = ({ children }: { children: React.ReactNode }) => {
-  const { uid, isAnon } = useAuth();
+  const { uid, isAnon, isLoading } = useAuth();
   const queryClient = useQueryClient();
   const pathname = usePathname();
   const router = useRouter();
   const shouldRedirectHomeToChat = pathname === "/" && uid && isAnon === false;
-  const isPublicPage = pathname === "/" || pathname.startsWith("/share/");
 
   useEffect(() => {
     if (!uid) return;
@@ -52,19 +49,7 @@ const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
   if (shouldRedirectHomeToChat) return null;
 
-  if (!uid && !isPublicPage)
-    return (
-      <div className="flex flex-col items-center justify-center min-h-screen gap-4">
-        <img
-          src="/saaki-chat-transparent.png"
-          alt="Sakhi AI"
-          className="h-16 w-16 object-contain animate-bounce"
-        />
-        <TextShimmer className="text-2xl font-semibold leading-loose  [--base-color:theme(colors.blue.400)] [--base-gradient-color:theme(colors.blue.600)] dark:[--base-color:theme(colors.blue.700)] dark:[--base-gradient-color:theme(colors.blue.400)]">
-          Sakhi Chat
-        </TextShimmer>
-      </div>
-    );
+  if (isLoading) return null;
 
   console.log("uid: ", uid);
   return <>{children}</>;

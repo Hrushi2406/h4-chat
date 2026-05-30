@@ -15,7 +15,15 @@ import { GoogleLogo } from "@/lib/brand-logos";
 import { Loader2 } from "lucide-react";
 
 const SettingsLayout = ({ children }: { children: React.ReactNode }) => {
-  const { uid, isAnon } = useAuth();
+  const { isAnon, isLoading } = useAuth();
+
+  if (isLoading) {
+    return (
+      <div className="h-screen bg-secondary flex items-center justify-center">
+        <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
 
   if (isAnon) {
     return (

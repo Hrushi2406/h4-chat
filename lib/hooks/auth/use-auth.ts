@@ -1,39 +1,37 @@
 import { useEffect, useState } from "react";
-import { onAuthStateChanged } from "firebase/auth";
+import { onAuthStateChanged, signOut } from "firebase/auth";
 import { auth } from "@/lib/clients/firebase";
-import { useAuthActions } from "./use-auth-actions";
-import { useQuery } from "@tanstack/react-query";
-import userService from "@/lib/services/user-service";
 
 export const useAuth = () => {
-  const { signInAnon } = useAuthActions();
   const [uid, setUid] = useState<string>();
   const [isAnon, setIsAnon] = useState<boolean>();
+  const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (user) => {
-      if (user) {
+      if (user && !user.isAnonymous) {
         setUid(user.uid);
-        setIsAnon(user.isAnonymous);
-        localStorage.setItem("isAnon", String(user.isAnonymous));
+        setIsAnon(false);
+        localStorage.setItem("isAnon", "false");
       } else {
-        signInAnon.mutate();
-        localStorage.setItem("isAnon", "true");
+        if (user?.isAnonymous) {
+          void signOut(auth);
+        }
+
         setUid(undefined);
+        localStorage.setItem("isAnon", "true");
         setIsAnon(true);
       }
+
+      setIsLoading(false);
     });
 
     return () => unsubscribe();
   }, []);
 
-  useEffect(() => {
-    const isAnon = (localStorage.getItem("isAnon") ?? "true") === "true";
-    setIsAnon(isAnon);
-  }, [isAnon, uid]);
-
   return {
     uid,
     isAnon,
+    isLoading,
   };
 };

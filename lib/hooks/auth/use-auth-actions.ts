@@ -1,7 +1,6 @@
 import { useMutation } from "@tanstack/react-query";
 import {
   GoogleAuthProvider,
-  signInAnonymously,
   signInWithPopup,
   signOut,
 } from "firebase/auth";
@@ -11,14 +10,6 @@ import { toast } from "sonner";
 import userService from "@/lib/services/user-service";
 
 export const useAuthActions = () => {
-  const signInAnon = useMutation({
-    mutationFn: async () => {
-      const cred = await signInAnonymously(auth);
-      await userService.createUserAnon(cred.user.uid);
-    },
-    onError: (error) => handleError(error, "Failed to sign in"),
-  });
-
   const signOutUser = useMutation({
     mutationFn: () => signOut(auth),
     onSuccess: () => toast.success("Signed out successfully"),
@@ -42,7 +33,6 @@ export const useAuthActions = () => {
   });
 
   return {
-    signInAnon,
     signOutUser,
     signInWithGoogle,
   };

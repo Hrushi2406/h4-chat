@@ -1,4 +1,3 @@
-import { onAuthStateChanged, signInAnonymously } from "firebase/auth";
 import {
   collection,
   doc,
@@ -8,28 +7,13 @@ import {
   where,
 } from "firebase/firestore";
 import { v4 } from "uuid";
-import { auth, db } from "@/lib/clients/firebase";
+import { db } from "@/lib/clients/firebase";
 import { generateWaitlistEntry } from "@/lib/types/waitlist";
-
-const ensureFirebaseAuthUser = async () => {
-  if (auth.currentUser) return;
-
-  await new Promise<void>((resolve) => {
-    const unsubscribe = onAuthStateChanged(auth, () => {
-      unsubscribe();
-      resolve();
-    });
-  });
-
-  if (!auth.currentUser) await signInAnonymously(auth);
-};
 
 class WaitlistService {
   async joinWaitlist(email: string) {
     const normalizedEmail = email.toLowerCase().trim();
     if (!normalizedEmail) throw new Error("Email is required");
-
-    await ensureFirebaseAuthUser();
 
     const existing = await getDocs(
       query(collection(db, "waitlist"), where("email", "==", normalizedEmail))

@@ -1,8 +1,4 @@
 import {
-  onAuthStateChanged,
-  signInAnonymously,
-} from "firebase/auth";
-import {
   collection,
   doc,
   addDoc,
@@ -40,6 +36,11 @@ export interface ThreadsPage {
   nextCursor: ThreadCursor | null;
 }
 
+const getSignedInUserId = () => {
+  const user = auth.currentUser;
+  return user && !user.isAnonymous ? user.uid : undefined;
+};
+
 const normalizeThreadData = (thread: Thread): Thread => ({
   ...thread,
   createdAt: normalizeThreadDate(thread.createdAt),
@@ -66,23 +67,6 @@ const normalizeThreadDate = (date: unknown): Date => {
   }
 
   return new Date();
-};
-
-const ensureFirebaseAuthUser = async () => {
-  if (auth.currentUser) {
-    return;
-  }
-
-  await new Promise<void>((resolve) => {
-    const unsubscribe = onAuthStateChanged(auth, () => {
-      unsubscribe();
-      resolve();
-    });
-  });
-
-  if (!auth.currentUser) {
-    await signInAnonymously(auth);
-  }
 };
 
 const removeUndefinedValues = <T>(value: T): T => {
@@ -125,8 +109,11 @@ class ThreadService {
     userId?: string;
   }): Promise<Thread> {
     try {
-      await ensureFirebaseAuthUser();
-      const resolvedUserId = userId ?? auth.currentUser?.uid;
+      const resolvedUserId = userId ?? getSignedInUserId();
+
+      if (!resolvedUserId) {
+        throw new Error("Sign in is required to create a thread");
+      }
 
       console.log("Creating new thread:", { title, userId: resolvedUserId });
 
@@ -226,7 +213,7 @@ class ThreadService {
   }): Promise<Thread | null> {
     try {
       console.log("Fetching thread: ", threadId);
-      const uid = userId ?? auth.currentUser?.uid;
+      const uid = userId ?? getSignedInUserId();
       const docRef = doc(db, colThreads, threadId);
       const docSnap = await getDoc(docRef);
 
@@ -349,8 +336,6 @@ class ThreadService {
 
   async getSharedThread({ shareId }: { shareId: string }): Promise<Thread> {
     try {
-      await ensureFirebaseAuthUser();
-
       const q = query(
         collection(db, colThreads),
         where("shareId", "==", shareId)
