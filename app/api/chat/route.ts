@@ -15,8 +15,8 @@ import { verifyFirebaseIdToken } from "@/lib/firebase-auth-server";
 import {
   closeMcpClients,
   createMcpToolContext,
-  type McpServerInput,
 } from "@/lib/mcp";
+import { getUserMcpServersFromFirestore } from "@/lib/mcp-firestore";
 import {
   COMPOSIO_META_TOOLS,
   COMPOSIO_TOOLKIT_EXAMPLES,
@@ -31,7 +31,6 @@ export async function POST(req: Request) {
     userInfo,
     authToken,
     threadId,
-    mcpServers = [],
   } = await req.json();
 
   const geo = geolocation(req);
@@ -48,9 +47,13 @@ export async function POST(req: Request) {
     verifiedUserId,
     getChatCallbackUrl(req, threadId),
   );
+  const mcpServers = await getUserMcpServersFromFirestore({
+    idToken: authToken,
+    userId: verifiedUserId,
+  });
   const mcpContext = await createMcpToolContext(
     verifiedUserId,
-    normalizeRequestMcpServers(mcpServers),
+    mcpServers,
   );
   const messagesWithFileUrls = appendUnsupportedFileUrlsToMessages(
     messages,
@@ -331,56 +334,4 @@ const createCloseMcpClientsOnce = (
     didClose = true;
     await closeMcpClients(clients);
   };
-};
-
-const normalizeRequestMcpServers = (value: unknown): McpServerInput[] => {
-  if (!Array.isArray(value)) {
-    return [];
-  }
-
-  return value
-    .map((server): McpServerInput | undefined => {
-      if (typeof server !== "object" || server === null) {
-        return undefined;
-      }
-
-      const candidate = server as Record<string, unknown>;
-      const id = typeof candidate.id === "string" ? candidate.id : undefined;
-      const url =
-        typeof candidate.url === "string" ? candidate.url.trim() : undefined;
-
-      if (!id || !url) {
-        return undefined;
-      }
-
-      return {
-        id,
-        name: typeof candidate.name === "string" ? candidate.name : undefined,
-        url,
-        transport: candidate.transport === "sse" ? "sse" : "http",
-        headers: normalizeRequestHeaders(candidate.headers),
-        enabled:
-          typeof candidate.enabled === "boolean" ? candidate.enabled : true,
-      };
-    })
-    .filter((server): server is McpServerInput => Boolean(server));
-};
-
-const normalizeRequestHeaders = (value: unknown) => {
-  if (typeof value !== "object" || value === null || Array.isArray(value)) {
-    return undefined;
-  }
-
-  const headers = Object.entries(value).reduce<Record<string, string>>(
-    (acc, [key, headerValue]) => {
-      if (typeof headerValue === "string") {
-        acc[key] = headerValue;
-      }
-
-      return acc;
-    },
-    {},
-  );
-
-  return Object.keys(headers).length > 0 ? headers : undefined;
 };

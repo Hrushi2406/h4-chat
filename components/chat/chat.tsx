@@ -26,10 +26,7 @@ import {
   useConnections,
 } from "@/lib/hooks/connections/use-connections";
 import { useQueryClient } from "@tanstack/react-query";
-import {
-  BrowserMcpServer,
-  getBrowserMcpServers,
-} from "@/lib/mcp-browser";
+import { useMcpServers } from "@/lib/hooks/mcp/use-mcp-servers";
 
 interface ChatProps {
   threadId: string;
@@ -62,7 +59,6 @@ export function Chat({ threadId, isNew = false }: ChatProps) {
   const [input, setInput] = useState("");
   const [queuedMessages, setQueuedMessages] = useState<QueuedChatMessage[]>([]);
   const [isSendingQueuedMessage, setIsSendingQueuedMessage] = useState(false);
-  const [mcpServers, setMcpServers] = useState<BrowserMcpServer[]>([]);
   const threadWriteQueueRef = useRef<Promise<void>>(Promise.resolve());
   const loadedThreadIdRef = useRef<string | null>(null);
   const previousThreadIdRef = useRef(threadId);
@@ -74,6 +70,11 @@ export function Chat({ threadId, isNew = false }: ChatProps) {
   const queryClient = useQueryClient();
   const { data: toolApps = [], refetch: refetchConnections } =
     useConnections(uid);
+  const { data: savedMcpServers = [] } = useMcpServers(uid);
+  const mcpServers = useMemo(
+    () => savedMcpServers.filter((server) => server.enabled),
+    [savedMcpServers],
+  );
 
   const { createThread, addMessageToThread } = useThreadActions();
 
@@ -178,21 +179,6 @@ export function Chat({ threadId, isNew = false }: ChatProps) {
     if (!isNewThread) return;
     setInput(readNewThreadDraft());
   }, [isNewThread]);
-
-  useEffect(() => {
-    const syncMcpServers = () => {
-      setMcpServers(getBrowserMcpServers().filter((server) => server.enabled));
-    };
-
-    syncMcpServers();
-    window.addEventListener("storage", syncMcpServers);
-    window.addEventListener("mcp-servers-changed", syncMcpServers);
-
-    return () => {
-      window.removeEventListener("storage", syncMcpServers);
-      window.removeEventListener("mcp-servers-changed", syncMcpServers);
-    };
-  }, []);
 
   const handleInputChangeWithClearSuggestions = (
     e: React.ChangeEvent<HTMLTextAreaElement>
@@ -499,7 +485,6 @@ export function Chat({ threadId, isNew = false }: ChatProps) {
         modelId: selectedModel.id,
         authToken: await auth.currentUser?.getIdToken(),
         threadId,
-        mcpServers,
         userInfo: {
           name: user?.name,
           occupation: user?.occupation,

@@ -35,34 +35,6 @@ export const getBrowserMcpServers = (): BrowserMcpServer[] => {
   }
 };
 
-export const saveBrowserMcpServer = (server: BrowserMcpServer) => {
-  const servers = getBrowserMcpServers();
-  const nextServers = [
-    ...servers.filter((item) => item.id !== server.id),
-    server,
-  ];
-
-  window.localStorage.setItem(
-    MCP_SERVERS_STORAGE_KEY,
-    JSON.stringify(nextServers)
-  );
-  window.dispatchEvent(new Event("mcp-servers-changed"));
-
-  return nextServers;
-};
-
-export const removeBrowserMcpServer = (id: string) => {
-  const nextServers = getBrowserMcpServers().filter((server) => server.id !== id);
-
-  window.localStorage.setItem(
-    MCP_SERVERS_STORAGE_KEY,
-    JSON.stringify(nextServers)
-  );
-  window.dispatchEvent(new Event("mcp-servers-changed"));
-
-  return nextServers;
-};
-
 const normalizeBrowserMcpServer = (
   value: unknown
 ): BrowserMcpServer | undefined => {

@@ -14,10 +14,7 @@ import { navToolbarSecondaryBtnClass } from "@/lib/utils";
 import { TextShimmer } from "@/components/ui/text-shimmer";
 import { useAuth } from "@/lib/hooks/auth/use-auth";
 import { useConnections } from "@/lib/hooks/connections/use-connections";
-import {
-  BrowserMcpServer,
-  getBrowserMcpServers,
-} from "@/lib/mcp-browser";
+import { useMcpServers } from "@/lib/hooks/mcp/use-mcp-servers";
 
 export default function SharedChatPage() {
   const params = useParams<{ shareId: string }>();
@@ -25,9 +22,13 @@ export default function SharedChatPage() {
   const router = useRouter();
   const [threadData, setThreadData] = useState<Thread>();
   const [error, setError] = useState<string>();
-  const [mcpServers, setMcpServers] = useState<BrowserMcpServer[]>([]);
   const { uid } = useAuth();
   const { data: toolApps = [] } = useConnections(uid);
+  const { data: savedMcpServers = [] } = useMcpServers(uid);
+  const mcpServers = useMemo(
+    () => savedMcpServers.filter((server) => server.enabled),
+    [savedMcpServers],
+  );
   const messages = useMemo(
     () => threadData?.messages.map(normalizeThreadMessage) ?? [],
     [threadData]
@@ -48,21 +49,6 @@ export default function SharedChatPage() {
     };
     fetchThread();
   }, [shareId]);
-
-  useEffect(() => {
-    const syncMcpServers = () => {
-      setMcpServers(getBrowserMcpServers().filter((server) => server.enabled));
-    };
-
-    syncMcpServers();
-    window.addEventListener("storage", syncMcpServers);
-    window.addEventListener("mcp-servers-changed", syncMcpServers);
-
-    return () => {
-      window.removeEventListener("storage", syncMcpServers);
-      window.removeEventListener("mcp-servers-changed", syncMcpServers);
-    };
-  }, []);
 
   const handleNewThread = () => {
     router.push("/chat");

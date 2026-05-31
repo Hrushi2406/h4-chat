@@ -26,6 +26,7 @@ import {
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import React, { Suspense } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import {
@@ -51,12 +52,14 @@ import {
   ConnectionToolkit,
   useConnections,
 } from "@/lib/hooks/connections/use-connections";
+import { getBrowserMcpServers } from "@/lib/mcp-browser";
+import { useMcpServers, mcpServerKeys } from "@/lib/hooks/mcp/use-mcp-servers";
+import mcpServerService from "@/lib/services/mcp-server-service";
 import {
-  BrowserMcpServer,
-  getBrowserMcpServers,
-  removeBrowserMcpServer,
-  saveBrowserMcpServer,
-} from "@/lib/mcp-browser";
+  parseMcpHeadersJson,
+  slugifyMcpId,
+  type StoredMcpServer,
+} from "@/lib/types/mcp-server";
 
 const settingsCardClass = "rounded-3xl border shadow-xs";
 const settingsPanelClass = "rounded-3xl border bg-card/50 p-4 shadow-xs";
@@ -401,70 +404,56 @@ const toolkitIcons: Record<string, React.ElementType> = {
   browser_tool: Globe,
 };
 
-const slugifyMcpId = (value: string) =>
-  value
-    .trim()
-    .toLowerCase()
-    .replace(/[^a-z0-9_-]/g, "_")
-    .replace(/_+/g, "_")
-    .replace(/^_+|_+$/g, "");
-
-const parseMcpHeaders = (value: string) => {
-  const trimmed = value.trim();
-
-  if (!trimmed) {
-    return undefined;
-  }
-
-  try {
-    const parsed: unknown = JSON.parse(trimmed);
-
-    if (
-      typeof parsed !== "object" ||
-      parsed === null ||
-      Array.isArray(parsed)
-    ) {
-      return null;
-    }
-
-    return Object.entries(parsed).reduce<Record<string, string>>(
-      (acc, [key, headerValue]) => {
-        if (typeof headerValue === "string") {
-          acc[key] = headerValue;
-        }
-
-        return acc;
-      },
-      {},
-    );
-  } catch {
-    return null;
-  }
-};
-
 const McpSettings = () => {
-  const [mcpServers, setMcpServers] = React.useState<BrowserMcpServer[]>([]);
+  const { uid } = useAuth();
+  const queryClient = useQueryClient();
+  const {
+    data: mcpServers = [],
+    isLoading,
+    refetch,
+  } = useMcpServers(uid);
   const [mcpName, setMcpName] = React.useState("");
   const [mcpId, setMcpId] = React.useState("");
   const [mcpUrl, setMcpUrl] = React.useState("");
   const [mcpHeaders, setMcpHeaders] = React.useState("");
   const [mcpTransport, setMcpTransport] =
-    React.useState<BrowserMcpServer["transport"]>("http");
+    React.useState<StoredMcpServer["transport"]>("http");
+  const [isSavingMcp, setIsSavingMcp] = React.useState(false);
+  const [pendingMcpId, setPendingMcpId] = React.useState<string>();
 
   React.useEffect(() => {
-    setMcpServers(getBrowserMcpServers());
-  }, []);
+    if (!uid || mcpServers.length > 0 || isLoading) return;
+
+    const localServers = getBrowserMcpServers();
+
+    if (localServers.length === 0) {
+      return;
+    }
+
+    Promise.all(
+      localServers.map((server) => mcpServerService.saveServer(uid, server)),
+    )
+      .then(() => refetch())
+      .catch((error) => {
+        console.error("Failed to migrate local MCP servers:", error);
+      });
+  }, [isLoading, mcpServers.length, refetch, uid]);
 
   React.useEffect(() => {
     if (mcpId) return;
     setMcpId(slugifyMcpId(mcpName));
   }, [mcpId, mcpName]);
 
-  const handleAddMcpServer = () => {
+  const handleAddMcpServer = async () => {
+    if (!uid) {
+      toast.error("Sign in to save MCP servers");
+      return;
+    }
+
     const url = mcpUrl.trim();
     const id = slugifyMcpId(mcpId || mcpName);
     const name = mcpName.trim() || id;
-    const headers = parseMcpHeaders(mcpHeaders);
+    const headers = parseMcpHeadersJson(mcpHeaders);
 
     if (!id) {
       toast.error("Give this MCP a name");
@@ -487,30 +476,66 @@ const McpSettings = () => {
       return;
     }
 
-    setMcpServers(
-      saveBrowserMcpServer({
+    setIsSavingMcp(true);
+
+    try {
+      await mcpServerService.saveServer(uid, {
         id,
         name,
         url,
         transport: mcpTransport,
         headers,
         enabled: true,
-      }),
-    );
-    setMcpName("");
-    setMcpId("");
-    setMcpUrl("");
-    setMcpHeaders("");
-    setMcpTransport("http");
-    toast.success(`${name} MCP connected`);
+      });
+      await queryClient.invalidateQueries({ queryKey: mcpServerKeys.list(uid) });
+      setMcpName("");
+      setMcpId("");
+      setMcpUrl("");
+      setMcpHeaders("");
+      setMcpTransport("http");
+      toast.success(`${name} MCP saved`);
+    } catch (error) {
+      console.error("Failed to save MCP server:", error);
+      toast.error("Unable to save MCP server");
+    } finally {
+      setIsSavingMcp(false);
+    }
   };
 
-  const handleToggleMcpServer = (server: BrowserMcpServer, enabled: boolean) =>
-    setMcpServers(saveBrowserMcpServer({ ...server, enabled }));
+  const handleToggleMcpServer = async (
+    server: StoredMcpServer,
+    enabled: boolean,
+  ) => {
+    if (!uid) return;
 
-  const handleRemoveMcpServer = (server: BrowserMcpServer) => {
-    setMcpServers(removeBrowserMcpServer(server.id));
-    toast.success(`${server.name} MCP removed`);
+    setPendingMcpId(server.id);
+
+    try {
+      await mcpServerService.updateServer(uid, server.id, { enabled });
+      await queryClient.invalidateQueries({ queryKey: mcpServerKeys.list(uid) });
+    } catch (error) {
+      console.error("Failed to update MCP server:", error);
+      toast.error("Unable to update MCP server");
+    } finally {
+      setPendingMcpId(undefined);
+    }
+  };
+
+  const handleRemoveMcpServer = async (server: StoredMcpServer) => {
+    if (!uid) return;
+
+    setPendingMcpId(server.id);
+
+    try {
+      await mcpServerService.deleteServer(uid, server.id);
+      await queryClient.invalidateQueries({ queryKey: mcpServerKeys.list(uid) });
+      toast.success(`${server.name} MCP removed`);
+    } catch (error) {
+      console.error("Failed to remove MCP server:", error);
+      toast.error("Unable to remove MCP server");
+    } finally {
+      setPendingMcpId(undefined);
+    }
   };
 
   return (
@@ -578,8 +603,13 @@ const McpSettings = () => {
             type="button"
             onClick={handleAddMcpServer}
             className={cn("self-end", settingsBtnClass)}
+            disabled={isSavingMcp || !uid}
           >
-            <Plus className="h-4 w-4" />
+            {isSavingMcp ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <Plus className="h-4 w-4" />
+            )}
             Add
           </Button>
         </div>
@@ -597,7 +627,9 @@ const McpSettings = () => {
       </div>
 
       <div className="space-y-2">
-        {mcpServers.length === 0 ? (
+        {isLoading ? (
+          <div className="h-24 animate-pulse rounded-3xl border bg-muted/30" />
+        ) : mcpServers.length === 0 ? (
           <div className="rounded-3xl border border-dashed bg-muted/20 px-4 py-8 text-center text-sm text-muted-foreground">
             No MCP servers added yet.
           </div>
@@ -647,6 +679,7 @@ const McpSettings = () => {
                   onCheckedChange={(enabled) =>
                     handleToggleMcpServer(server, enabled)
                   }
+                  disabled={pendingMcpId === server.id}
                   aria-label={`Toggle ${server.name}`}
                 />
                 <Button
@@ -655,9 +688,14 @@ const McpSettings = () => {
                   size="icon"
                   className={settingsBtnClass}
                   onClick={() => handleRemoveMcpServer(server)}
+                  disabled={pendingMcpId === server.id}
                   aria-label={`Remove ${server.name}`}
                 >
-                  <Trash2 className="h-4 w-4" />
+                  {pendingMcpId === server.id ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Trash2 className="h-4 w-4" />
+                  )}
                 </Button>
               </div>
             </div>

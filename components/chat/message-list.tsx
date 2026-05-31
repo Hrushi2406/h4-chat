@@ -18,7 +18,7 @@ import { AnimatePresence, motion } from "framer-motion";
 import { TextShimmer } from "@/components/ui/text-shimmer";
 import clsx from "clsx";
 import { getToolDisplayName } from "@/lib/types/tool-mappings";
-import type { BrowserMcpServer } from "@/lib/mcp-browser";
+import type { StoredMcpServer } from "@/lib/types/mcp-server";
 import {
   getMessageAttachments,
   getMessageContent,
@@ -102,7 +102,7 @@ interface MessageListProps {
   messages: ThreadMessage[];
   status?: "submitted" | "streaming" | "ready" | "error";
   toolApps?: ToolAppIcon[];
-  mcpServers?: BrowserMcpServer[];
+  mcpServers?: StoredMcpServer[];
 }
 
 export const MessageList = memo(function MessageList({
