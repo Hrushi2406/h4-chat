@@ -49,6 +49,12 @@ export const COMPOSIO_TOOLKITS = [
   "browser_tool",
 ] as const;
 
+const COMPOSIO_AUTH_CONFIG_ENV_BY_TOOLKIT: Partial<
+  Record<ComposioToolkit, string>
+> = {
+  twitter: "COMPOSIO_TWITTER_AUTH_CONFIG_ID",
+};
+
 export const COMPOSIO_TOOLKIT_LABELS: Record<ComposioToolkit, string> = {
   gmail: "Email",
   googlecalendar: "Calendar",
@@ -100,6 +106,28 @@ export type ComposioToolkit = (typeof COMPOSIO_TOOLKITS)[number];
 
 export const isComposioConfigured = () => Boolean(process.env.COMPOSIO_API_KEY);
 
+export const getComposioAuthConfigs = (): Partial<
+  Record<ComposioToolkit, string>
+> =>
+  Object.fromEntries(
+    Object.entries(COMPOSIO_AUTH_CONFIG_ENV_BY_TOOLKIT).flatMap(
+      ([toolkit, envKey]) => {
+        const authConfigId = process.env[envKey]?.trim();
+        return authConfigId ? [[toolkit, authConfigId]] : [];
+      }
+    )
+  ) as Partial<Record<ComposioToolkit, string>>;
+
+export const getEnabledComposioToolkits = () => {
+  const authConfigs = getComposioAuthConfigs();
+
+  return COMPOSIO_TOOLKITS.filter((toolkit) => {
+    const requiredAuthConfigEnv = COMPOSIO_AUTH_CONFIG_ENV_BY_TOOLKIT[toolkit];
+
+    return !requiredAuthConfigEnv || Boolean(authConfigs[toolkit]);
+  });
+};
+
 export const getComposioUserId = (userId: string) => `h4-chat:${userId}`;
 
 export const createComposioClient = () =>
@@ -116,9 +144,12 @@ export const createComposioSession = async (
   options: CreateComposioSessionOptions = {}
 ) => {
   const composio = createComposioClient();
+  const toolkits = getEnabledComposioToolkits();
+  const authConfigs = getComposioAuthConfigs();
 
   return composio.create(getComposioUserId(userId), {
-    toolkits: [...COMPOSIO_TOOLKITS],
+    toolkits,
+    authConfigs,
     manageConnections: {
       enable: true,
       ...(options.callbackUrl ? { callbackUrl: options.callbackUrl } : {}),
@@ -197,3 +228,8 @@ export const isSupportedComposioToolkit = (
   toolkit: string
 ): toolkit is ComposioToolkit =>
   COMPOSIO_TOOLKITS.includes(toolkit as ComposioToolkit);
+
+export const isEnabledComposioToolkit = (
+  toolkit: string
+): toolkit is ComposioToolkit =>
+  getEnabledComposioToolkits().includes(toolkit as ComposioToolkit);

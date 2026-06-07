@@ -1,7 +1,8 @@
 import {
   COMPOSIO_TOOLKIT_LABELS,
-  COMPOSIO_TOOLKITS,
   createComposioSession,
+  getEnabledComposioToolkits,
+  isEnabledComposioToolkit,
   isComposioConfigured,
   isSupportedComposioToolkit,
 } from "@/lib/composio";
@@ -33,9 +34,10 @@ export async function GET(req: Request) {
     }
 
     const session = await createComposioSession(userId);
+    const toolkits = getEnabledComposioToolkits();
     const { items } = await session.toolkits({
-      toolkits: [...COMPOSIO_TOOLKITS],
-      limit: COMPOSIO_TOOLKITS.length,
+      toolkits,
+      limit: toolkits.length,
     });
 
     return Response.json({
@@ -81,6 +83,13 @@ export async function POST(req: Request) {
 
     if (!toolkit || !isSupportedComposioToolkit(toolkit)) {
       return Response.json({ error: "Unsupported toolkit" }, { status: 400 });
+    }
+
+    if (!isEnabledComposioToolkit(toolkit)) {
+      return Response.json(
+        { error: `${toolkit} requires a configured Composio auth config` },
+        { status: 400 }
+      );
     }
 
     const origin = new URL(req.url).origin;
