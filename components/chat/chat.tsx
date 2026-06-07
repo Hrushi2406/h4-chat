@@ -576,6 +576,7 @@ const CONNECTED_APP_PROMPTS: Record<string, string> = {
   pexels: "Find stock photos and videos on Pexels",
   figma: "Summarize Figma project context",
   instagram: "Review recent Instagram activity",
+  twitter: "Draft and review X/Twitter posts",
   whatsapp: "Draft or send WhatsApp Business messages",
   strava: "Summarize my Strava activity",
   youtube: "Analyze my YouTube channel and videos",
