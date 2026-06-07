@@ -399,7 +399,6 @@ const toolkitIcons: Record<string, React.ElementType> = {
   linear: ListTodo,
   splitwise: Receipt,
   canva: Image,
-  twitter: MessageCircle,
   whatsapp: MessageCircle,
   firecrawl: Flame,
   browser_tool: Globe,
