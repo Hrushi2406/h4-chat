@@ -115,7 +115,7 @@ export const availableModels: AIModel[] = [
   },
   {
     id: "deepseek/deepseek-v4-flash",
-    name: "Sakhi Vayu",
+    name: "Sakhi 1",
     description: "Fast Sakhi model with long context and tool use",
     provider: "deepseek",
     maxTokens: 1000000,
@@ -124,7 +124,7 @@ export const availableModels: AIModel[] = [
   },
   {
     id: "deepseek/deepseek-v4-pro",
-    name: "Sakhi Agni",
+    name: "Sakhi 1 Pro",
     description: "Advanced Sakhi model for reasoning and long-context work",
     provider: "deepseek",
     maxTokens: 1000000,
