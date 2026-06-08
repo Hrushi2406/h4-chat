@@ -20,7 +20,9 @@ import {
   PlugZap,
   Receipt,
   RefreshCw,
+  Search,
   Server,
+  Star,
   Trash2,
 } from "lucide-react";
 import Link from "next/link";
@@ -404,6 +406,214 @@ const toolkitIcons: Record<string, React.ElementType> = {
   browser_tool: Globe,
 };
 
+const connectionCategoryOrder = [
+  "Google Workspace",
+  "Marketing & Social",
+  "Productivity",
+  "Developer Tools",
+  "Sales & CRM",
+  "Design & Media",
+  "Personal",
+  "Utilities",
+] as const;
+
+type ConnectionCategory = (typeof connectionCategoryOrder)[number];
+
+type ConnectionMetadata = {
+  category: ConnectionCategory;
+  useCase: string;
+  popularOrder?: number;
+};
+
+const connectionMetadata: Record<string, ConnectionMetadata> = {
+  gmail: {
+    category: "Google Workspace",
+    useCase: "Read, draft, and send email",
+    popularOrder: 1,
+  },
+  googlecalendar: {
+    category: "Google Workspace",
+    useCase: "Create events and manage schedules",
+    popularOrder: 2,
+  },
+  googledrive: {
+    category: "Google Workspace",
+    useCase: "Find and manage Drive files",
+    popularOrder: 3,
+  },
+  googledocs: {
+    category: "Google Workspace",
+    useCase: "Create and update documents",
+    popularOrder: 4,
+  },
+  googlesheets: {
+    category: "Google Workspace",
+    useCase: "Read and update spreadsheets",
+  },
+  googleslides: {
+    category: "Google Workspace",
+    useCase: "Create and edit presentations",
+  },
+  googletasks: {
+    category: "Google Workspace",
+    useCase: "Track tasks and to-dos",
+  },
+  googlemeet: {
+    category: "Google Workspace",
+    useCase: "Work with meetings and calls",
+  },
+  googlephotos: {
+    category: "Google Workspace",
+    useCase: "Search and organize photos",
+  },
+  google_maps: {
+    category: "Google Workspace",
+    useCase: "Search places, routes, and locations",
+  },
+  google_search_console: {
+    category: "Google Workspace",
+    useCase: "Inspect search performance data",
+  },
+  notion: {
+    category: "Productivity",
+    useCase: "Search and update workspace pages",
+  },
+  linear: {
+    category: "Productivity",
+    useCase: "Manage issues, projects, and cycles",
+  },
+  trello: {
+    category: "Productivity",
+    useCase: "Create cards and organize boards",
+  },
+  confluence: {
+    category: "Productivity",
+    useCase: "Search and manage team docs",
+  },
+  todoist: {
+    category: "Productivity",
+    useCase: "Capture and organize tasks",
+  },
+  github: {
+    category: "Developer Tools",
+    useCase: "Work with repos, issues, and PRs",
+  },
+  firecrawl: {
+    category: "Developer Tools",
+    useCase: "Crawl websites and extract data",
+  },
+  gemini: {
+    category: "Developer Tools",
+    useCase: "Use Google AI models and tools",
+  },
+  composio_search: {
+    category: "Developer Tools",
+    useCase: "Search across connected tools",
+  },
+  browser_tool: {
+    category: "Developer Tools",
+    useCase: "Browse and inspect web pages",
+  },
+  hubspot: {
+    category: "Sales & CRM",
+    useCase: "Manage contacts, deals, and CRM data",
+  },
+  salesforce: {
+    category: "Sales & CRM",
+    useCase: "Work with accounts and opportunities",
+  },
+  stripe: {
+    category: "Sales & CRM",
+    useCase: "Check payments, customers, and invoices",
+  },
+  shopify: {
+    category: "Sales & CRM",
+    useCase: "Manage store orders and products",
+  },
+  instagram: {
+    category: "Marketing & Social",
+    useCase: "Manage Instagram content and insights",
+    popularOrder: 5,
+  },
+  whatsapp: {
+    category: "Marketing & Social",
+    useCase: "Send and manage messages",
+  },
+  youtube: {
+    category: "Marketing & Social",
+    useCase: "Work with videos and channel data",
+    popularOrder: 6,
+  },
+  metaads: {
+    category: "Marketing & Social",
+    useCase: "Review and manage Meta campaigns",
+  },
+  googleads: {
+    category: "Marketing & Social",
+    useCase: "Manage Google ad campaigns",
+  },
+  reddit: {
+    category: "Marketing & Social",
+    useCase: "Search posts and community discussions",
+  },
+  facebook: {
+    category: "Marketing & Social",
+    useCase: "Manage Facebook pages and content",
+    popularOrder: 8,
+  },
+  linkedin: {
+    category: "Marketing & Social",
+    useCase: "Work with professional social data",
+  },
+  ahrefs: {
+    category: "Marketing & Social",
+    useCase: "Research SEO and backlink data",
+  },
+  pexels: {
+    category: "Design & Media",
+    useCase: "Find stock photos and videos",
+  },
+  figma: {
+    category: "Design & Media",
+    useCase: "Access design files and comments",
+  },
+  canva: {
+    category: "Design & Media",
+    useCase: "Create and manage visual designs",
+  },
+  elevenlabs: {
+    category: "Design & Media",
+    useCase: "Generate and manage voice audio",
+  },
+  fal_ai: {
+    category: "Design & Media",
+    useCase: "Generate images and media assets",
+  },
+  splitwise: {
+    category: "Personal",
+    useCase: "Track shared expenses and balances",
+    popularOrder: 7,
+  },
+  strava: {
+    category: "Personal",
+    useCase: "Review activities and fitness data",
+  },
+  outlook: {
+    category: "Utilities",
+    useCase: "Read and send Outlook email",
+  },
+  cats: {
+    category: "Utilities",
+    useCase: "Access the connected toolkit",
+  },
+};
+
+const getConnectionMetadata = (toolkit: ConnectionToolkit) =>
+  connectionMetadata[toolkit.slug] ?? {
+    category: "Utilities" as const,
+    useCase: `Connect ${toolkit.name} to chat`,
+  };
+
 const McpSettings = () => {
   const { uid } = useAuth();
   const queryClient = useQueryClient();
@@ -709,6 +919,7 @@ const McpSettings = () => {
 const ConnectionsSettings = () => {
   const { uid } = useAuth();
   const [pendingSlug, setPendingSlug] = React.useState<string>();
+  const [connectionSearch, setConnectionSearch] = React.useState("");
   const {
     data: toolkits = [],
     error,
@@ -716,6 +927,64 @@ const ConnectionsSettings = () => {
     isLoading,
     refetch,
   } = useConnections(uid);
+  const normalizedSearch = connectionSearch.trim().toLowerCase();
+
+  const filteredToolkits = React.useMemo(() => {
+    const sortedToolkits = [...toolkits].sort((a, b) =>
+      a.name.localeCompare(b.name),
+    );
+
+    if (!normalizedSearch) return sortedToolkits;
+
+    return sortedToolkits.filter((toolkit) => {
+      const metadata = getConnectionMetadata(toolkit);
+      const searchableText = [
+        toolkit.name,
+        toolkit.providerName,
+        toolkit.slug,
+        toolkit.status,
+        metadata.category,
+        metadata.useCase,
+      ]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase();
+
+      return searchableText.includes(normalizedSearch);
+    });
+  }, [normalizedSearch, toolkits]);
+
+  const popularToolkits = React.useMemo(
+    () =>
+      toolkits
+        .filter((toolkit) => getConnectionMetadata(toolkit).popularOrder)
+        .sort(
+          (a, b) =>
+            (getConnectionMetadata(a).popularOrder ?? Number.MAX_SAFE_INTEGER) -
+            (getConnectionMetadata(b).popularOrder ?? Number.MAX_SAFE_INTEGER),
+        ),
+    [toolkits],
+  );
+
+  const groupedToolkits = React.useMemo(() => {
+    const groups = new Map<ConnectionCategory, ConnectionToolkit[]>();
+
+    for (const category of connectionCategoryOrder) {
+      groups.set(category, []);
+    }
+
+    for (const toolkit of filteredToolkits) {
+      const metadata = getConnectionMetadata(toolkit);
+      groups.get(metadata.category)?.push(toolkit);
+    }
+
+    return connectionCategoryOrder
+      .map((category) => ({
+        category,
+        toolkits: groups.get(category) ?? [],
+      }))
+      .filter((group) => group.toolkits.length > 0);
+  }, [filteredToolkits]);
 
   const connect = async (toolkit: string) => {
     if (!uid) return;
@@ -787,21 +1056,118 @@ const ConnectionsSettings = () => {
     }
   };
 
+  const renderConnectionCard = (toolkit: ConnectionToolkit) => {
+    const Icon = toolkitIcons[toolkit.slug] ?? PlugZap;
+    const isPending = pendingSlug === toolkit.slug;
+    const metadata = getConnectionMetadata(toolkit);
+
+    return (
+      <div
+        key={toolkit.slug}
+        className={cn(
+          "grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-3 overflow-hidden",
+          settingsPanelClass,
+        )}
+      >
+        <div className="flex min-w-0 items-center gap-3">
+          <div className="grid size-10 shrink-0 place-items-center rounded-lg border bg-background shadow-xs">
+            {toolkit.logo ? (
+              <img
+                src={toolkit.logo}
+                alt=""
+                className="size-6 rounded-xs object-contain"
+              />
+            ) : (
+              <Icon className="h-5 w-5 text-muted-foreground" />
+            )}
+          </div>
+          <div className="min-w-0">
+            <div className="flex min-w-0 items-center gap-2">
+              <p className="truncate font-medium">{toolkit.name}</p>
+              {toolkit.isConnected && (
+                <Badge
+                  variant="outline"
+                  className={cn(
+                    settingsBtnClass,
+                    "hidden px-3 py-0.5 text-xs text-emerald-700 sm:inline-flex",
+                  )}
+                >
+                  Connected
+                </Badge>
+              )}
+            </div>
+            <p className="truncate text-xs text-muted-foreground">
+              {metadata.useCase}
+            </p>
+          </div>
+        </div>
+
+        {toolkit.isConnected ? (
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className={cn("shrink-0", settingsBtnClass)}
+            onClick={() => disconnect(toolkit)}
+            disabled={Boolean(pendingSlug)}
+          >
+            {isPending ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              "Disconnect"
+            )}
+          </Button>
+        ) : (
+          <Button
+            type="button"
+            size="sm"
+            variant={"secondary"}
+            className={cn("shrink-0 border", settingsBtnClass)}
+            onClick={() => connect(toolkit.slug)}
+            disabled={Boolean(pendingSlug)}
+          >
+            {isPending ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              "Connect"
+            )}
+          </Button>
+        )}
+      </div>
+    );
+  };
+
   return (
     <div className="space-y-5">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h2 className="text-lg font-semibold sm:text-xl">App Connections</h2>
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          className={cn("shrink-0", settingsBtnClass)}
-          onClick={() => refetch()}
-          disabled={isFetching || !uid}
-        >
-          <RefreshCw className={cn("w-4 h-4", isFetching && "animate-spin")} />
-          Refresh
-        </Button>
+        <div className="flex w-full items-center gap-2 sm:w-auto">
+          <div className="relative min-w-0 flex-1 sm:w-72 sm:flex-none">
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              value={connectionSearch}
+              onChange={(event) => setConnectionSearch(event.target.value)}
+              placeholder="Search apps"
+              className={cn(
+                "h-9 rounded-full pl-9 text-sm shadow-xs",
+                settingsBtnClass,
+              )}
+            />
+          </div>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className={cn("shrink-0", settingsBtnClass)}
+            onClick={() => refetch()}
+            disabled={isFetching || !uid}
+          >
+            <RefreshCw
+              className={cn("h-4 w-4", isFetching && "animate-spin")}
+            />
+            Refresh
+          </Button>
+        </div>
       </div>
 
       {error && (
@@ -812,95 +1178,47 @@ const ConnectionsSettings = () => {
         </div>
       )}
 
-      <div className="grid gap-3 sm:grid-cols-2">
-        {isLoading
-          ? Array.from({ length: 5 }).map((_, index) => (
-              <div
-                key={index}
-                className="h-24 animate-pulse rounded-3xl border bg-muted/30"
-              />
-            ))
-          : toolkits.map((toolkit) => {
-              const Icon = toolkitIcons[toolkit.slug] ?? PlugZap;
-              const isPending = pendingSlug === toolkit.slug;
+      {isLoading ? (
+        <div className="grid gap-3 sm:grid-cols-2">
+          {Array.from({ length: 6 }).map((_, index) => (
+            <div
+              key={index}
+              className="h-28 animate-pulse rounded-3xl border bg-muted/30"
+            />
+          ))}
+        </div>
+      ) : (
+        <div className="space-y-6">
+          {!normalizedSearch && popularToolkits.length > 0 && (
+            <section className="space-y-3">
+              <div className="flex items-center gap-2">
+                <Star className="h-4 w-4 text-muted-foreground" />
+                <h3 className="text-sm font-semibold">Popular</h3>
+              </div>
+              <div className="grid gap-3 sm:grid-cols-2">
+                {popularToolkits.map(renderConnectionCard)}
+              </div>
+            </section>
+          )}
 
-              return (
-                <div
-                  key={toolkit.slug}
-                  className={cn(
-                    "grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-3 overflow-hidden",
-                    settingsPanelClass,
-                  )}
-                >
-                  <div className="flex min-w-0 items-center gap-3">
-                    <div className="grid size-10 shrink-0 place-items-center rounded-lg border bg-background shadow-xs">
-                      {toolkit.logo ? (
-                        <img
-                          src={toolkit.logo}
-                          alt=""
-                          className="size-6 object-contain rounded-xs"
-                        />
-                      ) : (
-                        <Icon className="h-5 w-5 text-muted-foreground" />
-                      )}
-                    </div>
-                    <div className="min-w-0">
-                      <div className="flex min-w-0 items-center gap-2">
-                        <p className="truncate font-medium">{toolkit.name}</p>
-                        {toolkit.isConnected && (
-                          <Badge
-                            variant="outline"
-                            className={cn(
-                              settingsBtnClass,
-                              "hidden px-3 py-0.5 text-xs text-emerald-700 sm:inline-flex",
-                            )}
-                          >
-                            Connected
-                          </Badge>
-                        )}
-                      </div>
-                      <p className="truncate text-xs text-muted-foreground">
-                        {toolkit.providerName}
-                        {toolkit.status ? ` / ${toolkit.status}` : ""}
-                      </p>
-                    </div>
-                  </div>
-
-                  {toolkit.isConnected ? (
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      className={cn("shrink-0", settingsBtnClass)}
-                      onClick={() => disconnect(toolkit)}
-                      disabled={Boolean(pendingSlug)}
-                    >
-                      {isPending ? (
-                        <Loader2 className="w-4 h-4 animate-spin" />
-                      ) : (
-                        "Disconnect"
-                      )}
-                    </Button>
-                  ) : (
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant={"secondary"}
-                      className={cn("shrink-0 border", settingsBtnClass)}
-                      onClick={() => connect(toolkit.slug)}
-                      disabled={Boolean(pendingSlug)}
-                    >
-                      {isPending ? (
-                        <Loader2 className="w-4 h-4 animate-spin" />
-                      ) : (
-                        "Connect"
-                      )}
-                    </Button>
-                  )}
+          {groupedToolkits.length > 0 ? (
+            groupedToolkits.map((group) => (
+              <section key={group.category} className="space-y-3">
+                <div className="flex items-center gap-2">
+                  <h3 className="text-sm font-semibold">{group.category}</h3>
                 </div>
-              );
-            })}
-      </div>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  {group.toolkits.map(renderConnectionCard)}
+                </div>
+              </section>
+            ))
+          ) : (
+            <div className="rounded-3xl border bg-muted/20 px-4 py-8 text-center text-sm text-muted-foreground">
+              No connections match your search.
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 };

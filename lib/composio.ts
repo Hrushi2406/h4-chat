@@ -49,9 +49,9 @@ export const COMPOSIO_TOOLKITS = [
 ] as const;
 
 export const COMPOSIO_TOOLKIT_LABELS: Record<ComposioToolkit, string> = {
-  gmail: "Email",
-  googlecalendar: "Calendar",
-  googledrive: "Drive",
+  gmail: "Gmail",
+  googlecalendar: "Google Calendar",
+  googledrive: "Google Drive",
   notion: "Notion",
   linear: "Linear",
   github: "GitHub",

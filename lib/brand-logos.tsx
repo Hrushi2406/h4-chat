@@ -108,6 +108,17 @@ export const DeepSeekLogo: React.FC<{ className?: string }> = ({
   </svg>
 );
 
+export const SakhiLogo: React.FC<{ className?: string }> = ({
+  className = "w-6 h-6",
+}) => (
+  <img
+    src="/saaki-chat-transparent.png"
+    alt=""
+    className={`${className} object-contain`}
+    aria-hidden="true"
+  />
+);
+
 export const MiniMaxLogo: React.FC<{ className?: string }> = ({
   className = "w-6 h-6",
 }) => (
@@ -160,8 +171,8 @@ export const brandLogos: Record<string, BrandLogo> = {
     component: XAILogo,
   },
   deepseek: {
-    name: "DeepSeek",
-    component: DeepSeekLogo,
+    name: "Sakhi",
+    component: SakhiLogo,
   },
   minimax: {
     name: "MiniMax",
