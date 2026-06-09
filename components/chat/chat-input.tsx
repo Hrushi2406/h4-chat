@@ -7,6 +7,7 @@ import {
   CloudUpload,
   CornerDownLeft,
   FileText,
+  Mic,
   Paperclip,
   Pencil,
   Square,
@@ -17,11 +18,15 @@ import {
   ClipboardEvent,
   FormEvent,
   KeyboardEvent,
+  PointerEvent as ReactPointerEvent,
   useCallback,
+  useEffect,
   useLayoutEffect,
   useRef,
   useState,
 } from "react";
+import { toast } from "sonner";
+import { useSpeechRecognition } from "@/lib/hooks/speech/use-speech-recognition";
 import { motion } from "framer-motion";
 import { type AIModel } from "@/lib/available-models";
 import clsx from "clsx";
@@ -44,6 +49,12 @@ import {
 
 const CONTEXT_WINDOW_TOKENS = 200_000;
 const CHAT_INPUT_MAX_HEIGHT = 200;
+// How long the user must hold before press-and-hold dictation engages, so a
+// quick tap still focuses the textarea for normal typing.
+const PRESS_HOLD_THRESHOLD_MS = 350;
+// Pointer movement (px) past which we treat the gesture as a scroll/selection
+// rather than a press-and-hold.
+const PRESS_HOLD_MOVE_TOLERANCE = 10;
 const DROPZONE_ACCEPT = ALLOWED_FILE_TYPES as unknown as Record<
   string,
   string[]
@@ -125,6 +136,127 @@ export const ChatInput = ({
   const pathname = usePathname();
   const threadId = pathname.split("/").pop();
   const hasAttachments = attachments.length > 0;
+
+  // --- Press-and-hold dictation (speech-to-text) ---------------------------
+  const holdTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pointerStartRef = useRef<{ x: number; y: number } | null>(null);
+  const dictationBaseTextRef = useRef("");
+  const isDictatingRef = useRef(false);
+
+  const setInputValue = useCallback(
+    (value: string) => {
+      handleInputChange({
+        target: { value },
+      } as React.ChangeEvent<HTMLTextAreaElement>);
+    },
+    [handleInputChange],
+  );
+
+  const {
+    isSupported: isSpeechSupported,
+    isListening,
+    start: startDictation,
+    stop: stopDictation,
+  } = useSpeechRecognition({
+    onResult: (transcript) => {
+      const base = dictationBaseTextRef.current;
+      const separator = base && transcript ? " " : "";
+      setInputValue(`${base}${separator}${transcript}`);
+    },
+    onError: (error) => {
+      switch (error) {
+        case "not-allowed":
+        case "service-not-allowed":
+          toast.error("Microphone access is blocked. Enable it to dictate.");
+          break;
+        case "audio-capture":
+          toast.error("No microphone was found.");
+          break;
+        case "network":
+          toast.error("Dictation needs an internet connection in this browser.");
+          break;
+        case "language-not-supported":
+          toast.error("Dictation isn't supported for this language.");
+          break;
+        default:
+          toast.error(`Could not start dictation (${error}).`);
+      }
+    },
+  });
+
+  const clearHoldTimer = useCallback(() => {
+    if (holdTimerRef.current) {
+      clearTimeout(holdTimerRef.current);
+      holdTimerRef.current = null;
+    }
+    pointerStartRef.current = null;
+  }, []);
+
+  const endDictation = useCallback(() => {
+    clearHoldTimer();
+    if (isDictatingRef.current) {
+      isDictatingRef.current = false;
+      stopDictation();
+    }
+  }, [clearHoldTimer, stopDictation]);
+
+  const handlePointerDown = useCallback(
+    (e: ReactPointerEvent<HTMLDivElement>) => {
+      if (!isSpeechSupported || isLoading) {
+        return;
+      }
+
+      // Let the toolbar controls (upload, send, model selector) behave normally.
+      const target = e.target as HTMLElement;
+      if (target.closest("button, a, [role='combobox'], [data-no-dictation]")) {
+        return;
+      }
+
+      pointerStartRef.current = { x: e.clientX, y: e.clientY };
+      holdTimerRef.current = setTimeout(() => {
+        // Capture the text typed so far so dictation appends to it.
+        dictationBaseTextRef.current = input.trim();
+        // Avoid the on-screen keyboard fighting with the mic on mobile.
+        textareaRef.current?.blur();
+        isDictatingRef.current = true;
+        startDictation();
+      }, PRESS_HOLD_THRESHOLD_MS);
+    },
+    [isSpeechSupported, isLoading, input, startDictation],
+  );
+
+  const handlePointerMove = useCallback(
+    (e: ReactPointerEvent<HTMLDivElement>) => {
+      const start = pointerStartRef.current;
+      if (!start || isDictatingRef.current) {
+        return;
+      }
+
+      const movedFar =
+        Math.abs(e.clientX - start.x) > PRESS_HOLD_MOVE_TOLERANCE ||
+        Math.abs(e.clientY - start.y) > PRESS_HOLD_MOVE_TOLERANCE;
+
+      if (movedFar) {
+        clearHoldTimer();
+      }
+    },
+    [clearHoldTimer],
+  );
+
+  const handleContextMenu = useCallback((e: React.MouseEvent) => {
+    // Suppress the long-press selection callout while dictating.
+    if (isDictatingRef.current) {
+      e.preventDefault();
+    }
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (holdTimerRef.current) {
+        clearTimeout(holdTimerRef.current);
+      }
+    };
+  }, []);
 
   const resizeTextarea = useCallback((textarea: HTMLTextAreaElement) => {
     textarea.style.height = "auto";
@@ -323,13 +455,39 @@ export const ChatInput = ({
           <div
             className={cn(
               "relative min-w-0 flex-1 border-2 rounded-3xl focus-within:border-primary/50 focus-within:ring-2 focus-within:ring-primary/20 transition-all duration-200",
+              isListening &&
+                "border-primary/70 ring-2 ring-primary/30 select-none",
             )}
             {...getRootProps()}
+            onPointerDown={handlePointerDown}
+            onPointerMove={handlePointerMove}
+            onPointerUp={endDictation}
+            onPointerCancel={endDictation}
+            onPointerLeave={endDictation}
+            onContextMenu={handleContextMenu}
           >
             {isDragActive && (
               <div className="absolute grid place-items-center  inset-0 bg-black/40 backdrop-blur-md rounded-3xl">
                 <p className="text-white text-sm">Drop files here...</p>
               </div>
+            )}
+            {isListening && (
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                className="pointer-events-none absolute inset-0 z-10 grid place-items-center rounded-3xl bg-background/70 backdrop-blur-sm"
+              >
+                <div className="flex flex-col items-center gap-2 text-primary">
+                  <span className="relative grid h-12 w-12 place-items-center">
+                    <span className="absolute inset-0 animate-ping rounded-full bg-primary/30" />
+                    <span className="grid h-12 w-12 place-items-center rounded-full bg-primary text-primary-foreground">
+                      <Mic className="h-5 w-5" />
+                    </span>
+                  </span>
+                  <p className="text-sm font-medium">Listening… release to stop</p>
+                </div>
+              </motion.div>
             )}
             <input {...getInputProps()} />
             <form onSubmit={handleFormSubmit}>
@@ -351,10 +509,16 @@ export const ChatInput = ({
                     onChange={handleTextareaChange}
                     onKeyDown={handleKeyDown}
                     onPaste={handlePaste}
+                    autoCapitalize="sentences"
+                    autoCorrect="on"
+                    spellCheck
+                    inputMode="text"
                     placeholder={
                       isDragActive
                         ? "Drop files here..."
-                        : "Type your message..."
+                        : isSpeechSupported
+                          ? "Type your message, or press and hold to talk…"
+                          : "Type your message…"
                     }
                     className="w-full min-h-11 max-h-[200px] resize-none overflow-y-hidden rounded-2xl border-0 bg-transparent text-base leading-relaxed transition-all duration-200 focus:ring-0 focus:border-0 focus:outline-none focus-visible:ring-0 shadow-none"
                     rows={1}
