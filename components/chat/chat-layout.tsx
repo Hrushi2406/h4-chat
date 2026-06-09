@@ -153,7 +153,7 @@ const ThreadSidebar = () => {
               alt="Sakhi AI"
               className="h-7 w-7 object-contain"
             />
-            <h2 className="font-semibold">Sakhi AI</h2>
+            <h2 className="font-semibold">Sakhi</h2>
           </div>
           <div className="py-2">
             <Button
