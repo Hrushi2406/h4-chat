@@ -278,10 +278,6 @@ export const MessageList = memo(function MessageList({
       previousStatus === "submitted" && status === "streaming";
     const hasLoadedThreadMessages =
       previousSnapshot.count === 0 && currentSnapshot.count > 0;
-    const isSameThread =
-      currentSnapshot.count === 0 ||
-      previousSnapshot.count === 0 ||
-      currentSnapshot.firstId === previousSnapshot.firstId;
     const hasSwitchedThreads =
       currentSnapshot.count > 0 &&
       previousSnapshot.count > 0 &&
@@ -298,8 +294,7 @@ export const MessageList = memo(function MessageList({
       stopPinnedBottomScroll();
     } else if (
       hasNewUserMessage &&
-      !hasNewStreamingAssistantMessage &&
-      (wasNearBottomRef.current || !isSameThread)
+      !hasNewStreamingAssistantMessage
     ) {
       scrollToBottom();
     }
