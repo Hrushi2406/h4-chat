@@ -56,6 +56,7 @@ export async function POST(req: Request) {
       const tools = await getComposioTools(
         verifiedUserId,
         getChatCallbackUrl(req, threadId),
+        threadId,
       );
       console.log(
         `composio tools: +${Math.round(performance.now() - start)}ms (${Math.round(performance.now() - parallelStart)}ms since parallel start)`,
@@ -365,13 +366,17 @@ function isFileTypeSupportedByModel(
 async function getComposioTools(
   userId?: string,
   callbackUrl?: string,
+  threadId?: string,
 ): Promise<ToolSet | undefined> {
   if (!userId || !isComposioConfigured()) {
     return undefined;
   }
 
   try {
-    const session = await createComposioSession(userId, { callbackUrl });
+    const session = await createComposioSession(userId, {
+      callbackUrl,
+      threadId,
+    });
     return getWrappedComposioTools(await session.tools());
   } catch (error) {
     console.error("Failed to load Composio tools:", error);
