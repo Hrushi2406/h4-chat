@@ -4,7 +4,7 @@ export default function manifest(): MetadataRoute.Manifest {
   return {
     name: "Sakhi AI",
     short_name: "Sakhi AI",
-    description: "Fast & personalized AI chat assistant for your chats",
+    description: "Fast & personalized AI chat assistant for your conversations",
     start_url: "/",
     scope: "/",
     display: "standalone",

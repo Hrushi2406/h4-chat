@@ -124,7 +124,7 @@ export const UseCasesSection = () => {
             className="mt-5 text-sm leading-relaxed text-neutral-400 sm:text-base"
           >
             Works with 200+ apps you already use. Summarize emails, update
-            tasks, review PRs, pull reports — all in one chat.
+            tasks, review PRs, pull reports — all in one conversation.
           </motion.p>
         </motion.div>
 
