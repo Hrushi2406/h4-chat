@@ -1,6 +1,8 @@
 import type { ToolSet } from "ai";
 import { Composio } from "@composio/core";
 import { VercelProvider } from "@composio/vercel";
+import { FieldPath } from "firebase-admin/firestore";
+import { getAdminFirestore } from "@/lib/clients/firebase-admin";
 
 export const COMPOSIO_TOOLKITS = [
   "gmail",
@@ -107,6 +109,69 @@ export const createComposioClient = () =>
 
 type CreateComposioSessionOptions = {
   callbackUrl?: string;
+  threadId?: string;
+};
+
+// Creating a Tool Router session costs a Composio API round-trip. For multi-turn
+// chats we reuse the same session across messages (`composio.use`) instead of
+// recreating it. The session id lives on the thread document (`composioSessionId`,
+// alongside `shareId`) so it is co-located with the chat and cleaned up when the
+// thread is deleted; an in-memory mirror lets warm instances skip the read.
+// Sessions are scoped per thread because each thread has its own connection
+// callback URL — reusing across threads would redirect auth to the wrong chat.
+const COMPOSIO_SESSION_FIELD = "composioSessionId";
+const sessionIdCache = new Map<string, string>();
+
+const getSessionCacheKey = (userId: string, threadId?: string) =>
+  threadId ?? `user:${userId}`;
+
+const readStoredSessionId = async (
+  threadId: string
+): Promise<string | undefined> => {
+  const db = getAdminFirestore();
+  if (!db) {
+    return undefined;
+  }
+
+  try {
+    // Project only the session id — thread docs hold the full message history,
+    // which we don't want to pull onto the request's latency path.
+    const snapshot = await db
+      .collection("threads")
+      .where(FieldPath.documentId(), "==", threadId)
+      .select(COMPOSIO_SESSION_FIELD)
+      .limit(1)
+      .get();
+    const sessionId = snapshot.docs[0]?.get(COMPOSIO_SESSION_FIELD);
+    return typeof sessionId === "string" ? sessionId : undefined;
+  } catch (error) {
+    console.error(
+      "Failed to read stored Composio session id:",
+      error instanceof Error ? error.message : error
+    );
+    return undefined;
+  }
+};
+
+const persistSessionId = async (threadId: string, sessionId: string) => {
+  const db = getAdminFirestore();
+  if (!db) {
+    return;
+  }
+
+  try {
+    // update() (not set) so we never create a partial thread doc if the thread
+    // hasn't been persisted yet; the in-memory mirror still serves reuse here.
+    await db
+      .collection("threads")
+      .doc(threadId)
+      .update({ [COMPOSIO_SESSION_FIELD]: sessionId });
+  } catch (error) {
+    console.error(
+      "Failed to persist Composio session id:",
+      error instanceof Error ? error.message : error
+    );
+  }
 };
 
 export const createComposioSession = async (
@@ -114,8 +179,29 @@ export const createComposioSession = async (
   options: CreateComposioSessionOptions = {}
 ) => {
   const composio = createComposioClient();
+  const { threadId } = options;
+  const cacheKey = getSessionCacheKey(userId, threadId);
 
-  return composio.create(getComposioUserId(userId), {
+  const storedSessionId =
+    sessionIdCache.get(cacheKey) ??
+    (threadId ? await readStoredSessionId(threadId) : undefined);
+
+  if (storedSessionId) {
+    try {
+      const session = await composio.use(storedSessionId);
+      sessionIdCache.set(cacheKey, storedSessionId);
+      return session;
+    } catch (error) {
+      // Session likely expired or was revoked; fall through to recreate it.
+      sessionIdCache.delete(cacheKey);
+      console.warn(
+        `Composio session ${storedSessionId} could not be reused, recreating:`,
+        error instanceof Error ? error.message : error
+      );
+    }
+  }
+
+  const session = await composio.create(getComposioUserId(userId), {
     toolkits: [...COMPOSIO_TOOLKITS],
     manageConnections: {
       enable: true,
@@ -126,6 +212,13 @@ export const createComposioSession = async (
       maxAccountsPerToolkit: 3,
     },
   });
+
+  sessionIdCache.set(cacheKey, session.sessionId);
+  if (threadId) {
+    void persistSessionId(threadId, session.sessionId);
+  }
+
+  return session;
 };
 
 export const getWrappedComposioTools = (tools: ToolSet): ToolSet =>
