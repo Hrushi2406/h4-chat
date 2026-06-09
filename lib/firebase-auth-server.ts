@@ -1,38 +1,27 @@
-type FirebaseLookupResponse = {
-  users?: Array<{
-    localId: string;
-  }>;
-  error?: {
-    message?: string;
-  };
-};
+import { getAdminAuth } from "@/lib/clients/firebase-admin";
 
 export async function verifyFirebaseIdToken(idToken?: string) {
   if (!idToken) {
     return undefined;
   }
 
-  const apiKey = process.env.NEXT_PUBLIC_FIREBASE_API_KEY;
+  const auth = getAdminAuth();
 
-  if (!apiKey) {
+  if (!auth) {
     return undefined;
   }
 
-  const response = await fetch(
-    `https://identitytoolkit.googleapis.com/v1/accounts:lookup?key=${apiKey}`,
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ idToken }),
-    }
-  );
-
-  const data = (await response.json()) as FirebaseLookupResponse;
-
-  if (!response.ok || !data.users?.[0]?.localId) {
-    console.error("Firebase token verification failed:", data.error?.message);
+  try {
+    // verifyIdToken validates the JWT signature locally against Google's
+    // public keys (cached in-process), so this is a no-network call after
+    // the first request that warms the key cache.
+    const decoded = await auth.verifyIdToken(idToken);
+    return decoded.uid;
+  } catch (error) {
+    console.error(
+      "Firebase token verification failed:",
+      error instanceof Error ? error.message : error,
+    );
     return undefined;
   }
-
-  return data.users[0].localId;
 }

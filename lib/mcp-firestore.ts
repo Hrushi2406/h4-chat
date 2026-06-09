@@ -1,114 +1,67 @@
+import { getAdminFirestore } from "@/lib/clients/firebase-admin";
 import type { McpServerInput } from "@/lib/mcp";
 import { normalizeMcpHeaders } from "@/lib/types/mcp-server";
 
-type FirestoreValue = {
-  stringValue?: string;
-  booleanValue?: boolean;
-  mapValue?: {
-    fields?: Record<string, FirestoreValue>;
-  };
-};
-
-type FirestoreDocument = {
-  name?: string;
-  fields?: Record<string, FirestoreValue>;
-};
-
-type FirestoreListResponse = {
-  documents?: FirestoreDocument[];
-  error?: {
-    message?: string;
-  };
-};
-
-const getStringField = (
-  fields: Record<string, FirestoreValue>,
-  key: string,
-) => fields[key]?.stringValue;
-
-const getBooleanField = (
-  fields: Record<string, FirestoreValue>,
-  key: string,
-) => fields[key]?.booleanValue;
-
-const getMapField = (fields: Record<string, FirestoreValue>, key: string) => {
-  const mapFields = fields[key]?.mapValue?.fields;
-
-  if (!mapFields) {
-    return undefined;
-  }
-
-  return Object.fromEntries(
-    Object.entries(mapFields).flatMap(([headerKey, value]) =>
-      typeof value.stringValue === "string"
-        ? [[headerKey, value.stringValue]]
-        : [],
-    ),
-  );
-};
-
-const getDocumentId = (documentName?: string) => {
-  if (!documentName) {
-    return undefined;
-  }
-
-  return documentName.split("/").at(-1);
-};
+// The MCP server list rarely changes, so cache per user for a short window to
+// keep it off the hot path of every chat request. Fluid Compute reuses
+// function instances, so this cache survives across requests on a warm instance.
+const CACHE_TTL_MS = 30_000;
+const cache = new Map<string, { expiresAt: number; servers: McpServerInput[] }>();
 
 export const getUserMcpServersFromFirestore = async ({
-  idToken,
   userId,
 }: {
-  idToken?: string;
   userId?: string;
 }): Promise<McpServerInput[]> => {
-  if (!idToken || !userId) {
+  if (!userId) {
     return [];
   }
 
-  const projectId = process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID;
+  const cached = cache.get(userId);
 
-  if (!projectId) {
+  if (cached && cached.expiresAt > Date.now()) {
+    return cached.servers;
+  }
+
+  const db = getAdminFirestore();
+
+  if (!db) {
     return [];
   }
 
-  const response = await fetch(
-    `https://firestore.googleapis.com/v1/projects/${projectId}/databases/(default)/documents/users/${encodeURIComponent(
-      userId,
-    )}/mcpServers`,
-    {
-      cache: "no-store",
-      headers: {
-        Authorization: `Bearer ${idToken}`,
-      },
-    },
-  );
-  const data = (await response.json()) as FirestoreListResponse;
+  try {
+    const snapshot = await db.collection(`users/${userId}/mcpServers`).get();
 
-  if (!response.ok) {
-    console.error("Failed to load MCP servers from Firestore:", data.error?.message);
+    const servers = snapshot.docs
+      .map((doc): McpServerInput | undefined => {
+        const data = doc.data();
+        const id = typeof data.id === "string" ? data.id : doc.id;
+        const url = typeof data.url === "string" ? data.url : undefined;
+
+        if (!id || !url) {
+          return undefined;
+        }
+
+        return {
+          id,
+          name: typeof data.name === "string" ? data.name : undefined,
+          url,
+          transport: data.transport === "sse" ? "sse" : "http",
+          headers: normalizeMcpHeaders(data.headers),
+          enabled: typeof data.enabled === "boolean" ? data.enabled : true,
+        };
+      })
+      .filter((server): server is McpServerInput => Boolean(server))
+      .filter((server) => server.enabled !== false);
+
+    cache.set(userId, { expiresAt: Date.now() + CACHE_TTL_MS, servers });
+
+    return servers;
+  } catch (error) {
+    console.error(
+      "Failed to load MCP servers from Firestore:",
+      error instanceof Error ? error.message : error,
+    );
     return [];
   }
-
-  return (data.documents ?? [])
-    .map((document): McpServerInput | undefined => {
-      const fields = document.fields ?? {};
-      const id = getStringField(fields, "id") ?? getDocumentId(document.name);
-      const url = getStringField(fields, "url");
-
-      if (!id || !url) {
-        return undefined;
-      }
-
-      return {
-        id,
-        name: getStringField(fields, "name"),
-        url,
-        transport: getStringField(fields, "transport") === "sse" ? "sse" : "http",
-        headers: normalizeMcpHeaders(getMapField(fields, "headers")),
-        enabled: getBooleanField(fields, "enabled") ?? true,
-      };
-    })
-    .filter((server): server is McpServerInput => Boolean(server))
-    .filter((server) => server.enabled !== false);
 };
