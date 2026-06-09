@@ -437,7 +437,7 @@ const ThreadItemActions = ({
     <div className="absolute right-1 top-1/2 flex -translate-y-1/2 items-center gap-0.5 rounded-md bg-sidebar-accent opacity-0 transition-opacity [div[data-threadid]:focus-within_&]:opacity-100 [div[data-threadid]:hover_&]:opacity-100">
       <SidebarMenuAction
         type="button"
-        className="static size-7 translate-y-0 text-muted-foreground hover:text-foreground"
+        className="static size-7 translate-y-0 cursor-pointer text-muted-foreground hover:text-foreground"
         onClick={(e) => {
           e.stopPropagation();
           onEditThread(thread.title);
@@ -448,7 +448,7 @@ const ThreadItemActions = ({
       </SidebarMenuAction>
       <SidebarMenuAction
         type="button"
-        className="static size-7 translate-y-0 text-muted-foreground hover:text-destructive"
+        className="static size-7 translate-y-0 cursor-pointer text-muted-foreground hover:text-destructive"
         onClick={(e) => {
           e.stopPropagation();
           onDeleteThread(thread.id, thread.title);

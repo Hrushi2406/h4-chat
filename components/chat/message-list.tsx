@@ -120,8 +120,12 @@ export const MessageList = memo(function MessageList({
   const wasNearBottomRef = useRef(true);
   const pinToBottomUntilRef = useRef(0);
   const scheduledScrollRef = useRef<number | null>(null);
+  const scrollStateFrameRef = useRef<number | null>(null);
+  const resizeScrollFrameRef = useRef<number | null>(null);
   const initialLoadScrollTimerRefs = useRef<number[]>([]);
   const suppressScrollButtonUntilRef = useRef(0);
+  const showScrollToBottomRef = useRef(false);
+  const activeResponseScrollLockRef = useRef(false);
   const [showScrollToBottom, setShowScrollToBottom] = useState(false);
   const messageSnapshot = getMessageSnapshot(messages);
   const messageSnapshotKey = `${messageSnapshot.count}:${messageSnapshot.firstId ?? ""}:${
@@ -140,6 +144,32 @@ export const MessageList = memo(function MessageList({
   const loadingIndicatorIndex = messages.length;
   const bottomSpacerIndex = messages.length + (showLoadingIndicator ? 1 : 0);
   const rowCount = bottomSpacerIndex + 1;
+  const isActiveResponse = status === "submitted" || status === "streaming";
+  const latestMessage = messages.at(-1);
+  const isSettlingResponse =
+    previousStatusRef.current === "streaming" &&
+    status === "ready" &&
+    latestMessage?.role === "assistant";
+  const hasChangedThreadForRender = previousThreadIdRef.current !== threadId;
+
+  if (hasChangedThreadForRender || messages.length === 0) {
+    activeResponseScrollLockRef.current = false;
+  }
+
+  if (latestMessage?.role === "user") {
+    activeResponseScrollLockRef.current = false;
+  }
+
+  if (isActiveResponse || isSettlingResponse) {
+    activeResponseScrollLockRef.current = true;
+  }
+
+  const shouldLockActiveResponseScroll = activeResponseScrollLockRef.current;
+  const activeResponseIndex = showLoadingIndicator
+    ? loadingIndicatorIndex
+    : shouldLockActiveResponseScroll && latestMessage?.role === "assistant"
+      ? messages.length - 1
+      : -1;
   const virtualizer = useVirtualizer({
     count: rowCount,
     getScrollElement: () => scrollContainerRef.current,
@@ -158,14 +188,17 @@ export const MessageList = memo(function MessageList({
     },
     getItemKey: (index) => {
       if (index === bottomSpacerIndex) return "bottom-spacer";
-      if (index === loadingIndicatorIndex && showLoadingIndicator) {
-        return "loading-indicator";
+      if (index === activeResponseIndex && shouldLockActiveResponseScroll) {
+        return "active-response";
       }
 
       return messages[index]?.id ?? index;
     },
-    overscan: 8,
+    overscan: 5,
+    useAnimationFrameWithResizeObserver: true,
   });
+  virtualizer.shouldAdjustScrollPositionOnItemSizeChange = () =>
+    !shouldLockActiveResponseScroll;
   const virtualItems = virtualizer.getVirtualItems();
 
   useLayoutEffect(() => {
@@ -180,6 +213,11 @@ export const MessageList = memo(function MessageList({
         (messageSnapshot.count <= previousSnapshot.count &&
           messageSnapshot.lastId !== previousSnapshot.lastId));
 
+    if (shouldLockActiveResponseScroll) {
+      stopPinnedBottomScroll();
+      return;
+    }
+
     if (!hasChangedThread && !hasLoadedThreadMessages && !hasSwitchedThreads) {
       return;
     }
@@ -189,7 +227,7 @@ export const MessageList = memo(function MessageList({
     return () => {
       stopPinnedBottomScroll();
     };
-  }, [threadId, messageSnapshotKey]);
+  }, [threadId, messageSnapshotKey, shouldLockActiveResponseScroll]);
 
   useLayoutEffect(() => {
     const contentElement = contentRef.current;
@@ -200,18 +238,30 @@ export const MessageList = memo(function MessageList({
 
     const resizeObserver = new ResizeObserver(() => {
       if (Date.now() <= pinToBottomUntilRef.current) {
-        scrollToBottom("auto");
+        scheduleResizePinnedBottomScroll();
+        return;
       }
 
-      updateScrollState();
+      scheduleScrollStateUpdate();
     });
 
     resizeObserver.observe(contentElement);
 
     return () => {
       resizeObserver.disconnect();
+      cancelFrame(scrollStateFrameRef);
+      cancelFrame(resizeScrollFrameRef);
     };
   }, []);
+
+  useEffect(
+    () => () => {
+      stopPinnedBottomScroll();
+      cancelFrame(scrollStateFrameRef);
+      cancelFrame(resizeScrollFrameRef);
+    },
+    [],
+  );
 
   useEffect(() => {
     const currentSnapshot = getMessageSnapshot(messages);
@@ -219,6 +269,7 @@ export const MessageList = memo(function MessageList({
     const previousStatus = previousStatusRef.current;
     const hasChangedThread = previousThreadIdRef.current !== threadId;
     const hasNewMessage = currentSnapshot.count > previousSnapshot.count;
+    const hasNewUserMessage = hasNewMessage && messages.at(-1)?.role === "user";
     const hasNewStreamingAssistantMessage =
       status === "streaming" &&
       hasNewMessage &&
@@ -237,13 +288,16 @@ export const MessageList = memo(function MessageList({
       (currentSnapshot.firstId !== previousSnapshot.firstId ||
         (currentSnapshot.count <= previousSnapshot.count &&
           currentSnapshot.lastId !== previousSnapshot.lastId));
-    if (hasChangedThread || hasSwitchedThreads || hasLoadedThreadMessages) {
+    if (
+      !shouldLockActiveResponseScroll &&
+      (hasChangedThread || hasSwitchedThreads || hasLoadedThreadMessages)
+    ) {
       wasNearBottomRef.current = true;
       startPinnedBottomScroll();
     } else if (hasStartedResponse) {
       stopPinnedBottomScroll();
     } else if (
-      hasNewMessage &&
+      hasNewUserMessage &&
       !hasNewStreamingAssistantMessage &&
       (wasNearBottomRef.current || !isSameThread)
     ) {
@@ -253,17 +307,7 @@ export const MessageList = memo(function MessageList({
     previousStatusRef.current = status;
     previousThreadIdRef.current = threadId;
     previousMessageSnapshotRef.current = currentSnapshot;
-  }, [threadId, messages, status]);
-
-  useEffect(() => {
-    if (showLoadingIndicator && wasNearBottomRef.current) {
-      startPinnedBottomScroll();
-    }
-  }, [showLoadingIndicator]);
-
-  const updateNearBottom = () => {
-    updateScrollState();
-  };
+  }, [threadId, messages, status, shouldLockActiveResponseScroll]);
 
   const scrollToBottom = (behavior: ScrollBehavior = "smooth") => {
     const scrollElement = scrollContainerRef.current;
@@ -278,8 +322,39 @@ export const MessageList = memo(function MessageList({
     });
     suppressScrollButtonUntilRef.current =
       behavior === "smooth" ? Date.now() + 700 : 0;
-    setShowScrollToBottom(false);
+    setScrollButtonVisibility(false);
     wasNearBottomRef.current = true;
+  };
+
+  const updateNearBottom = () => {
+    scheduleScrollStateUpdate();
+  };
+
+  const scheduleScrollStateUpdate = () => {
+    if (scrollStateFrameRef.current !== null) {
+      return;
+    }
+
+    scrollStateFrameRef.current = requestAnimationFrame(() => {
+      scrollStateFrameRef.current = null;
+      updateScrollState();
+    });
+  };
+
+  const scheduleResizePinnedBottomScroll = () => {
+    if (resizeScrollFrameRef.current !== null) {
+      return;
+    }
+
+    resizeScrollFrameRef.current = requestAnimationFrame(() => {
+      resizeScrollFrameRef.current = null;
+
+      if (Date.now() <= pinToBottomUntilRef.current) {
+        scrollToBottom("auto");
+      }
+
+      updateScrollState();
+    });
   };
 
   const updateScrollState = () => {
@@ -292,7 +367,7 @@ export const MessageList = memo(function MessageList({
       suppressScrollButtonUntilRef.current = 0;
     }
 
-    setShowScrollToBottom(
+    setScrollButtonVisibility(
       Boolean(
         scrollElement &&
           !nearBottom &&
@@ -300,6 +375,15 @@ export const MessageList = memo(function MessageList({
           hasScrollableOverflow(scrollElement),
       ),
     );
+  };
+
+  const setScrollButtonVisibility = (nextVisible: boolean) => {
+    if (showScrollToBottomRef.current === nextVisible) {
+      return;
+    }
+
+    showScrollToBottomRef.current = nextVisible;
+    setShowScrollToBottom(nextVisible);
   };
 
   const startPinnedBottomScroll = () => {
@@ -499,37 +583,25 @@ const ActiveMessageItem = ({
 };
 
 const LoadingMessage = () => (
-  <motion.div
-    initial={{
-      opacity: 0,
-      y: 10,
-    }}
-    animate={{
-      opacity: 1,
-      y: 0,
-    }}
-    exit={{
-      opacity: 0,
-      y: -10,
-    }}
-    transition={{
-      duration: 0.2,
-      ease: "easeOut",
-    }}
-    className="flex min-w-0 w-full justify-start"
-  >
-    <div
-      className={`min-w-0 w-full max-w-full md:w-auto md:max-w-[75%] ${heightClass} rounded-lg py-3 text-foreground`}
-    >
-      <TextShimmer
-        className="text-sm md:text-base leading-loose [--base-color:theme(colors.blue.600)] [--base-gradient-color:theme(colors.blue.200)] dark:[--base-color:theme(colors.blue.700)] dark:[--base-gradient-color:theme(colors.blue.400)]"
-        duration={1.5}
-        spread={1.5}
+  <div className="group/message min-w-0">
+    <div className="flex min-w-0 w-full justify-start">
+      <div
+        className={clsx(
+          "min-w-0 leading-7 w-full max-w-full md:w-auto md:max-w-[75%]",
+          "text-foreground rounded-lg pt-3 pb-1",
+          heightClass,
+        )}
       >
-        Generating response...
-      </TextShimmer>
+        <TextShimmer
+          className="text-sm md:text-base leading-loose [--base-color:theme(colors.blue.600)] [--base-gradient-color:theme(colors.blue.200)] dark:[--base-color:theme(colors.blue.700)] dark:[--base-gradient-color:theme(colors.blue.400)]"
+          duration={1.5}
+          spread={1.5}
+        >
+          Generating response...
+        </TextShimmer>
+      </div>
     </div>
-  </motion.div>
+  </div>
 );
 
 const MessageItemContent = memo(
@@ -1274,6 +1346,15 @@ const isNearBottom = (element: HTMLElement | null) => {
 const hasScrollableOverflow = (element: HTMLElement) =>
   element.scrollHeight - element.clientHeight > scrollBottomThreshold;
 
+const cancelFrame = (frameRef: { current: number | null }) => {
+  if (frameRef.current === null) {
+    return;
+  }
+
+  cancelAnimationFrame(frameRef.current);
+  frameRef.current = null;
+};
+
 const getMessageSnapshot = (messages: ThreadMessage[]) => ({
   count: messages.length,
   firstId: messages[0]?.id,
@@ -1303,12 +1384,27 @@ const MessageMetadataRow = ({
 }: {
   message: ThreadMessage;
   showCopy: boolean;
-}) => (
-  <div className="flex items-center justify-start gap-1 text-muted-foreground/70">
-    <MessageTokenUsage message={message} />
-    {showCopy && <MessageCopyButton message={message} />}
-  </div>
-);
+}) => {
+  if (!showCopy && !hasTokenUsage(message)) {
+    return null;
+  }
+
+  return (
+    <div className="flex items-center justify-start gap-1 text-muted-foreground/70">
+      <MessageTokenUsage message={message} />
+      {showCopy && <MessageCopyButton message={message} />}
+    </div>
+  );
+};
+
+const hasTokenUsage = (message: ThreadMessage) => {
+  const metadata = message.metadata;
+  const inputTokens = metadata?.inputTokens ?? 0;
+  const outputTokens = metadata?.outputTokens ?? 0;
+  const totalTokens = metadata?.totalTokens ?? inputTokens + outputTokens;
+
+  return totalTokens > 0;
+};
 
 const MessageTokenUsage = ({ message }: { message: ThreadMessage }) => {
   const metadata = message.metadata;
