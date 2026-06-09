@@ -65,7 +65,9 @@ export default function ChatLayout({
         <ThreadSidebar />
         <SidebarInset className="min-h-0 min-w-0 flex-1">
           <Navbar />
-          <div className="min-h-0 min-w-0 flex-1 overflow-hidden">{children}</div>
+          <div className="min-h-0 min-w-0 flex-1 overflow-hidden">
+            {children}
+          </div>
         </SidebarInset>
       </div>
     </SidebarProvider>
@@ -151,7 +153,7 @@ const ThreadSidebar = () => {
               alt="Sakhi AI"
               className="h-7 w-7 object-contain"
             />
-            <h2 className="font-semibold">Sakhi</h2>
+            <h2 className="font-semibold">Sakhi AI</h2>
           </div>
           <div className="py-2">
             <Button
@@ -255,7 +257,7 @@ const ThreadsList = ({
           onLoadMore();
         }
       },
-      { root: scrollRoot, rootMargin: "120px" }
+      { root: scrollRoot, rootMargin: "120px" },
     );
 
     observer.observe(node);
@@ -365,10 +367,7 @@ const ThreadItem = ({
 
   return (
     <SidebarMenuItem>
-      <div
-        className="relative"
-        data-threadid={thread.id}
-      >
+      <div className="relative" data-threadid={thread.id}>
         {isEditing ? (
           <div className="flex h-8 items-center gap-1 rounded-md bg-sidebar-accent px-2">
             <Input
