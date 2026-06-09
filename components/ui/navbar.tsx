@@ -34,7 +34,7 @@ export default function Navbar() {
             onClick={handleNewThread}
           >
             <Plus className="h-4 w-4 shrink-0" />
-            <span className="sr-only md:not-sr-only md:inline">New Thread</span>
+            <span className="sr-only md:not-sr-only md:inline">New Chat</span>
           </Button>
           <Button
             variant="secondary"
