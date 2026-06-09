@@ -68,34 +68,40 @@ const settingsPanelClass = "rounded-3xl border bg-card/50 p-4 shadow-xs";
 const settingsControlClass = "rounded-full shadow-xs";
 const settingsBtnClass = "rounded-full";
 
-const SETTINGS_TABS = [
-  "account",
-  "customization",
-  "connections",
-  "mcp",
-] as const;
+const SETTINGS_TABS = ["account", "connections", "mcp"] as const;
 type SettingsTab = (typeof SETTINGS_TABS)[number];
 
 const isSettingsTab = (value: string): value is SettingsTab =>
   SETTINGS_TABS.includes(value as SettingsTab);
+
+const resolveSettingsTab = (value: string): SettingsTab => {
+  if (value === "customization") return "account";
+  return isSettingsTab(value) ? value : "account";
+};
 
 function SettingsPageInner() {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const tabParam = searchParams.get("tab") ?? "";
-  const tabFromUrl: SettingsTab = isSettingsTab(tabParam)
-    ? tabParam
-    : "account";
+  const tabFromUrl = resolveSettingsTab(tabParam);
   const [activeTab, setActiveTab] = React.useState<SettingsTab>(tabFromUrl);
 
   React.useEffect(() => {
     setActiveTab(tabFromUrl);
   }, [tabFromUrl]);
 
+  React.useEffect(() => {
+    if (tabParam === "customization") {
+      const next = new URLSearchParams(searchParams.toString());
+      next.set("tab", "account");
+      router.replace(`${pathname}?${next.toString()}`, { scroll: false });
+    }
+  }, [pathname, router, searchParams, tabParam]);
+
   const handleTabChange = React.useCallback(
     (value: string) => {
-      const nextTab = isSettingsTab(value) ? value : "account";
+      const nextTab = resolveSettingsTab(value);
       setActiveTab(nextTab);
       const next = new URLSearchParams(searchParams.toString());
       next.set("tab", nextTab);
@@ -128,12 +134,6 @@ function SettingsPageInner() {
               Account
             </TabsTrigger>
             <TabsTrigger
-              value="customization"
-              className={cn(settingsBtnClass, "h-8 shrink-0 px-4")}
-            >
-              Customization
-            </TabsTrigger>
-            <TabsTrigger
               value="connections"
               className={cn(settingsBtnClass, "h-8 shrink-0 px-4")}
             >
@@ -155,13 +155,6 @@ function SettingsPageInner() {
           <Card className={settingsCardClass}>
             <CardContent className="">
               <AccountSettings />
-            </CardContent>
-          </Card>
-        </TabsContent>
-        <TabsContent value="customization">
-          <Card className={settingsCardClass}>
-            <CardContent className="">
-              <CustomizationSettings />
             </CardContent>
           </Card>
         </TabsContent>
@@ -201,14 +194,57 @@ const AccountSettings = () => {
   const { signOutUser } = useAuthActions();
 
   return (
-    <div className="space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <h2 className="text-xl font-semibold">Account Settings</h2>
+    <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,2fr)]">
+      <section className="flex flex-col rounded-3xl border bg-muted/25 p-5 shadow-xs">
+        <div className="flex flex-1 flex-col justify-center">
+          <div className="flex flex-col items-center text-center">
+            <div className="h-20 w-20 overflow-hidden rounded-full border bg-muted shadow-xs">
+              {user?.avatar ? (
+                <img
+                  src={user.avatar}
+                  loading="lazy"
+                  alt={user?.name || "User avatar"}
+                  className="h-full w-full object-cover"
+                  onError={(e) => {
+                    e.currentTarget.onerror = null;
+                    e.currentTarget.src =
+                      "https://via.placeholder.com/150?text=Error";
+                  }}
+                />
+              ) : (
+                <div className="h-full w-full bg-muted flex items-center justify-center">
+                  <span className="text-3xl font-medium text-muted-foreground">
+                    {user?.name?.charAt(0) || user?.email?.charAt(0) || "?"}
+                  </span>
+                </div>
+              )}
+            </div>
+            <div className="mt-4 min-w-0">
+              <p className="truncate font-medium">
+                {user?.name || "Anonymous User"}
+              </p>
+              <p className="mt-1 break-all text-sm text-muted-foreground">
+                {user?.email || "No email provided"}
+              </p>
+            </div>
+          </div>
+
+          <div className="mx-auto mt-6 w-full max-w-48">
+            <div className="mb-2 flex items-center justify-between gap-3">
+              <p className="text-xs text-muted-foreground">Usage</p>
+              <div className="text-xs text-muted-foreground">{80}/400</div>
+            </div>
+            <Progress value={25} max={400} className="h-2 w-full" />
+          </div>
+        </div>
         <Button
           type="button"
           variant="secondary"
           size="sm"
-          className={cn(settingsBtnClass, "h-7 px-2.5 text-xs")}
+          className={cn(
+            settingsBtnClass,
+            "mt-6 h-7 w-full px-2.5 text-xs lg:mt-auto",
+          )}
           onClick={() => signOutUser.mutate()}
           disabled={signOutUser.isPending}
         >
@@ -219,52 +255,8 @@ const AccountSettings = () => {
           )}
           Log out
         </Button>
-      </div>
-      <div className="grid gap-4">
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
-          <div className="h-12 w-12 rounded-full overflow-hidden">
-            {user?.avatar ? (
-              <img
-                src={user.avatar}
-                loading="lazy"
-                alt={user?.name || "User avatar"}
-                className="h-full w-full object-cover"
-                onError={(e) => {
-                  e.currentTarget.onerror = null;
-                  e.currentTarget.src =
-                    "https://via.placeholder.com/150?text=Error";
-                }}
-              />
-            ) : (
-              <div className="h-full w-full bg-muted flex items-center justify-center">
-                <span className="text-xl font-medium text-muted-foreground">
-                  {user?.name?.charAt(0) || user?.email?.charAt(0) || "?"}
-                </span>
-              </div>
-            )}
-          </div>
-          <div>
-            <p className="font-medium">{user?.name || "Anonymous User"}</p>
-            <p className="text-sm text-muted-foreground">
-              {user?.email || "No email provided"}
-            </p>
-          </div>
-          <div className="w-full sm:ml-auto sm:w-auto">
-            <div className="flex justify-between items-center mb-0">
-              <p className="text-xs text-muted-foreground ">Usage</p>
-              <div className="flex justify-end text-xs text-muted-foreground">
-                {80}/400
-              </div>
-            </div>
-
-            <div className="flex justify-between items-center mb-2"> </div>
-            <Progress value={25} max={400} className="h-2 w-full sm:w-48" />
-            <p className="mt-2 text-xs text-muted-foreground sm:text-right">
-              Demo usage
-            </p>
-          </div>
-        </div>
-      </div>
+      </section>
+      <CustomizationSettings />
     </div>
   );
 };

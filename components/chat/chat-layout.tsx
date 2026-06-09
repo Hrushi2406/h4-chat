@@ -7,6 +7,7 @@ import {
   SidebarGroup,
   SidebarGroupLabel,
   SidebarGroupContent,
+  SidebarFooter,
   SidebarHeader,
   SidebarInset,
   SidebarMenu,
@@ -30,7 +31,6 @@ import {
   AlertDialogDescription,
 } from "@/components/ui/alert-dialog";
 import {
-  Settings,
   MessageSquare,
   Plus,
   Edit2,
@@ -38,7 +38,7 @@ import {
   Check,
   X,
   Loader2,
-  Share,
+  Settings2,
 } from "lucide-react";
 import Link from "next/link";
 import { useRouter, usePathname } from "next/navigation";
@@ -53,6 +53,8 @@ import {
 } from "@/lib/types/thread";
 import { useAuth } from "@/lib/hooks/auth/use-auth";
 import Navbar from "../ui/navbar";
+import { useUser } from "@/lib/hooks/user/use-user";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 
 export default function ChatLayout({
   children,
@@ -76,6 +78,7 @@ export default function ChatLayout({
 
 const ThreadSidebar = () => {
   const { uid } = useAuth();
+  const { data: user } = useUser();
   const {
     data: threads = [],
     isLoading,
@@ -186,6 +189,14 @@ const ThreadSidebar = () => {
             />
           )}
         </SidebarContent>
+        <SidebarFooter className="px-1.5 pb-1 pt-3">
+          <SidebarUserFooter
+            name={user?.name}
+            email={user?.email}
+            avatar={user?.avatar}
+            fallbackSeed={user?.name || user?.email || uid}
+          />
+        </SidebarFooter>
       </Sidebar>
 
       <DeleteConfirmationDialog
@@ -197,6 +208,68 @@ const ThreadSidebar = () => {
       />
     </>
   );
+};
+
+interface SidebarUserFooterProps {
+  name?: string;
+  email?: string;
+  avatar?: string;
+  fallbackSeed?: string;
+}
+
+const SidebarUserFooter = ({
+  name,
+  email,
+  avatar,
+  fallbackSeed,
+}: SidebarUserFooterProps) => {
+  const displayName = name?.trim() || "Anonymous User";
+  const displayEmail = email?.trim() || "No email provided";
+  const initials = getUserInitials(fallbackSeed || displayName);
+
+  return (
+    <Link
+      href="/settings"
+      aria-label="Open settings"
+      className="flex items-center gap-2 rounded-md px-1 py-0 hover:bg-sidebar-accent"
+    >
+      <Avatar className="size-7 bg-primary text-primary-foreground">
+        {avatar ? (
+          <AvatarImage
+            src={avatar}
+            alt={`${displayName} avatar`}
+            className="object-cover"
+          />
+        ) : null}
+        <AvatarFallback className="bg-primary text-xs font-medium uppercase text-primary-foreground">
+          {initials}
+        </AvatarFallback>
+      </Avatar>
+
+      <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+        <p className="truncate text-sm font-medium leading-4">{displayName}</p>
+        <p className="truncate text-xs leading-4 text-muted-foreground">
+          {displayEmail}
+        </p>
+      </div>
+
+      <Settings2 className="h-4 w-4 shrink-0 text-muted-foreground" />
+    </Link>
+  );
+};
+
+const getUserInitials = (value: string) => {
+  const words = value.trim().split(/\s+/).filter(Boolean);
+
+  if (!words.length) {
+    return "?";
+  }
+
+  if (words.length === 1) {
+    return words[0].slice(0, 2).toUpperCase();
+  }
+
+  return `${words[0][0]}${words[1][0]}`.toUpperCase();
 };
 
 const LoadingState = () => (
