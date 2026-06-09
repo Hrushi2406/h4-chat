@@ -1,6 +1,6 @@
 const APP_NAME = "Sakhi AI";
-const DEFAULT_SHARED_TITLE = `Shared thread | ${APP_NAME}`;
-const DEFAULT_SHARED_DESCRIPTION = `Someone shared a thread with you on ${APP_NAME}.`;
+const DEFAULT_SHARED_TITLE = `Shared chat | ${APP_NAME}`;
+const DEFAULT_SHARED_DESCRIPTION = `Someone shared a chat with you on ${APP_NAME}.`;
 
 type FirestoreValue = {
   stringValue?: string;
@@ -102,9 +102,9 @@ const buildSharedChatPreview = (
   chatTitle?: string
 ): SharedChatPreview => {
   const sharedBy = ownerName ?? "Someone";
-  const resolvedChatTitle = chatTitle ?? "a thread";
+  const resolvedChatTitle = chatTitle ?? "a chat";
   const title = `${sharedBy} shared ${resolvedChatTitle} with you`;
-  const description = `Catch up on the ${APP_NAME} thread ${sharedBy} sent you.`;
+  const description = `Catch up on the ${APP_NAME} chat ${sharedBy} sent you.`;
 
   return {
     title,
