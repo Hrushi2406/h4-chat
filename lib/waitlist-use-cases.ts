@@ -92,7 +92,7 @@ export const WAITLIST_USE_CASE_CATEGORIES: WaitlistUseCaseCategory[] = [
   {
     id: "growth",
     label: "Sales & Growth",
-    tagline: "Pipeline, payments, and performance — one conversation away.",
+    tagline: "Pipeline, payments, and performance — one chat away.",
     cases: [
       {
         slug: "hubspot",
