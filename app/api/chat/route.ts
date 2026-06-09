@@ -25,7 +25,7 @@ import {
 import { IUser } from "@/lib/types/user";
 
 export async function POST(req: Request) {
-  const latency = createLatencyLogger("chat");
+  const latency = createLatencyLogger();
 
   const {
     messages,
@@ -44,6 +44,8 @@ export async function POST(req: Request) {
     return new Response("Invalid model ID", { status: 400 });
   }
 
+  console.log("using model: ", model.id);
+
   const verifiedUserId = await verifyFirebaseIdToken(authToken);
   latency.step("firebase auth");
 
@@ -56,7 +58,7 @@ export async function POST(req: Request) {
         getChatCallbackUrl(req, threadId),
       );
       console.log(
-        `[chat] composio tools: +${Math.round(performance.now() - start)}ms (${Math.round(performance.now() - parallelStart)}ms since parallel start)`,
+        `composio tools: +${Math.round(performance.now() - start)}ms (${Math.round(performance.now() - parallelStart)}ms since parallel start)`,
       );
       return tools;
     })(),
@@ -66,12 +68,12 @@ export async function POST(req: Request) {
         userId: verifiedUserId,
       });
       console.log(
-        `[chat] mcp firestore: +${Math.round(performance.now() - start)}ms (${Math.round(performance.now() - parallelStart)}ms since parallel start)`,
+        `mcp firestore: +${Math.round(performance.now() - start)}ms (${Math.round(performance.now() - parallelStart)}ms since parallel start)`,
       );
       const ctxStart = performance.now();
       const ctx = await createMcpToolContext(verifiedUserId, mcpServers);
       console.log(
-        `[chat] mcp clients: +${Math.round(performance.now() - ctxStart)}ms (${Math.round(performance.now() - parallelStart)}ms since parallel start)`,
+        `mcp clients: +${Math.round(performance.now() - ctxStart)}ms (${Math.round(performance.now() - parallelStart)}ms since parallel start)`,
       );
       return ctx;
     })(),
@@ -113,11 +115,6 @@ export async function POST(req: Request) {
     ignoreIncompleteToolCalls: true,
   });
   latency.step("convert messages", { contextMessages: contextMessages.length });
-
-  console.log(`[chat] pre-streamText total: ${latency.elapsed()}ms`, {
-    model: model.id,
-    threadId,
-  });
 
   const result = streamText({
     model: model.id,
@@ -169,7 +166,7 @@ export async function POST(req: Request) {
         if (firstChunk) {
           firstChunk = false;
           console.log(
-            `[chat] first stream chunk: ${Math.round(performance.now() - requestStart)}ms since request start`,
+            `first stream chunk: ${Math.round(performance.now() - requestStart)}ms since request start`,
           );
         }
         controller.enqueue(chunk);
@@ -405,18 +402,17 @@ const createCloseMcpClientsOnce = (
   };
 };
 
-const createLatencyLogger = (scope: string) => {
+const createLatencyLogger = () => {
   const start = performance.now();
   let last = start;
 
   return {
     step: (name: string, extra?: Record<string, unknown>) => {
       const now = performance.now();
-      const line = `[${scope}] ${name}: +${Math.round(now - last)}ms (${Math.round(now - start)}ms total)`;
+      const line = `${name}: +${Math.round(now - last)}ms (${Math.round(now - start)}ms total)`;
       console.log(extra ? `${line} ${JSON.stringify(extra)}` : line);
       last = now;
     },
-    elapsed: () => Math.round(performance.now() - start),
     start,
   };
 };
