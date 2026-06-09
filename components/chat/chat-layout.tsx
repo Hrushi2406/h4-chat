@@ -153,7 +153,7 @@ const ThreadSidebar = () => {
               alt="Sakhi AI"
               className="h-7 w-7 object-contain"
             />
-            <h2 className="font-semibold">Sakhi</h2>
+            <h2 className="font-semibold">Threads</h2>
           </div>
           <div className="py-2">
             <Button
@@ -163,7 +163,7 @@ const ThreadSidebar = () => {
               onClick={handleNewThreadClick}
             >
               <Plus className="h-4 w-4" />
-              New Chat
+              New Thread
             </Button>
           </div>
         </SidebarHeader>
@@ -202,14 +202,14 @@ const ThreadSidebar = () => {
 const LoadingState = () => (
   <div className="flex flex-col items-center justify-center py-6 text-center">
     <Loader2 className="h-6 w-6 text-muted-foreground mb-2 animate-spin" />
-    <p className="text-sm text-muted-foreground">Loading chats...</p>
+    <p className="text-sm text-muted-foreground">Loading threads...</p>
   </div>
 );
 
 const EmptyState = () => (
   <div className="flex flex-col items-center justify-center py-6 text-center">
     <MessageSquare className="h-6 w-6 text-muted-foreground mb-2" />
-    <p className="text-sm text-muted-foreground">No chats yet</p>
+    <p className="text-sm text-muted-foreground">No threads yet</p>
   </div>
 );
 
@@ -305,10 +305,10 @@ const ThreadsList = ({
             {isLoadingMoreThreads ? (
               <>
                 <Loader2 className="h-4 w-4 animate-spin" />
-                Loading older chats...
+                Loading older threads...
               </>
             ) : (
-              "Load older chats"
+              "Load older threads"
             )}
           </Button>
         ) : null}
@@ -384,7 +384,7 @@ const ThreadItem = ({
               onClick={handleSaveEdit}
             >
               <Check className="h-4 w-4" />
-              <span className="sr-only">Save chat title</span>
+              <span className="sr-only">Save thread title</span>
             </Button>
             <Button
               variant="ghost"
@@ -393,7 +393,7 @@ const ThreadItem = ({
               onClick={handleCancelEdit}
             >
               <X className="h-4 w-4" />
-              <span className="sr-only">Cancel editing chat title</span>
+              <span className="sr-only">Cancel editing thread title</span>
             </Button>
           </div>
         ) : (
@@ -443,7 +443,7 @@ const ThreadItemActions = ({
         }}
       >
         <Edit2 className="h-4 w-4" />
-        <span className="sr-only">Edit chat title</span>
+        <span className="sr-only">Edit thread title</span>
       </SidebarMenuAction>
       <SidebarMenuAction
         type="button"
@@ -454,7 +454,7 @@ const ThreadItemActions = ({
         }}
       >
         <Trash2 className="h-4 w-4" />
-        <span className="sr-only">Delete chat</span>
+        <span className="sr-only">Delete thread</span>
       </SidebarMenuAction>
     </div>
   );
@@ -479,9 +479,9 @@ const DeleteConfirmationDialog = ({
     <AlertDialog open={open} onOpenChange={onCancel}>
       <AlertDialogContent>
         <AlertDialogHeader>
-          <AlertDialogTitle>Delete Chat</AlertDialogTitle>
+          <AlertDialogTitle>Delete Thread</AlertDialogTitle>
           <AlertDialogDescription>
-            {`Are you sure you want to delete "${threadToDelete?.title}"? This action cannot be undone and all messages in this chat will be permanently deleted.`}
+            {`Are you sure you want to delete "${threadToDelete?.title}"? This action cannot be undone and all messages in this thread will be permanently deleted.`}
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
@@ -491,7 +491,7 @@ const DeleteConfirmationDialog = ({
           <AlertDialogAction
             onClick={onConfirm}
             disabled={isDeleting}
-            aria-label="Confirm delete chat"
+            aria-label="Confirm delete thread"
           >
             {isDeleting ? (
               <>

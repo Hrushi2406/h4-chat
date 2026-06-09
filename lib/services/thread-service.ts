@@ -112,7 +112,7 @@ class ThreadService {
       const resolvedUserId = userId ?? getSignedInUserId();
 
       if (!resolvedUserId) {
-        throw new Error("Sign in is required to create a chat");
+        throw new Error("Sign in is required to create a thread");
       }
 
       console.log("Creating new thread:", { title, userId: resolvedUserId });
@@ -297,7 +297,7 @@ class ThreadService {
 
       if (!threadDoc.exists()) {
         console.error("Thread not found when adding message:", { threadId });
-        throw new Error("Chat not found");
+        throw new Error("Thread not found");
       }
 
       const threadData = threadDoc.data() as Thread;
@@ -345,7 +345,7 @@ class ThreadService {
         normalizeThreadData(doc.data() as Thread)
       );
 
-      if (threads.length === 0) throw new Error("Chat not found");
+      if (threads.length === 0) throw new Error("Thread not found");
       return threads[0];
     } catch (error) {
       console.error("Failed to get shared thread: ", { shareId }, error);

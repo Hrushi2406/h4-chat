@@ -44,7 +44,7 @@ export default function SharedChatPage() {
         setThreadData(thread);
       } catch (error) {
         console.error("Failed to get shared thread: ", { shareId }, error);
-        setError("This shared chat could not be found.");
+        setError("This shared thread could not be found.");
       }
     };
     fetchThread();
@@ -67,7 +67,7 @@ export default function SharedChatPage() {
             <div className="min-w-0">
               <h1 className="truncate text-lg font-semibold">Sakhi AI</h1>
               <p className="truncate text-xs text-muted-foreground md:hidden">
-                Shared chat
+                Shared thread
               </p>
             </div>
           </div>
@@ -82,7 +82,7 @@ export default function SharedChatPage() {
             >
               <Plus className="h-4 w-4 shrink-0" />
               <span className="sr-only md:not-sr-only md:inline">
-                New Chat
+                New Thread
               </span>
             </Button>
 
@@ -107,7 +107,7 @@ export default function SharedChatPage() {
         <main className="flex min-h-0 flex-1 items-center justify-center px-4 text-center">
           <div className="max-w-sm space-y-2">
             <h2 className="text-lg font-medium text-foreground">
-              Shared chat unavailable
+              Shared thread unavailable
             </h2>
             <p className="text-sm text-muted-foreground">{error}</p>
           </div>
@@ -120,7 +120,7 @@ export default function SharedChatPage() {
             className="h-12 w-12 object-contain"
           />
           <TextShimmer className="text-sm font-medium leading-loose [--base-color:theme(colors.blue.400)] [--base-gradient-color:theme(colors.blue.600)] dark:[--base-color:theme(colors.blue.700)] dark:[--base-gradient-color:theme(colors.blue.400)]">
-            Loading shared chat...
+            Loading shared thread...
           </TextShimmer>
         </main>
       ) : (
