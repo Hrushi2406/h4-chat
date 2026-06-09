@@ -63,7 +63,6 @@ export async function POST(req: Request) {
     (async () => {
       const start = performance.now();
       const mcpServers = await getUserMcpServersFromFirestore({
-        idToken: authToken,
         userId: verifiedUserId,
       });
       console.log(
