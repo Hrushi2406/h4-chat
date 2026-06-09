@@ -18,7 +18,7 @@ const stix = STIX_Two_Text({
 export const metadata: Metadata = {
   applicationName: "Sakhi AI",
   title: "Sakhi AI",
-  description: "Fast & personalized AI chat assistant for your conversations",
+  description: "Fast & personalized AI chat assistant for your chats",
   manifest: "/manifest.webmanifest",
   appleWebApp: {
     capable: true,

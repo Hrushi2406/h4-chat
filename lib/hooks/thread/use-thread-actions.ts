@@ -169,7 +169,7 @@ export const useThreadActions = () => {
       } else {
         qc.removeQueries({ queryKey: threadKeys.detail(variables.threadId) });
       }
-      handleError(error, "Failed to create thread");
+      handleError(error, "Failed to create chat");
     },
   });
 
@@ -186,7 +186,7 @@ export const useThreadActions = () => {
       );
       qc.invalidateQueries({ queryKey: threadKeys.all });
     },
-    onError: (error) => handleError(error, "Failed to update thread"),
+    onError: (error) => handleError(error, "Failed to update chat"),
   });
 
   const deleteThread = useMutation({
@@ -198,7 +198,7 @@ export const useThreadActions = () => {
       );
       qc.invalidateQueries({ queryKey: threadKeys.all });
     },
-    onError: (error) => handleError(error, "Failed to delete thread"),
+    onError: (error) => handleError(error, "Failed to delete chat"),
   });
 
   const addMessageToThread = useMutation({
@@ -232,7 +232,7 @@ export const useThreadActions = () => {
         }))
       );
     },
-    onError: (error) => handleError(error, "Failed to add message to thread"),
+    onError: (error) => handleError(error, "Failed to add message to chat"),
   });
 
   const shareThread = useMutation({
@@ -265,7 +265,7 @@ export const useThreadActions = () => {
       window.prompt("Copy share link", shareUrl);
       toast.info("Clipboard permission blocked, copied link is shown in prompt");
     },
-    onError: (error) => handleError(error, "Failed to share thread"),
+    onError: (error) => handleError(error, "Failed to share chat"),
   });
 
   return {

@@ -44,7 +44,7 @@ export default function SharedChatPage() {
         setThreadData(thread);
       } catch (error) {
         console.error("Failed to get shared thread: ", { shareId }, error);
-        setError("This shared thread could not be found.");
+        setError("This shared chat could not be found.");
       }
     };
     fetchThread();
@@ -82,7 +82,7 @@ export default function SharedChatPage() {
             >
               <Plus className="h-4 w-4 shrink-0" />
               <span className="sr-only md:not-sr-only md:inline">
-                New Thread
+                New Chat
               </span>
             </Button>
 
