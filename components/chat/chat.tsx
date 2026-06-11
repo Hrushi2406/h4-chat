@@ -770,7 +770,7 @@ const HomeSuggestions = ({
                   >
                     {suggestion.logo && (
                       <span
-                        className="h-5 w-5 shrink-0 rounded-full bg-background bg-[length:14px_14px] bg-center bg-no-repeat"
+                        className="h-5 w-5 shrink-0 rounded-xs bg-background bg-[length:14px_14px] bg-center bg-no-repeat"
                         style={{ backgroundImage: `url(${suggestion.logo})` }}
                         aria-hidden="true"
                       />

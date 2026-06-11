@@ -869,7 +869,7 @@ const ToolIcon = ({
       {logos.slice(0, 3).map((logo) => (
         <span
           key={logo}
-          className="h-4 w-4 shrink-0 rounded-full bg-background bg-[length:12px_12px] bg-center bg-no-repeat ring-1 ring-background"
+          className="h-4 w-4 shrink-0 rounded-xs bg-background bg-[length:12px_12px] bg-center bg-no-repeat ring-1 ring-background"
           style={{ backgroundImage: `url(${logo})` }}
         />
       ))}
