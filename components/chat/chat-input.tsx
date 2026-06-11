@@ -374,7 +374,9 @@ export const ChatInput = ({
                     >
                       <Paperclip className="h-6 w-6 text-muted-foreground " />
                     </Button>
-                    <ContextWindowIndicator tokenUsage={tokenUsage} />
+                    <div className="hidden" aria-hidden="true">
+                      <ContextWindowIndicator tokenUsage={tokenUsage} />
+                    </div>
                   </div>
 
                   <div className="flex min-w-0 flex-1 justify-end overflow-hidden">

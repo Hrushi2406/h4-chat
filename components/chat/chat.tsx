@@ -120,6 +120,9 @@ export function Chat({ threadId, isNew = false }: ChatProps) {
     () => (loadedThreadIdRef.current === threadId ? messages : []),
     [threadId, messages]
   );
+  // Token context calculation disabled for performance.
+  const totalTokenUsage: ThreadMessageMetadata | undefined = undefined;
+  /*
   const totalTokenUsage = useMemo<ThreadMessageMetadata | undefined>(() => {
     const usage = visibleMessages.reduce(
       (total, message) => {
@@ -143,6 +146,7 @@ export function Chat({ threadId, isNew = false }: ChatProps) {
 
     return usage;
   }, [visibleMessages]);
+  */
 
   // Clear stale messages immediately when the route changes to another thread.
   useEffect(() => {
