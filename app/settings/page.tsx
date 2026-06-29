@@ -500,7 +500,7 @@ const connectionMetadata: Record<string, ConnectionMetadata> = {
   },
   composio_search: {
     category: "Developer Tools",
-    useCase: "Search across connected tools",
+    useCase: "Search the web",
   },
   browser_tool: {
     category: "Developer Tools",
@@ -1164,7 +1164,7 @@ const ConnectionsSettings = () => {
 
       {error && (
         <div className="rounded-3xl border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm text-destructive shadow-xs">
-          {error.message === "Composio is not configured"
+          {error.message === "Sakhi tools are not configured"
             ? "Add COMPOSIO_API_KEY to your environment to enable app connections."
             : error.message}
         </div>

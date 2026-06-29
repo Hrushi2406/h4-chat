@@ -92,7 +92,7 @@ export const COMPOSIO_TOOLKIT_LABELS: Record<ComposioToolkit, string> = {
   ahrefs: "Ahrefs",
   firecrawl: "Firecrawl",
   gemini: "Gemini",
-  composio_search: "Composio Search",
+  composio_search: "Web Search",
   browser_tool: "Browser Tool",
 };
 

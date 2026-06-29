@@ -19,7 +19,7 @@ export async function GET(req: Request) {
   try {
     if (!isComposioConfigured()) {
       return Response.json(
-        { error: "Composio is not configured", toolkits: [] },
+        { error: "Sakhi tools are not configured", toolkits: [] },
         { status: 503 }
       );
     }
@@ -61,7 +61,7 @@ export async function POST(req: Request) {
   try {
     if (!isComposioConfigured()) {
       return Response.json(
-        { error: "Composio is not configured" },
+        { error: "Sakhi tools are not configured" },
         { status: 503 }
       );
     }

@@ -15,7 +15,7 @@ export async function POST(req: Request) {
   try {
     if (!isComposioConfigured()) {
       return Response.json(
-        { error: "Composio is not configured" },
+        { error: "Sakhi tools are not configured" },
         { status: 503 }
       );
     }

@@ -347,9 +347,9 @@ const composioToolDisplay: Array<{
   {
     match: (context) => includesAny(context, ["COMPOSIO_SEARCH", "COMPOSIO SEARCH"]),
     appSlug: "composio_search",
-    fallbackLoading: "Searching Composio",
-    fallbackDone: "Searched Composio",
-    Icon: PlugZap,
+    fallbackLoading: "Searching the web",
+    fallbackDone: "Searched the web",
+    Icon: Globe,
   },
   {
     match: (context) =>
@@ -362,8 +362,8 @@ const composioToolDisplay: Array<{
   {
     match: (context) => context.includes("COMPOSIO"),
     appSlug: "composio",
-    fallbackLoading: "Using Composio",
-    fallbackDone: "Used Composio",
+    fallbackLoading: "Using Sakhi",
+    fallbackDone: "Used Sakhi",
     Icon: PlugZap,
   },
 ];
@@ -444,7 +444,12 @@ export const getToolDisplayName = (
 
     return {
       displayName: label,
-      Icon: getToolIcon(normalizedToolName, toolContext, composioTool.Icon),
+      Icon: getToolIcon(
+        normalizedToolName,
+        toolContext,
+        composioTool.Icon,
+        appSlugs,
+      ),
       tooltip: getComposioTooltip(label, toolName, toolContext, appSlugs),
       appSlugs: storedDisplay?.appSlugs?.length
         ? storedDisplay.appSlugs
@@ -525,7 +530,15 @@ const getToolIcon = (
   toolName: string,
   context: ReturnType<typeof getToolContext>,
   fallbackIcon: any,
+  appSlugs: string[] = [],
 ) => {
+  if (
+    appSlugs.includes("composio_search") ||
+    includesAny(context.raw, ["COMPOSIO_SEARCH", "COMPOSIO SEARCH"])
+  ) {
+    return Globe;
+  }
+
   if (
     toolName !== COMPOSIO_META_TOOLS.REMOTE_BASH_TOOL &&
     toolName !== COMPOSIO_META_TOOLS.REMOTE_WORKBENCH
@@ -838,8 +851,8 @@ const getComposioDisplay = (appSlugs: string[], context: string) => {
     return {
       match: () => true,
       appSlug: "sandbox",
-      fallbackLoading: "Using Sandbox",
-      fallbackDone: "Used Sandbox",
+      fallbackLoading: "Processing data",
+      fallbackDone: "Processed data",
       Icon: Hammer,
     };
   }
@@ -910,10 +923,10 @@ const getComposioLabel = (
           ? `Failed to ${action.loading.toLowerCase()}`
         : action.done
       : calling
-        ? "Running Sandbox command"
+        ? "Running command"
         : error
-          ? "Failed to run Sandbox command"
-        : "Ran Sandbox command";
+          ? "Failed to run command"
+        : "Ran command";
   }
 
   if (toolName === COMPOSIO_META_TOOLS.REMOTE_WORKBENCH) {
@@ -925,10 +938,10 @@ const getComposioLabel = (
           ? `Failed to ${action.loading.toLowerCase()}`
         : action.done
       : calling
-        ? "Processing Sandbox data"
+        ? "Processing data"
         : error
-          ? "Failed to process Sandbox data"
-        : "Processed Sandbox data";
+          ? "Failed to process data"
+        : "Processed data";
   }
 
   const action = getComposioAction(
@@ -1136,8 +1149,8 @@ const appLabels: Record<string, string> = {
   canva: "Canva",
   cats: "Cats",
   confluence: "Confluence",
-  composio: "Composio",
-  composio_search: "Composio Search",
+  composio: "Sakhi",
+  composio_search: "Web Search",
   browser_tool: "Browser Tool",
   elevenlabs: "ElevenLabs",
   facebook: "Facebook",
@@ -1254,6 +1267,10 @@ const getToolkitSlugFromToolSlug = (value: string) => {
     return "composio_search";
   }
 
+  if (slug === "WEB" || slug.startsWith("WEB_")) {
+    return "composio_search";
+  }
+
   if (slug.startsWith("BROWSER_TOOL_")) {
     return "browser_tool";
   }
@@ -1273,6 +1290,11 @@ const formatAppSlug = (slug: string) => {
 const formatToolSlugForDisplay = (slug: string) => {
   const normalized = slug.trim().replace(/^COMPOSIO_/, "");
   const toolkit = getToolkitSlugFromToolSlug(normalized);
+
+  if (toolkit === "composio_search" && normalized === "WEB") {
+    return "Web Search";
+  }
+
   const withoutToolkit = toolkit
     ? normalized.replace(new RegExp(`^${toolkit.toUpperCase()}_`), "")
     : normalized;

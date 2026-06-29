@@ -595,7 +595,7 @@ const CONNECTED_APP_PROMPTS: Record<string, string> = {
   ahrefs: "Analyze SEO data in Ahrefs",
   firecrawl: "Scrape a website and extract clean content",
   gemini: "Use Gemini for a generation task",
-  composio_search: "Search available Composio tools",
+  composio_search: "Search the web",
   browser_tool: "Browse a website and extract what matters",
 };
 
