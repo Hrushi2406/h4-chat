@@ -6,7 +6,8 @@
     "dev": "next dev --turbopack",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint ."
+    "lint": "eslint .",
+    "tunnel": "cloudflared tunnel run --token eyJhIjoiMzIxYTMxMzcwM2MwZGFhM2RjZjlmYWEyYzZmOGU3NWQiLCJ0IjoiZjg1Yjk3NTUtNzU3ZS00MTM3LTk1ZjktZjA4ZjgzNWEyNDBhIiwicyI6Ik5XRXpOakEwWkdZdE9ERTFNQzAwWkdWaExUazJOV0l0T1dVek5qWmpNbVJoTnpOayJ9"
   },
   "dependencies": {
     "@ai-sdk/mcp": "^1.0.42",
