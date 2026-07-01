@@ -181,6 +181,22 @@ export function Chat({ threadId, isNew = false }: ChatProps) {
 
   useEffect(() => {
     if (!isNewThread) return;
+
+    if (typeof window !== "undefined") {
+      const url = new URL(window.location.href);
+      const draft = url.searchParams.get("draft");
+
+      if (draft !== null) {
+        writeNewThreadDraft(draft);
+        url.searchParams.delete("draft");
+        window.history.replaceState(
+          {},
+          "",
+          `${url.pathname}${url.search}${url.hash}`,
+        );
+      }
+    }
+
     setInput(readNewThreadDraft());
   }, [isNewThread]);
 
@@ -523,6 +539,7 @@ export function Chat({ threadId, isNew = false }: ChatProps) {
       {/* Chat Input */}
       <ChatInput
         input={input}
+        autoFocus={isNewThread}
         tokenUsage={totalTokenUsage}
         isLoading={isLoading || isCreatingThread}
         handleInputChange={handleInputChangeWithClearSuggestions}

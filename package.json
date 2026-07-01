@@ -35,6 +35,7 @@
     "@radix-ui/react-tooltip": "^1.2.8",
     "@tanstack/react-query": "^5.100.7",
     "@tanstack/react-virtual": "3.13.24",
+    "@upstash/qstash": "^2.11.1",
     "@vercel/analytics": "^2.0.1",
     "@vercel/functions": "^3.5.0",
     "ai": "^6.0.172",

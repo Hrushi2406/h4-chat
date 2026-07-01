@@ -2,9 +2,11 @@ import {
   convertToModelMessages,
   stepCountIs,
   streamText,
+  tool,
   type ToolSet,
 } from "ai";
 import { Geo, geolocation } from "@vercel/functions";
+import { z } from "zod";
 import { getModelById } from "@/lib/available-models";
 import {
   createComposioSession,
@@ -23,6 +25,7 @@ import {
   COMPOSIO_TOOL_NAME_PATTERN,
 } from "@/lib/types/composio-tool-slugs";
 import { IUser } from "@/lib/types/user";
+import scheduledTaskServerService from "@/lib/services/scheduled-task-server-service";
 
 export async function POST(req: Request) {
   const latency = createLatencyLogger();
@@ -93,19 +96,25 @@ export async function POST(req: Request) {
     Boolean(composioTools) && messagesWithFileUrls !== messages;
   latency.step("message prep");
 
-  const systemPrompt = getSystemPrompt(
+  const systemPrompt = `${getSystemPrompt(
     geo,
     Boolean(composioTools),
     needsComposioFileRule,
     mcpContext?.servers,
     userInfo,
-  );
+  )}\n${getScheduledTaskSystemPrompt()}`;
   latency.step("system prompt");
 
   const closeMcpClientsOnce = createCloseMcpClientsOnce(
     mcpContext?.clients ?? [],
   );
   const tools = {
+    ...createScheduledTaskTools({
+      userId: verifiedUserId,
+      threadId,
+      modelId,
+      baseUrl: getBaseUrl(req),
+    }),
     ...composioTools,
     ...mcpContext?.tools,
   } satisfies ToolSet;
@@ -390,6 +399,100 @@ function getChatCallbackUrl(req: Request, threadId?: string) {
   return threadId
     ? `${origin}/chat/${threadId}?composioAuth=complete`
     : `${origin}/chat?composioAuth=complete`;
+}
+
+function getBaseUrl(req: Request) {
+  return (
+    process.env.NEXT_PUBLIC_BASE_URL ||
+    process.env.APP_URL ||
+    new URL(req.url).origin
+  ).replace(/\/$/, "");
+}
+
+function createScheduledTaskTools({
+  userId,
+  threadId,
+  modelId,
+  baseUrl,
+}: {
+  userId?: string;
+  threadId?: string;
+  modelId: string;
+  baseUrl: string;
+}): ToolSet {
+  if (!userId) {
+    return {};
+  }
+
+  return {
+    create_scheduled_task: tool({
+      description:
+        "Create a recurring automation for the user when they ask the assistant to do something on a repeated schedule.",
+      inputSchema: z.object({
+        title: z
+          .string()
+          .min(1)
+          .describe("Short, user-facing automation name."),
+        instruction: z
+          .string()
+          .min(1)
+          .describe(
+            "The full instruction to execute each time the automation runs. Include all relevant context from the user's request.",
+          ),
+        cron: z
+          .string()
+          .min(1)
+          .describe(
+            "A standard 5-field cron expression, without seconds. Example: 0 20 * * * for every day at 8 PM.",
+          ),
+        timezone: z
+          .string()
+          .min(1)
+          .default("Asia/Kolkata")
+          .describe(
+            "IANA timezone for the schedule, for example Asia/Kolkata or America/New_York.",
+          ),
+        humanText: z
+          .string()
+          .min(1)
+          .describe("Natural-language schedule summary shown in the UI."),
+      }),
+      execute: async ({ title, instruction, cron, timezone, humanText }) => {
+        const task = await scheduledTaskServerService.createTask({
+          userId,
+          title,
+          instruction,
+          cron,
+          timezone,
+          humanText,
+          source: "chat",
+          sourceThreadId: threadId,
+          modelId,
+          baseUrl,
+        });
+
+        return {
+          ok: true,
+          taskId: task.id,
+          title: task.title,
+          schedule: task.schedule.humanText,
+          status: task.status,
+          message:
+            "Automation created. The user can inspect and test it from Automations.",
+        };
+      },
+    }),
+  } satisfies ToolSet;
+}
+
+function getScheduledTaskSystemPrompt() {
+  return `Automations:
+- If the user asks you to do something on a recurring schedule, call create_scheduled_task.
+- Examples include "every day at 8 PM", "each Monday morning", "every 6 hours", or similar repeated schedules.
+- Use a 5-field cron expression. Do not include seconds.
+- Use the user's explicitly stated timezone when provided. If they only provide a local time, use Asia/Kolkata.
+- The automation instruction should describe the work to perform when the schedule fires, not the act of scheduling it.
+- After creating the automation, briefly confirm the schedule and mention that they can use Automations > Run now to test the output.`;
 }
 
 const createCloseMcpClientsOnce = (

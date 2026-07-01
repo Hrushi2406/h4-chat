@@ -35,6 +35,8 @@ export interface Thread {
   updatedAt: Date;
   userId?: string;
   shareId?: string;
+  scheduledTaskId?: string;
+  scheduledTaskRunId?: string;
   // Composio Tool Router session id, written server-side by the chat route so
   // multi-turn messages reuse one session instead of recreating it each turn.
   composioSessionId?: string;

@@ -14,22 +14,14 @@ import {
   SidebarMenuAction,
   SidebarMenuButton,
   SidebarMenuItem,
+  SidebarMenuSkeleton,
   SidebarProvider,
   SidebarTrigger,
   useSidebar,
 } from "@/components/ui/sidebar";
 import { Button } from "@/components/ui/button";
+import ConfirmationDialog from "@/components/ui/confirmation-dialog";
 import { Input } from "@/components/ui/input";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogFooter,
-  AlertDialogContent,
-  AlertDialogCancel,
-  AlertDialogHeader,
-  AlertDialogTitle,
-  AlertDialogDescription,
-} from "@/components/ui/alert-dialog";
 import {
   MessageSquare,
   Plus,
@@ -39,6 +31,9 @@ import {
   X,
   Loader2,
   Settings2,
+  Clock,
+  PlusSquare,
+  Edit,
 } from "lucide-react";
 import Link from "next/link";
 import { useRouter, usePathname } from "next/navigation";
@@ -89,6 +84,7 @@ const ThreadSidebar = () => {
   const router = useRouter();
   const pathname = usePathname();
   const currentThreadId = pathname.split("/").pop() as string;
+  const isScheduledTasksActive = pathname.startsWith("/scheduled-tasks");
   const { isMobile, setOpenMobile } = useSidebar();
 
   const { deleteThread } = useThreadActions();
@@ -109,6 +105,13 @@ const ThreadSidebar = () => {
 
   const handleNewThreadClick = () => {
     router.push("/chat");
+    if (isMobile) {
+      setOpenMobile(false);
+    }
+  };
+
+  const handleScheduledTasksClick = () => {
+    router.push("/scheduled-tasks");
     if (isMobile) {
       setOpenMobile(false);
     }
@@ -149,8 +152,8 @@ const ThreadSidebar = () => {
   return (
     <>
       <Sidebar variant="inset">
-        <SidebarHeader>
-          <div className="flex items-center gap-2">
+        <SidebarHeader className="px-0 pb-1">
+          <div className="flex px-2 items-center gap-2 pb-2">
             <img
               src="/saaki-chat-transparent.png"
               alt="Sakhi AI"
@@ -158,22 +161,37 @@ const ThreadSidebar = () => {
             />
             <h2 className="font-semibold">Sakhi Plus</h2>
           </div>
-          <div className="py-2">
-            <Button
-              className="w-full rounded-full border shadow-none"
-              variant="secondary"
-              size="sm"
-              onClick={handleNewThreadClick}
-            >
-              <Plus className="h-4 w-4" />
-              New Chat
-            </Button>
-          </div>
+          <SidebarMenu>
+            <SidebarMenuItem>
+              <SidebarMenuButton
+                tooltip="New Chat"
+                onClick={handleNewThreadClick}
+                className="cursor-pointer "
+              >
+                <Edit className="h-4 w-4" />
+                <span>New Chat</span>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+            <SidebarMenuItem>
+              <SidebarMenuButton
+                tooltip="Automations"
+                isActive={isScheduledTasksActive}
+                onClick={handleScheduledTasksClick}
+                className="cursor-pointer "
+              >
+                <Clock className="h-4 w-4" />
+                <span>Automations</span>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+          </SidebarMenu>
         </SidebarHeader>
 
         <SidebarContent className="min-h-0 overflow-y-auto overscroll-contain">
           {isLoading ? (
-            <LoadingState />
+            <>
+              <ThreadsListSkeleton />
+              <ThreadsLoadingIndicator label="Loading chats..." />
+            </>
           ) : !threads.length ? (
             <EmptyState />
           ) : (
@@ -272,11 +290,33 @@ const getUserInitials = (value: string) => {
   return `${words[0][0]}${words[1][0]}`.toUpperCase();
 };
 
-const LoadingState = () => (
-  <div className="flex flex-col items-center justify-center py-6 text-center">
-    <Loader2 className="h-6 w-6 text-muted-foreground mb-2 animate-spin" />
-    <p className="text-sm text-muted-foreground">Loading chats...</p>
+const ThreadsLoadingIndicator = ({ label }: { label: string }) => (
+  <div className="px-2 py-3">
+    <Button
+      type="button"
+      variant="ghost"
+      size="sm"
+      className="w-full text-muted-foreground"
+      disabled
+    >
+      <Loader2 className="h-4 w-4 animate-spin" />
+      {label}
+    </Button>
   </div>
+);
+
+const ThreadsListSkeleton = () => (
+  <SidebarGroup className="px-0 py-1">
+    <SidebarGroupContent>
+      <SidebarMenu>
+        {Array.from({ length: 6 }).map((_, index) => (
+          <SidebarMenuItem key={index}>
+            <SidebarMenuSkeleton />
+          </SidebarMenuItem>
+        ))}
+      </SidebarMenu>
+    </SidebarGroupContent>
+  </SidebarGroup>
 );
 
 const EmptyState = () => (
@@ -365,25 +405,23 @@ const ThreadsList = ({
           </SidebarGroup>
         );
       })}
-      <div ref={loadMoreRef} className="px-2 py-3">
+      <div ref={loadMoreRef}>
         {hasMoreThreads ? (
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            className="w-full text-muted-foreground"
-            onClick={onLoadMore}
-            disabled={isLoadingMoreThreads}
-          >
-            {isLoadingMoreThreads ? (
-              <>
-                <Loader2 className="h-4 w-4 animate-spin" />
-                Loading older chats...
-              </>
-            ) : (
-              "Load older chats"
-            )}
-          </Button>
+          isLoadingMoreThreads ? (
+            <ThreadsLoadingIndicator label="Loading older chats..." />
+          ) : (
+            <div className="px-2 py-3">
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="w-full text-muted-foreground"
+                onClick={onLoadMore}
+              >
+                Load older chats
+              </Button>
+            </div>
+          )
         ) : null}
       </div>
     </div>
@@ -404,6 +442,9 @@ const ThreadItem = ({
   onDeleteThread,
 }: ThreadItemProps) => {
   const { updateThread } = useThreadActions();
+  const isScheduledTaskThread = Boolean(
+    thread.scheduledTaskId || thread.scheduledTaskRunId,
+  );
 
   const [isEditing, setIsEditing] = useState(false);
   const [editTitle, setEditTitle] = useState("");
@@ -474,11 +515,17 @@ const ThreadItem = ({
             <SidebarMenuButton
               tooltip={thread.title}
               isActive={isActive}
-              className="cursor-pointer pr-16"
+              className="cursor-pointer group-has-data-[sidebar=menu-action]/menu-item:pr-2"
               onClick={() => onThreadClick(thread.id)}
             >
               <div className="flex items-center gap-2 flex-1 min-w-0">
                 <h3 className="text-sm truncate text-left">{thread.title}</h3>
+                {isScheduledTaskThread ? (
+                  <Clock
+                    className="ml-auto h-3.5 w-3.5 shrink-0 text-sidebar-automation-icon"
+                    aria-label="Automation thread"
+                  />
+                ) : null}
               </div>
             </SidebarMenuButton>
 
@@ -549,35 +596,15 @@ const DeleteConfirmationDialog = ({
   onCancel,
 }: DeleteConfirmationDialogProps) => {
   return (
-    <AlertDialog open={open} onOpenChange={onCancel}>
-      <AlertDialogContent>
-        <AlertDialogHeader>
-          <AlertDialogTitle>Delete Chat</AlertDialogTitle>
-          <AlertDialogDescription>
-            {`Are you sure you want to delete "${threadToDelete?.title}"? This action cannot be undone and all messages in this chat will be permanently deleted.`}
-          </AlertDialogDescription>
-        </AlertDialogHeader>
-        <AlertDialogFooter>
-          <AlertDialogCancel aria-label="Cancel deletion">
-            Cancel
-          </AlertDialogCancel>
-          <AlertDialogAction
-            onClick={onConfirm}
-            disabled={isDeleting}
-            aria-label="Confirm delete chat"
-          >
-            {isDeleting ? (
-              <>
-                {/* Loader2 import from 'lucide-react' is required */}
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                Deleting...
-              </>
-            ) : (
-              "Delete"
-            )}
-          </AlertDialogAction>
-        </AlertDialogFooter>
-      </AlertDialogContent>
-    </AlertDialog>
+    <ConfirmationDialog
+      open={open}
+      title="Delete Chat"
+      description={`Are you sure you want to delete "${threadToDelete?.title}"? This action cannot be undone and all messages in this chat will be permanently deleted.`}
+      confirmLabel="Delete"
+      confirmingLabel="Deleting..."
+      isConfirming={isDeleting}
+      onCancel={onCancel}
+      onConfirm={onConfirm}
+    />
   );
 };

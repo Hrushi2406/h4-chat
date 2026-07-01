@@ -85,6 +85,7 @@ type QueuedChatMessage = {
 
 interface ChatInputProps {
   input: string;
+  autoFocus?: boolean;
   tokenUsage?: ThreadMessageMetadata;
   isLoading: boolean;
   handleInputChange: (e: React.ChangeEvent<HTMLTextAreaElement>) => void;
@@ -103,6 +104,7 @@ interface ChatInputProps {
 
 export const ChatInput = ({
   input,
+  autoFocus = false,
   tokenUsage,
   isLoading,
   handleInputChange,
@@ -120,6 +122,7 @@ export const ChatInput = ({
 }: ChatInputProps) => {
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const didAutoFocusRef = useRef(false);
   const { uploadFiles } = useStorageActions();
   const { uid } = useAuth();
   const pathname = usePathname();
@@ -140,6 +143,17 @@ export const ChatInput = ({
       resizeTextarea(textareaRef.current);
     }
   }, [input, resizeTextarea]);
+
+  useLayoutEffect(() => {
+    if (!autoFocus || didAutoFocusRef.current || !textareaRef.current) {
+      return;
+    }
+
+    didAutoFocusRef.current = true;
+    textareaRef.current.focus({ preventScroll: true });
+    const cursorPosition = textareaRef.current.value.length;
+    textareaRef.current.setSelectionRange(cursorPosition, cursorPosition);
+  }, [autoFocus]);
 
   const handleTextareaChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     handleInputChange(e);
