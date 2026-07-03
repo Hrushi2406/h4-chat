@@ -7,7 +7,10 @@ import {
 } from "ai";
 import { Geo, geolocation } from "@vercel/functions";
 import { z } from "zod";
-import { getModelById } from "@/lib/available-models";
+import {
+  DEFAULT_IMAGE_ANALYSIS_MODEL_ID,
+  getModelById,
+} from "@/lib/available-models";
 import {
   createComposioSession,
   getWrappedComposioTools,
@@ -47,7 +50,21 @@ export async function POST(req: Request) {
     return new Response("Invalid model ID", { status: 400 });
   }
 
-  console.log("using model: ", model.id);
+  const effectiveModel = getEffectiveModelForRequest(messages, model);
+
+  if (!effectiveModel) {
+    return new Response("Image analysis model is not configured", {
+      status: 500,
+    });
+  }
+
+  const imageFallbackUsed = effectiveModel.id !== model.id;
+
+  console.log("using model: ", effectiveModel.id, {
+    requestedModel: model.id,
+    effectiveModel: effectiveModel.id,
+    imageFallbackUsed,
+  });
 
   const verifiedUserId = await verifyFirebaseIdToken(authToken);
   latency.step("firebase auth");
@@ -90,7 +107,7 @@ export async function POST(req: Request) {
 
   const messagesWithFileUrls = appendUnsupportedFileUrlsToMessages(
     messages,
-    model,
+    effectiveModel,
   );
   const needsComposioFileRule =
     Boolean(composioTools) && messagesWithFileUrls !== messages;
@@ -127,7 +144,7 @@ export async function POST(req: Request) {
   latency.step("convert messages", { contextMessages: contextMessages.length });
 
   const result = streamText({
-    model: model.id,
+    model: effectiveModel.id,
     system: systemPrompt,
     messages: modelMessages,
     stopWhen: stepCountIs(100),
@@ -160,6 +177,9 @@ export async function POST(req: Request) {
         inputTokens,
         outputTokens,
         totalTokens: part.totalUsage.totalTokens ?? inputTokens + outputTokens,
+        requestedModel: model.id,
+        effectiveModel: effectiveModel.id,
+        imageFallbackUsed,
       };
     },
   });
@@ -187,6 +207,61 @@ export async function POST(req: Request) {
   return new Response(body, {
     status: response.status,
     headers: response.headers,
+  });
+}
+
+function getEffectiveModelForRequest(
+  messages: unknown,
+  requestedModel: NonNullable<ReturnType<typeof getModelById>>,
+) {
+  if (
+    !latestUserMessageHasImageAttachment(messages) ||
+    requestedModel.capabilities.imageInput
+  ) {
+    return requestedModel;
+  }
+
+  return getModelById(DEFAULT_IMAGE_ANALYSIS_MODEL_ID);
+}
+
+function latestUserMessageHasImageAttachment(messages: unknown) {
+  if (!Array.isArray(messages)) {
+    return false;
+  }
+
+  const latestUserMessage = messages.findLast((message) => {
+    if (typeof message !== "object" || message === null) {
+      return false;
+    }
+
+    return (message as { role?: unknown }).role === "user";
+  });
+
+  if (typeof latestUserMessage !== "object" || latestUserMessage === null) {
+    return false;
+  }
+
+  const parts = (latestUserMessage as { parts?: unknown }).parts;
+
+  if (!Array.isArray(parts)) {
+    return false;
+  }
+
+  return parts.some((part) => {
+    if (typeof part !== "object" || part === null) {
+      return false;
+    }
+
+    const filePart = part as {
+      type?: unknown;
+      mediaType?: unknown;
+    };
+
+    return (
+      filePart.type === "file" &&
+      typeof filePart.mediaType === "string" &&
+      filePart.mediaType.startsWith("image/")
+    );
   });
 }
 
@@ -276,20 +351,24 @@ function appendUnsupportedFileUrlsToMessages(
     return [];
   }
 
-  const unsupportedFiles = messages.flatMap((message) => {
+  const unsupportedFiles: string[] = [];
+  const latestMessageIndex = messages.length - 1;
+  let removedAnyUnsupportedFile = false;
+  const sanitizedMessages = messages.map((message, messageIndex) => {
     if (typeof message !== "object" || message === null) {
-      return [];
+      return message;
     }
 
     const parts = (message as { parts?: unknown }).parts;
 
     if (!Array.isArray(parts)) {
-      return [];
+      return message;
     }
 
-    return parts.flatMap((part) => {
+    let removedUnsupportedFile = false;
+    const supportedParts = parts.filter((part) => {
       if (typeof part !== "object" || part === null) {
-        return [];
+        return true;
       }
 
       const filePart = part as {
@@ -301,23 +380,36 @@ function appendUnsupportedFileUrlsToMessages(
       const mediaType =
         typeof filePart.mediaType === "string" ? filePart.mediaType : undefined;
 
-      if (
-        filePart.type !== "file" ||
-        typeof filePart.url !== "string" ||
-        isFileTypeSupportedByModel(mediaType, model)
-      ) {
-        return [];
+      if (filePart.type !== "file" || isFileTypeSupportedByModel(mediaType, model)) {
+        return true;
       }
 
-      return [
-        `- ${typeof filePart.filename === "string" ? filePart.filename : "uploaded file"}${
-          mediaType ? ` (${mediaType})` : ""
-        }: ${filePart.url}`,
-      ];
+      removedUnsupportedFile = true;
+      removedAnyUnsupportedFile = true;
+      if (messageIndex === latestMessageIndex) {
+        unsupportedFiles.push(
+          `- ${typeof filePart.filename === "string" ? filePart.filename : "uploaded file"}${
+            mediaType ? ` (${mediaType})` : ""
+          }: ${
+            typeof filePart.url === "string"
+              ? filePart.url
+              : "No accessible file URL was provided."
+          }`,
+        );
+      }
+      return false;
     });
+
+    return removedUnsupportedFile
+      ? { ...message, parts: supportedParts }
+      : message;
   });
 
   if (unsupportedFiles.length === 0) {
+    if (removedAnyUnsupportedFile) {
+      return sanitizedMessages;
+    }
+
     return messages;
   }
 
@@ -325,9 +417,9 @@ function appendUnsupportedFileUrlsToMessages(
     "\n",
   )}`;
 
-  return messages.map((message, index) => {
+  return sanitizedMessages.map((message, index) => {
     if (
-      index !== messages.length - 1 ||
+      index !== sanitizedMessages.length - 1 ||
       typeof message !== "object" ||
       message === null
     ) {

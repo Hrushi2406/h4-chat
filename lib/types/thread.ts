@@ -11,6 +11,9 @@ export interface Attachment {
 
 export interface ThreadMessageMetadata {
   model?: string;
+  requestedModel?: string;
+  effectiveModel?: string;
+  imageFallbackUsed?: boolean;
   tokenCount?: number;
   processingTime?: number;
   inputTokens?: number;

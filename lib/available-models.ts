@@ -16,6 +16,8 @@ export interface AIModel {
   capabilities: AIModelCapabilities;
 }
 
+export const DEFAULT_IMAGE_ANALYSIS_MODEL_ID = "openai/gpt-5-nano";
+
 const textOnlyToolModel: AIModelCapabilities = {
   toolUse: true,
   imageInput: false,
@@ -33,6 +35,14 @@ const multimodalToolModel: AIModelCapabilities = {
 };
 
 export const availableModels: AIModel[] = [
+  {
+    id: DEFAULT_IMAGE_ANALYSIS_MODEL_ID,
+    name: "GPT-5 Nano",
+    description: "Low-cost OpenAI model for image analysis and everyday vision tasks",
+    provider: "openai",
+    maxTokens: 400000,
+    capabilities: multimodalToolModel,
+  },
   {
     id: "openai/gpt-5.5",
     name: "GPT 5.5",
