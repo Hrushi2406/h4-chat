@@ -10,7 +10,7 @@ import {
   orderBy,
   limit,
   where,
-  setDoc,
+  writeBatch,
   startAfter,
   type DocumentData,
   type QueryConstraint,
@@ -29,6 +29,7 @@ import {
 import { v4 } from "uuid";
 
 const colThreads = "threads";
+const colUsers = "users";
 export type ThreadCursor = QueryDocumentSnapshot<DocumentData>;
 
 export interface ThreadsPage {
@@ -142,14 +143,24 @@ class ThreadService {
         initialMessage
       ).substring(0, 100);
 
-      await setDoc(
+      const nowIso = now.toISOString();
+      const batch = writeBatch(db);
+
+      batch.set(
         doc(db, colThreads, threadData.id),
         removeUndefinedValues({
           ...threadData,
-          createdAt: now.toISOString(),
-          updatedAt: now.toISOString(),
+          createdAt: nowIso,
+          updatedAt: nowIso,
         })
       );
+      batch.set(
+        doc(db, colUsers, resolvedUserId),
+        { updatedAt: nowIso },
+        { merge: true }
+      );
+
+      await batch.commit();
 
       console.log("Thread created successfully:", { threadId: threadData.id });
       return threadData;
