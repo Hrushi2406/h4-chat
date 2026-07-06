@@ -167,7 +167,7 @@ const persistSessionId = async (threadId: string, sessionId: string) => {
     await db
       .collection("threads")
       .doc(threadId)
-      .update({ [COMPOSIO_SESSION_FIELD]: sessionId });
+      .set({ [COMPOSIO_SESSION_FIELD]: sessionId }, { merge: true });
   } catch (error) {
     console.error(
       "Failed to persist Composio session id:",

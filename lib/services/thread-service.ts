@@ -152,7 +152,8 @@ class ThreadService {
           ...threadData,
           createdAt: nowIso,
           updatedAt: nowIso,
-        })
+        }),
+        { merge: true }
       );
       batch.set(
         doc(db, colUsers, resolvedUserId),
