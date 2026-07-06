@@ -48,7 +48,7 @@ import type {
 } from "@/lib/types/scheduled-task";
 import { cn, navToolbarSecondaryBtnClass } from "@/lib/utils";
 
-const cardClass = "rounded-3xl border bg-muted/30 dark:bg-muted-foreground/5";
+const cardClass = "rounded-3xl border bg-card/60 text-card-foreground";
 const controlClass = "rounded-full shadow-xs";
 const pillClass = "rounded-full";
 
@@ -507,7 +507,7 @@ function TaskFormModal({
       isOpen={open}
       closeModal={() => onOpenChange(false)}
       size="lg"
-      className="max-h-[90vh] overflow-y-auto rounded-3xl bg-white p-6 shadow-none dark:bg-card"
+      className="max-h-[90vh] overflow-y-auto rounded-3xl border bg-card p-6 text-card-foreground shadow-none"
       clickOutsideToClose={!isSaving}
     >
       <div className="space-y-5">

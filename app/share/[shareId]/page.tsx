@@ -119,7 +119,7 @@ export default function SharedChatPage() {
             alt="Sakhi AI"
             className="h-12 w-12 object-contain"
           />
-          <TextShimmer className="text-sm font-medium leading-loose [--base-color:theme(colors.blue.400)] [--base-gradient-color:theme(colors.blue.600)] dark:[--base-color:theme(colors.blue.700)] dark:[--base-gradient-color:theme(colors.blue.400)]">
+          <TextShimmer className="text-sm font-medium leading-loose">
             Loading shared chat...
           </TextShimmer>
         </main>

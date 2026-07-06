@@ -28,9 +28,7 @@ export function TextShimmer({
     <MotionComponent
       className={cn(
         'relative inline-block bg-[length:250%_100%,auto] bg-clip-text',
-        'text-transparent [--base-color:#a1a1aa] [--base-gradient-color:#000]',
-        '[--bg:linear-gradient(90deg,#0000_calc(50%-var(--spread)),var(--base-gradient-color),#0000_calc(50%+var(--spread)))] [background-repeat:no-repeat,padding-box]',
-        'dark:[--base-color:#71717a] dark:[--base-gradient-color:#ffffff] dark:[--bg:linear-gradient(90deg,#0000_calc(50%-var(--spread)),var(--base-gradient-color),#0000_calc(50%+var(--spread)))]',
+        'text-transparent [background-repeat:no-repeat,padding-box]',
         className
       )}
       initial={{ backgroundPosition: '100% center' }}
@@ -43,6 +41,10 @@ export function TextShimmer({
       style={
         {
           '--spread': `${dynamicSpread}px`,
+          '--base-color': 'var(--shimmer-base, var(--muted-foreground))',
+          '--base-gradient-color': 'var(--shimmer-gradient, var(--foreground))',
+          '--bg':
+            'linear-gradient(90deg,#0000 calc(50% - var(--spread)),color-mix(in srgb,var(--base-gradient-color) 55%,var(--base-color)) calc(50% - calc(var(--spread) * 0.35)),var(--base-gradient-color) 50%,color-mix(in srgb,var(--base-gradient-color) 55%,var(--base-color)) calc(50% + calc(var(--spread) * 0.35)),#0000 calc(50% + var(--spread)))',
           backgroundImage: `var(--bg), linear-gradient(var(--base-color), var(--base-color))`,
         } as React.CSSProperties
       }

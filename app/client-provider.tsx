@@ -18,7 +18,21 @@ interface ClientProviderProps {
 export const ClientProvider = ({ children }: ClientProviderProps) => {
   return (
     <QueryClientProvider client={queryClient}>
-      <ThemeProvider attribute="class" defaultTheme="dark" enableSystem>
+      <ThemeProvider
+        attribute="class"
+        defaultTheme="dark"
+        enableSystem
+        themes={[
+          "light",
+          "dark",
+          "macha",
+          "graphite",
+          "ocean",
+          "rose",
+          "luxury",
+        ]}
+        disableTransitionOnChange={false}
+      >
         <PwaServiceWorkerRegistrar />
         <AuthProvider>{children}</AuthProvider>
         <Toaster richColors />

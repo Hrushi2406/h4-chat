@@ -588,7 +588,7 @@ const LoadingMessage = () => (
         )}
       >
         <TextShimmer
-          className="text-sm md:text-base leading-loose [--base-color:theme(colors.blue.600)] [--base-gradient-color:theme(colors.blue.200)] dark:[--base-color:theme(colors.blue.700)] dark:[--base-gradient-color:theme(colors.blue.400)]"
+          className="text-sm md:text-base leading-loose"
           duration={1.5}
           spread={1.5}
         >
@@ -783,8 +783,8 @@ const ToolPart = memo(
               isCalling
                 ? "px-0 py-0"
                 : isError
-                  ? "px-3 py-1.5 bg-red-50 dark:bg-red-950/50 text-red-700 dark:text-red-300 border border-red-200 dark:border-red-800"
-                : "px-3 py-1.5 bg-blue-50 dark:bg-blue-950/50 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800"
+                  ? "px-3 py-1.5 bg-destructive/10 text-destructive border border-destructive/25"
+                : "px-3 py-1.5 bg-[var(--tool-call-bg)] text-[var(--tool-call-text)] border border-[color:var(--tool-call-border)]"
             }`}
           >
             {isCalling ? (
@@ -798,11 +798,11 @@ const ToolPart = memo(
                   <ToolIcon
                     Icon={Icon}
                     logos={logos}
-                    className="text-blue-500 animate-bounce"
+                    className="text-[var(--tool-call-icon)] animate-bounce"
                   />
                 )}
                 <TextShimmer
-                  className="text-sm md:text-base [--base-color:theme(colors.blue.600)] [--base-gradient-color:theme(colors.blue.200)] dark:[--base-color:theme(colors.blue.700)] dark:[--base-gradient-color:theme(colors.blue.400)]"
+                  className="text-sm md:text-base [--base-color:var(--tool-call-shimmer-base)] [--base-gradient-color:var(--tool-call-shimmer-gradient)]"
                   duration={1.5}
                   spread={1.5}
                 >
@@ -817,7 +817,7 @@ const ToolPart = memo(
                 {isMcp ? <McpToolIcon /> : <ToolIcon Icon={Icon} logos={logos} />}
                 <span>{displayName}</span>
                 {toolLabel && (
-                  <span className="max-w-44 truncate rounded-sm bg-blue-100 px-1.5 py-0.5 text-xs font-medium text-blue-900 dark:bg-blue-900/70 dark:text-blue-100">
+                  <span className="max-w-44 truncate rounded-sm bg-[var(--tool-call-label-bg)] px-1.5 py-0.5 text-xs font-medium text-[var(--tool-call-label-text)] ring-1 ring-[color:var(--tool-call-label-border)]">
                     {toolLabel}
                   </span>
                 )}
@@ -842,7 +842,7 @@ ToolPart.displayName = "ToolPart";
 const McpToolIcon = ({ isCalling = false }: { isCalling?: boolean }) => (
   <span
     className={clsx(
-      "grid h-4 w-4 shrink-0 place-items-center rounded-sm bg-blue-600 text-white dark:bg-blue-500",
+      "grid h-4 w-4 shrink-0 place-items-center rounded-sm bg-[var(--tool-call-mcp-bg)] text-[var(--tool-call-mcp-text)]",
       isCalling && "animate-bounce",
     )}
     aria-hidden="true"
@@ -1288,7 +1288,7 @@ const ReasoningBlock = ({
     return (
       <div className="mb-3">
         <TextShimmer
-          className="text-sm md:text-base leading-loose [--base-color:theme(colors.blue.600)] [--base-gradient-color:theme(colors.blue.200)] dark:[--base-color:theme(colors.blue.700)] dark:[--base-gradient-color:theme(colors.blue.400)]"
+          className="text-sm md:text-base leading-loose"
           duration={1.5}
           spread={1.5}
         >

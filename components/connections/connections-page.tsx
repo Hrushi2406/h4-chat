@@ -416,10 +416,7 @@ export default function ConnectionsPage() {
               type="button"
               variant="outline"
               size="sm"
-              className={cn(
-                settingsBtnClass,
-                "text-xs font-semibold text-primary",
-              )}
+              className={cn(settingsBtnClass, "text-xs font-semibold")}
               onClick={() => connect(toolkit.slug)}
               disabled={Boolean(pendingSlug)}
             >

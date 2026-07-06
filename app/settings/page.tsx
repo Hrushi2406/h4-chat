@@ -43,8 +43,8 @@ import {
   type StoredMcpServer,
 } from "@/lib/types/mcp-server";
 
-const settingsCardClass = "rounded-3xl border shadow-xs";
-const settingsPanelClass = "rounded-3xl border bg-card/50 p-4 shadow-xs";
+const settingsCardClass = "rounded-3xl border bg-card text-card-foreground shadow-xs";
+const settingsPanelClass = "rounded-3xl border bg-card p-4 text-card-foreground shadow-xs";
 const settingsControlClass = "rounded-full shadow-xs";
 const settingsBtnClass = "rounded-full";
 
@@ -162,7 +162,7 @@ const AccountSettings = () => {
 
   return (
     <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,2fr)]">
-      <section className="flex flex-col rounded-3xl border bg-muted/25 p-5 shadow-xs">
+      <section className="flex flex-col rounded-3xl border bg-card p-5 text-card-foreground shadow-xs">
         <div className="flex flex-1 flex-col justify-center">
           <div className="flex flex-col items-center text-center">
             <div className="h-20 w-20 overflow-hidden rounded-full border bg-muted shadow-xs">
@@ -549,8 +549,9 @@ const McpSettings = () => {
           </div>
           <Button
             type="button"
+            variant="secondary"
             onClick={handleAddMcpServer}
-            className={cn("self-end", settingsBtnClass)}
+            className={cn("self-end border border-input", settingsBtnClass)}
             disabled={isSavingMcp || !uid}
           >
             {isSavingMcp ? (
@@ -576,9 +577,9 @@ const McpSettings = () => {
 
       <div className="space-y-2">
         {isLoading ? (
-          <div className="h-24 animate-pulse rounded-3xl border bg-muted/30" />
+          <div className="h-24 animate-pulse rounded-3xl border bg-card" />
         ) : mcpServers.length === 0 ? (
-          <div className="rounded-3xl border border-dashed bg-muted/20 px-4 py-8 text-center text-sm text-muted-foreground">
+          <div className="rounded-3xl border border-dashed bg-card px-4 py-8 text-center text-sm text-muted-foreground">
             No MCP servers added yet.
           </div>
         ) : (

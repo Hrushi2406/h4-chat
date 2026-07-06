@@ -51,7 +51,7 @@ export default function Modal({
   clickOutsideToClose = true,
   size = "lg",
   children,
-  className = "bg-card dark:bg-muted rounded-2xl p-6",
+  className = "rounded-2xl border bg-card p-6 text-card-foreground",
 }: IModal) {
   return (
     <>
@@ -70,7 +70,7 @@ export default function Modal({
             leaveFrom="opacity-100"
             leaveTo="opacity-0"
           >
-            <DialogBackdrop className="fixed inset-0 bg-black/30 dark:bg-black/5 backdrop-blur-sm" />
+            <DialogBackdrop className="fixed inset-0 bg-foreground/20 backdrop-blur-sm" />
           </TransitionChild>
 
           <div className="fixed inset-0 overflow-y-auto">

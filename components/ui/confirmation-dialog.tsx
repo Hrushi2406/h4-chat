@@ -32,7 +32,7 @@ export default function ConfirmationDialog({
       isOpen={open}
       closeModal={onCancel}
       size="lg"
-      className="rounded-3xl bg-white p-6 shadow-none dark:bg-card"
+      className="rounded-3xl border bg-card p-6 text-card-foreground shadow-none"
       clickOutsideToClose={!isConfirming}
     >
       <div className="space-y-5">
