@@ -25,10 +25,12 @@ export const ClientProvider = ({ children }: ClientProviderProps) => {
         themes={[
           "light",
           "dark",
+          "neem",
           "macha",
           "graphite",
           "ocean",
-          "rose",
+          "jaipur-pink",
+          "jaipur",
           "luxury",
         ]}
         disableTransitionOnChange={false}

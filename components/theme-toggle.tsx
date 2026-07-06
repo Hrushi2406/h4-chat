@@ -34,9 +34,9 @@ const themeOptions = [
     palette: ["#171717", "#404040", "#f5f5f5"],
   },
   {
-    value: "macha",
-    label: "Macha",
-    vibe: "Soft matcha daylight",
+    value: "neem",
+    label: "Neem",
+    vibe: "Fresh herbal daylight",
     palette: ["#fbfdf3", "#8faf55", "#2f5f35"],
   },
   {
@@ -47,20 +47,20 @@ const themeOptions = [
   },
   {
     value: "ocean",
-    label: "Ocean",
-    vibe: "Deep blue drift",
+    label: "Malabar Blue",
+    vibe: "Deep coastal blue",
     palette: ["#082f49", "#38bdf8", "#67e8f9"],
   },
   {
-    value: "rose",
-    label: "Rose",
-    vibe: "Soft and expressive",
-    palette: ["#fff1f2", "#e11d48", "#fda4af"],
+    value: "jaipur-pink",
+    label: "Jaipur Pink",
+    vibe: "Soft Pink City glow",
+    palette: ["#fff5f7", "#f4a7b9", "#8a2f49"],
   },
   {
     value: "luxury",
-    label: "Luxury",
-    vibe: "Midnight luxury gold",
+    label: "Jaisalmer Gold",
+    vibe: "Desert palace gold",
     palette: ["#171006", "#d6a43a", "#fff1b8"],
   },
 ] as const;
