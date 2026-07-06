@@ -160,8 +160,8 @@ const ThreadSidebar = () => {
 
   return (
     <>
-      <Sidebar variant="inset">
-        <SidebarHeader className="px-0 pb-1">
+      <Sidebar>
+        <SidebarHeader className="px-2 pb-1 pt-3">
           <div className="flex px-2 items-center gap-2 pb-2">
             <img
               src="/saaki-chat-transparent.png"
@@ -227,7 +227,7 @@ const ThreadSidebar = () => {
             />
           )}
         </SidebarContent>
-        <SidebarFooter className="px-1.5 pb-1 pt-3">
+        <SidebarFooter className="px-2 pb-3 pt-3">
           <SidebarUserFooter
             name={user?.name}
             email={user?.email}
@@ -326,7 +326,7 @@ const ThreadsLoadingIndicator = ({ label }: { label: string }) => (
 );
 
 const ThreadsListSkeleton = () => (
-  <SidebarGroup className="px-0 py-1">
+  <SidebarGroup className="px-2 py-1">
     <SidebarGroupContent>
       <SidebarMenu>
         {Array.from({ length: 6 }).map((_, index) => (
@@ -405,7 +405,7 @@ const ThreadsList = ({
         if (!threadsInPeriod.length) return null;
 
         return (
-          <SidebarGroup key={period} className="px-0 py-1">
+          <SidebarGroup key={period} className="px-2 py-1">
             <SidebarGroupLabel className="text-xs text-muted-foreground">
               {getTimePeriodLabel(period)}
             </SidebarGroupLabel>

@@ -19,11 +19,11 @@ export default function Navbar() {
   };
 
   return (
-    <header className="flex h-12 shrink-0 items-center gap-2 px-4 border-b">
+    <header className="flex h-12 shrink-0 items-center gap-2 border-b px-4 md:border-b-0">
       <SidebarTrigger className="-ml-1" />
 
       <div className="flex items-center justify-between flex-1">
-        <h1 className="text-lg font-semibold">Sakhi AI</h1>
+        <h1 className="text-lg font-semibold">Sakhi</h1>
         <div className="flex items-center gap-2">
           <PwaInstallButton />
           <ThemeToggle />
