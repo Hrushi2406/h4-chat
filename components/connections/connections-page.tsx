@@ -223,6 +223,10 @@ const connectionMetadata: Record<string, ConnectionMetadata> = {
     category: "Design & Media",
     useCase: "Generate and manage voice audio",
   },
+  vapi: {
+    category: "Design & Media",
+    useCase: "Manage voice agents and calls",
+  },
   fal_ai: {
     category: "Design & Media",
     useCase: "Generate images and media assets",

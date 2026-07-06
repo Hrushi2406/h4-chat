@@ -46,7 +46,7 @@ export async function GET(req: Request) {
             toolkit.slug as keyof typeof COMPOSIO_TOOLKIT_LABELS
           ] ?? toolkit.name,
         providerName: toolkit.name,
-        logo: toolkit.logo,
+        logo: toolkit.logo ?? `https://logos.composio.dev/api/${toolkit.slug}`,
         isConnected: toolkit.connection?.isActive ?? false,
         connectedAccountId: toolkit.connection?.connectedAccount?.id,
         status: toolkit.connection?.connectedAccount?.status,

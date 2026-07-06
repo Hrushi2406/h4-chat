@@ -601,6 +601,7 @@ const CONNECTED_APP_PROMPTS: Record<string, string> = {
   strava: "Summarize my Strava activity",
   youtube: "Analyze my YouTube channel and videos",
   elevenlabs: "Create or manage ElevenLabs voice assets",
+  vapi: "Review my Vapi assistants and calls",
   cats: "Find cat images or breed facts",
   fal_ai: "Run a Fal.ai media generation task",
   todoist: "Organize my Todoist tasks",

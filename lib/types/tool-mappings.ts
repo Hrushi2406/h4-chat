@@ -268,6 +268,13 @@ const composioToolDisplay: Array<{
     Icon: PlugZap,
   },
   {
+    match: (context) => includesAny(context, ["VAPI"]),
+    appSlug: "vapi",
+    fallbackLoading: "Working with Vapi",
+    fallbackDone: "Used Vapi",
+    Icon: PlugZap,
+  },
+  {
     match: (context) => includesAny(context, ["CATS"]),
     appSlug: "cats",
     fallbackLoading: "Working with Cats",
@@ -1190,6 +1197,7 @@ const appLabels: Record<string, string> = {
   todoist: "Todoist",
   trello: "Trello",
   youtube: "YouTube",
+  vapi: "Vapi",
 };
 
 const getToolkitSlugFromToolSlug = (value: string) => {
