@@ -266,7 +266,7 @@ export const ChatInput = ({
   });
 
   return (
-    <div className="w-full min-w-0 p-2 pt-3 pb-mobile-safe">
+    <div className="w-full min-w-0 px-2 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:pb-4">
       <div className="mx-auto w-full min-w-0 max-w-4xl">
         {queuedMessages.length > 0 && (
           <div className="mx-auto w-[90%] overflow-hidden rounded-t-2xl border border-b-0 bg-background/95 px-2 py-1 shadow-sm backdrop-blur max-sm:w-full">
