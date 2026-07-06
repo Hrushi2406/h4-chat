@@ -28,11 +28,11 @@ export const ClientProvider = ({ children }: ClientProviderProps) => {
 };
 
 const AuthProvider = ({ children }: { children: React.ReactNode }) => {
-  const { uid, isAnon, isLoading } = useAuth();
+  const { uid, isLoading } = useAuth();
   const queryClient = useQueryClient();
   const pathname = usePathname();
   const router = useRouter();
-  const shouldRedirectHomeToChat = pathname === "/" && uid && isAnon === false;
+  const shouldRedirectHomeToChat = pathname === "/" && !!uid;
 
   useEffect(() => {
     if (!uid) return;

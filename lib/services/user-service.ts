@@ -13,7 +13,7 @@ class UserService {
 
   async createUserGoogle(uid: string, fbUser: User) {
     const userRef = doc(db, `users/${uid}`);
-    const user = generateDefaultUser(uid, false);
+    const user = generateDefaultUser(uid);
     const updated = {
       ...user,
       email: fbUser.email ?? "",

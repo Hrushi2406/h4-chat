@@ -21,7 +21,7 @@ export default function RootLayout({
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (user) => {
-      setRequiresSignIn(!user || user.isAnonymous);
+      setRequiresSignIn(!user);
       setIsCheckingAuth(false);
     });
     return () => unsubscribe();

@@ -15,7 +15,7 @@ import { GoogleLogo } from "@/lib/brand-logos";
 import { Loader2 } from "lucide-react";
 
 const SettingsLayout = ({ children }: { children: React.ReactNode }) => {
-  const { isAnon, isLoading } = useAuth();
+  const { uid, isLoading } = useAuth();
 
   if (isLoading) {
     return (
@@ -25,7 +25,7 @@ const SettingsLayout = ({ children }: { children: React.ReactNode }) => {
     );
   }
 
-  if (isAnon) {
+  if (!uid) {
     return (
       <div className="h-screen bg-secondary flex items-center justify-center">
         <AuthContainer />

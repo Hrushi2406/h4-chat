@@ -22,7 +22,6 @@ export const useAuthActions = () => {
       const cred = await signInWithPopup(auth, provider);
 
       if (cred.user) {
-        localStorage.setItem("isAnon", "false");
         await userService.createUserGoogle(cred.user.uid, cred.user);
       }
     },

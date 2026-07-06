@@ -39,7 +39,7 @@ export interface ThreadsPage {
 
 const getSignedInUserId = () => {
   const user = auth.currentUser;
-  return user && !user.isAnonymous ? user.uid : undefined;
+  return user?.uid ?? undefined;
 };
 
 const normalizeThreadData = (thread: Thread): Thread => ({
