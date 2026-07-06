@@ -779,11 +779,9 @@ function EmptyTasks({ onCreate }: { onCreate: () => void }) {
       <div className="mb-4 flex size-12 items-center justify-center rounded-full bg-muted text-muted-foreground">
         <CalendarClock className="h-6 w-6" />
       </div>
-      <h2 className="font-medium">No automations yet</h2>
+      <h2 className="font-medium">No automations</h2>
       <p className="mt-1.5 max-w-sm text-sm leading-6 text-muted-foreground">
-        An automation runs an instruction for you automatically — like
-        &ldquo;summarize my emails every morning.&rdquo; Set it once and Sakhi
-        handles the rest.
+        Set a task once and Sakhi runs it for you. Like &ldquo;send me a news summary every morning.&rdquo;
       </p>
       <Button className={cn(pillClass, "mt-5")} onClick={onCreate}>
         <Plus className="h-4 w-4" />

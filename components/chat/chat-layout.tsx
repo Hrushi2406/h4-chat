@@ -34,6 +34,7 @@ import {
   Clock,
   PlusSquare,
   Edit,
+  Blocks,
 } from "lucide-react";
 import Link from "next/link";
 import { useRouter, usePathname } from "next/navigation";
@@ -85,6 +86,7 @@ const ThreadSidebar = () => {
   const pathname = usePathname();
   const currentThreadId = pathname.split("/").pop() as string;
   const isScheduledTasksActive = pathname.startsWith("/scheduled-tasks");
+  const isConnectionsActive = pathname.startsWith("/apps");
   const { isMobile, setOpenMobile } = useSidebar();
 
   const { deleteThread } = useThreadActions();
@@ -112,6 +114,13 @@ const ThreadSidebar = () => {
 
   const handleScheduledTasksClick = () => {
     router.push("/scheduled-tasks");
+    if (isMobile) {
+      setOpenMobile(false);
+    }
+  };
+
+  const handleConnectionsClick = () => {
+    router.push("/apps");
     if (isMobile) {
       setOpenMobile(false);
     }
@@ -166,7 +175,7 @@ const ThreadSidebar = () => {
               <SidebarMenuButton
                 tooltip="New Chat"
                 onClick={handleNewThreadClick}
-                className="cursor-pointer "
+                className="cursor-pointer gap-2.5"
               >
                 <Edit className="h-4 w-4" />
                 <span>New Chat</span>
@@ -174,10 +183,21 @@ const ThreadSidebar = () => {
             </SidebarMenuItem>
             <SidebarMenuItem>
               <SidebarMenuButton
+                tooltip="Apps"
+                isActive={isConnectionsActive}
+                onClick={handleConnectionsClick}
+                className="cursor-pointer gap-2.5"
+              >
+                <Blocks className="h-4 w-4" />
+                <span>Apps</span>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+            <SidebarMenuItem>
+              <SidebarMenuButton
                 tooltip="Automations"
                 isActive={isScheduledTasksActive}
                 onClick={handleScheduledTasksClick}
-                className="cursor-pointer "
+                className="cursor-pointer gap-2.5"
               >
                 <Clock className="h-4 w-4" />
                 <span>Automations</span>
