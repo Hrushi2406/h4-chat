@@ -13,6 +13,17 @@ export const ALLOWED_FILE_TYPES = {
   "image/png": [".png"],
   "image/gif": [".gif"],
   "image/webp": [".webp"],
+  "audio/mpeg": [".mp3", ".mpeg"],
+  "audio/mp3": [".mp3"],
+  "audio/mp4": [".m4a", ".mp4"],
+  "audio/x-m4a": [".m4a"],
+  "audio/wav": [".wav"],
+  "audio/x-wav": [".wav"],
+  "audio/webm": [".webm"],
+  "audio/ogg": [".ogg", ".oga", ".opus"],
+  "audio/aac": [".aac"],
+  "audio/flac": [".flac"],
+  "audio/x-flac": [".flac"],
   "application/pdf": [".pdf"],
   "text/csv": [".csv"],
   "application/csv": [".csv"],
@@ -106,7 +117,7 @@ class StorageService {
 
     if (!hasAllowedMimeType && !hasAllowedExtension) {
       throw new Error(
-        "Only images, PDFs, spreadsheets, documents, text files, JSON, and ZIP files are allowed"
+        "Only images, audio files, PDFs, spreadsheets, documents, text files, JSON, and ZIP files are allowed"
       );
     }
 

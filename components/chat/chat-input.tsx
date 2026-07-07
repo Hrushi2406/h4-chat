@@ -6,6 +6,7 @@ import {
   ArrowUp,
   CloudUpload,
   CornerDownLeft,
+  FileAudio,
   FileText,
   Paperclip,
   Pencil,
@@ -576,6 +577,10 @@ const FilePreviews = ({
                     return () => URL.revokeObjectURL(URL.createObjectURL(file));
                   }}
                 />
+              ) : file.type.startsWith("audio/") ? (
+                <div className="w-full h-full flex items-center justify-center bg-muted/20">
+                  <FileAudio className="h-8 w-8 text-primary" />
+                </div>
               ) : file.type === "application/pdf" ? (
                 <div className="w-full h-full flex items-center justify-center bg-muted/20">
                   <FileText className="h-8 w-8 text-primary" />

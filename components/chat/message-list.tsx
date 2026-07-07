@@ -29,6 +29,7 @@ import {
   ArrowDown,
   ArrowUp,
   Check,
+  FileAudio,
   FileText,
   ChevronDown,
   ChevronRight,
@@ -1014,6 +1015,12 @@ const isImageAttachment = (attachment: ReturnType<typeof getMessageAttachments>[
   attachment.contentType?.startsWith("image/") ||
   /\.(gif|jpe?g|png|webp)$/i.test(attachment.name ?? "");
 
+const isAudioAttachment = (attachment: ReturnType<typeof getMessageAttachments>[number]) =>
+  attachment.contentType?.startsWith("audio/") ||
+  /\.(mp3|m4a|wav|webm|ogg|oga|opus|aac|flac|mpeg)$/i.test(
+    attachment.name ?? "",
+  );
+
 const UserMessage = memo(
   ({
     content,
@@ -1031,6 +1038,7 @@ const UserMessage = memo(
         >
           {attachments.map((attachment, attachmentIndex) => {
             const isImage = isImageAttachment(attachment);
+            const isAudio = isAudioAttachment(attachment);
 
             return (
               <div
@@ -1038,7 +1046,7 @@ const UserMessage = memo(
                 className={`rounded-lg overflow-hidden border border-border ${
                   attachments.length > 1
                     ? "max-w-[48%] max-h-[100px] aspect-square bg-muted"
-                    : "min-w-0 max-w-[min(200px,calc(100vw-3rem))]"
+                    : "min-w-0 max-w-[min(280px,calc(100vw-3rem))]"
                 }`}
               >
                 {isImage ? (
@@ -1054,6 +1062,23 @@ const UserMessage = memo(
                       loading="lazy"
                     />
                   </a>
+                ) : isAudio ? (
+                  <div className="flex h-full min-h-[120px] w-full flex-col items-center justify-center gap-2 bg-muted p-3">
+                    <a
+                      href={attachment.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex max-w-full items-center gap-2 text-xs text-primary transition-colors hover:text-primary/80"
+                    >
+                      <FileAudio className="h-5 w-5 shrink-0 text-muted-foreground" />
+                      <span className="truncate">
+                        {attachment.name || "Attached audio"}
+                      </span>
+                    </a>
+                    {attachments.length === 1 && (
+                      <audio controls src={attachment.url} className="w-full" />
+                    )}
+                  </div>
                 ) : (
                   <a
                     href={attachment.url}
