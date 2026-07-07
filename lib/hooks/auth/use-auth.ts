@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { onAuthStateChanged } from "firebase/auth";
+import { onAuthStateChanged, signOut } from "firebase/auth";
 import { auth } from "@/lib/clients/firebase";
 
 export const useAuth = () => {
@@ -8,6 +8,13 @@ export const useAuth = () => {
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (user) => {
+      if (user?.isAnonymous) {
+        setUid(undefined);
+        setIsLoading(false);
+        void signOut(auth);
+        return;
+      }
+
       setUid(user?.uid ?? undefined);
       setIsLoading(false);
     });

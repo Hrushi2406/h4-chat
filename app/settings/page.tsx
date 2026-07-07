@@ -188,7 +188,7 @@ const AccountSettings = () => {
             </div>
             <div className="mt-4 min-w-0">
               <p className="truncate font-medium">
-                {user?.name || "Anonymous User"}
+                {user?.name || "User"}
               </p>
               <p className="mt-1 break-all text-sm text-muted-foreground">
                 {user?.email || "No email provided"}

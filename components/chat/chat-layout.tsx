@@ -261,7 +261,7 @@ const SidebarUserFooter = ({
   avatar,
   fallbackSeed,
 }: SidebarUserFooterProps) => {
-  const displayName = name?.trim() || "Anonymous User";
+  const displayName = name?.trim() || "User";
   const displayEmail = email?.trim() || "No email provided";
   const initials = getUserInitials(fallbackSeed || displayName);
 

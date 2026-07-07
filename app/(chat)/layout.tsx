@@ -3,7 +3,7 @@
 import ChatLayout from "@/components/chat/chat-layout";
 import { useAuthActions } from "@/lib/hooks/auth/use-auth-actions";
 import { auth } from "@/lib/clients/firebase";
-import { onAuthStateChanged } from "firebase/auth";
+import { onAuthStateChanged, signOut } from "firebase/auth";
 import { useEffect, useState } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -21,6 +21,13 @@ export default function RootLayout({
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (user) => {
+      if (user?.isAnonymous) {
+        setRequiresSignIn(true);
+        setIsCheckingAuth(false);
+        void signOut(auth);
+        return;
+      }
+
       setRequiresSignIn(!user);
       setIsCheckingAuth(false);
     });

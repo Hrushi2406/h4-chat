@@ -16,6 +16,12 @@ export async function verifyFirebaseIdToken(idToken?: string) {
     // public keys (cached in-process), so this is a no-network call after
     // the first request that warms the key cache.
     const decoded = await auth.verifyIdToken(idToken);
+    const provider = decoded.firebase?.sign_in_provider;
+
+    if (provider === "anonymous") {
+      return undefined;
+    }
+
     return decoded.uid;
   } catch (error) {
     console.error(
