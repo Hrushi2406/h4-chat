@@ -83,10 +83,14 @@ export async function POST(req: Request) {
       return Response.json({ error: "Unsupported toolkit" }, { status: 400 });
     }
 
-    const origin = new URL(req.url).origin;
+    const origin = (
+      process.env.NEXT_PUBLIC_BASE_URL ||
+      process.env.APP_URL ||
+      new URL(req.url).origin
+    ).replace(/\/$/, "");
     const session = await createComposioSession(userId);
     const connectionRequest = await session.authorize(toolkit, {
-      callbackUrl: `${origin}/settings?tab=connections`,
+      callbackUrl: `${origin}/apps`,
     });
 
     return Response.json({ redirectUrl: connectionRequest.redirectUrl });

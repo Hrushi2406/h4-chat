@@ -486,7 +486,11 @@ async function getComposioTools(
 }
 
 function getChatCallbackUrl(req: Request, threadId?: string) {
-  const origin = new URL(req.url).origin;
+  const origin = (
+    process.env.NEXT_PUBLIC_BASE_URL ||
+    process.env.APP_URL ||
+    new URL(req.url).origin
+  ).replace(/\/$/, "");
 
   return threadId
     ? `${origin}/chat/${threadId}?composioAuth=complete`

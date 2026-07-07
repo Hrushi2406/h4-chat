@@ -1,6 +1,7 @@
 "use client";
 
-import React from "react";
+import React, { useEffect } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import {
   CalendarDays,
   FileText,
@@ -252,6 +253,8 @@ const getConnectionMetadata = (toolkit: ConnectionToolkit) =>
 
 export default function ConnectionsPage() {
   const { uid } = useAuth();
+  const router = useRouter();
+  const searchParams = useSearchParams();
   const [pendingSlug, setPendingSlug] = React.useState<string>();
   const [connectionSearch, setConnectionSearch] = React.useState("");
   const {
@@ -261,6 +264,15 @@ export default function ConnectionsPage() {
     refetch,
   } = useConnections(uid);
   const normalizedSearch = connectionSearch.trim().toLowerCase();
+
+  useEffect(() => {
+    if (!searchParams.get("connected_account_id")) return;
+    void refetch();
+    const params = new URLSearchParams(searchParams.toString());
+    params.delete("connected_account_id");
+    params.delete("status");
+    router.replace(`/apps${params.size ? `?${params}` : ""}`, { scroll: false });
+  }, [refetch, router, searchParams]);
 
   const filteredToolkits = React.useMemo(() => {
     const sortedToolkits = [...toolkits].sort((a, b) =>
