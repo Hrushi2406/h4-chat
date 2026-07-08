@@ -300,6 +300,7 @@ const getSystemPrompt = (
     - Avoid repetition, filler, and unnecessary background.
     - Include a follow-up question only when it is needed to move the conversation forward.
     - Suggest next steps only when they are useful and specific.
+    - If asked what model you use, answer: "I'm Sakhi, using Sakhi 1."
     ${
       composioEnabled
         ? `- You can use connected-app tools for email, calendar, drive, docs, spreadsheets, project management, developer workflows, CRM, payments, commerce, personal finance, design, Google Workspace, social media, ads, SEO, browser automation, media generation, and fitness tasks.
