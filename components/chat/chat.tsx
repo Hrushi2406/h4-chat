@@ -571,6 +571,8 @@ export function Chat({ threadId, isNew = false }: ChatProps) {
           name: user?.name,
           occupation: user?.occupation,
           userPreferences: user?.userPreferences,
+          memories: user?.memories,
+          memoryEnabled: user?.memoryEnabled,
         },
       },
     };

@@ -4,12 +4,15 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import {
+  Check,
   ChevronLeft,
   Loader2,
   LogOut,
+  Pencil,
   Plus,
   Server,
   Trash2,
+  X,
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
@@ -25,6 +28,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
+import ConfirmationDialog from "@/components/ui/confirmation-dialog";
 import { useUser } from "@/lib/hooks/user/use-user";
 import { useUserActions } from "@/lib/hooks/user/use-user-actions";
 import { Textarea } from "@/components/ui/textarea";
@@ -42,13 +46,18 @@ import {
   slugifyMcpId,
   type StoredMcpServer,
 } from "@/lib/types/mcp-server";
+import {
+  MAX_MEMORY_CONTENT_LENGTH,
+  MAX_USER_MEMORIES,
+  type IMemory,
+} from "@/lib/types/user";
 
 const settingsCardClass = "rounded-3xl border bg-card text-card-foreground shadow-xs";
 const settingsPanelClass = "rounded-3xl border bg-card p-4 text-card-foreground shadow-xs";
 const settingsControlClass = "rounded-full shadow-xs";
 const settingsBtnClass = "rounded-full";
 
-const SETTINGS_TABS = ["account", "mcp"] as const;
+const SETTINGS_TABS = ["account", "mcp", "memories"] as const;
 type SettingsTab = (typeof SETTINGS_TABS)[number];
 
 const isSettingsTab = (value: string): value is SettingsTab =>
@@ -119,6 +128,12 @@ function SettingsPageInner() {
             >
               MCP
             </TabsTrigger>
+            <TabsTrigger
+              value="memories"
+              className={cn(settingsBtnClass, "h-8 shrink-0 px-4")}
+            >
+              Memories
+            </TabsTrigger>
           </TabsList>
           <div
             className="hidden min-w-0 sm:block sm:flex-1 sm:basis-0"
@@ -136,6 +151,13 @@ function SettingsPageInner() {
           <Card className={settingsCardClass}>
             <CardContent className="">
               <McpSettings />
+            </CardContent>
+          </Card>
+        </TabsContent>
+        <TabsContent value="memories">
+          <Card className={settingsCardClass}>
+            <CardContent className="">
+              <MemorySettings />
             </CardContent>
           </Card>
         </TabsContent>
@@ -651,6 +673,225 @@ const McpSettings = () => {
           ))
         )}
       </div>
+    </div>
+  );
+};
+
+const MemorySettings = () => {
+  const { data: user, isLoading } = useUser();
+  const { addMemory, updateMemory, deleteMemory, updateUser } = useUserActions();
+  const memories = user?.memories ?? [];
+  const memoryEnabled = user?.memoryEnabled !== false;
+  const atLimit = memories.length >= MAX_USER_MEMORIES;
+
+  const [newMemory, setNewMemory] = React.useState("");
+  const [editingId, setEditingId] = React.useState<string>();
+  const [editingContent, setEditingContent] = React.useState("");
+  const [memoryToDelete, setMemoryToDelete] = React.useState<IMemory>();
+
+  const handleToggleMemoryEnabled = (enabled: boolean) => {
+    if (!user?.uid) return;
+
+    updateUser.mutate({ uid: user.uid, update: { memoryEnabled: enabled } });
+  };
+
+  const handleAddMemory = () => {
+    const content = newMemory.trim();
+    if (!user?.uid || !content || atLimit) return;
+
+    setNewMemory("");
+    addMemory.mutate({ uid: user.uid, content });
+  };
+
+  const handleStartEdit = (memory: IMemory) => {
+    setEditingId(memory.id);
+    setEditingContent(memory.content);
+  };
+
+  const handleSaveEdit = () => {
+    const content = editingContent.trim();
+
+    if (!user?.uid || !editingId) return;
+    if (!content) {
+      setEditingId(undefined);
+      return;
+    }
+
+    updateMemory.mutate({ uid: user.uid, memoryId: editingId, content });
+    setEditingId(undefined);
+  };
+
+  const handleConfirmDelete = () => {
+    if (!user?.uid || !memoryToDelete) return;
+    deleteMemory.mutate(
+      { uid: user.uid, memoryId: memoryToDelete.id },
+      { onSuccess: () => setMemoryToDelete(undefined) },
+    );
+  };
+
+  const rowClass = "flex items-center gap-3 px-4 py-3 first:rounded-t-2xl last:rounded-b-2xl";
+
+  if (isLoading) {
+    return (
+      <div className="space-y-2">
+        <div className="flex items-center justify-between gap-4 px-1">
+          <div>
+            <h2 className="text-xl font-semibold">Memories</h2>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Sakhi remembers things you tell it, so it can help you better
+              next time.
+            </p>
+          </div>
+          <div className="h-5 w-9 shrink-0 animate-pulse rounded-full bg-muted" />
+        </div>
+        <div className="divide-y divide-border overflow-hidden rounded-2xl border bg-card">
+          {[0, 1, 2].map((i) => (
+            <div key={i} className={rowClass}>
+              <div
+                className="h-4 animate-pulse rounded bg-muted"
+                style={{ width: `${60 - i * 10}%` }}
+              />
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between gap-4 px-1">
+        <div>
+          <h2 className="text-xl font-semibold">Memories</h2>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Sakhi remembers things you tell it, so it can help you better
+            next time.
+          </p>
+        </div>
+        <Switch
+          checked={memoryEnabled}
+          onCheckedChange={handleToggleMemoryEnabled}
+          disabled={updateUser.isPending || !user?.uid}
+          aria-label="Toggle memory"
+          className="shrink-0 cursor-pointer"
+        />
+      </div>
+
+      {!memoryEnabled ? (
+        <div className="rounded-2xl border border-dashed bg-card px-4 py-8 text-center text-sm text-muted-foreground">
+          Memory is off. Sakhi won't save or use memories in chats. Your
+          existing memories are kept and will return if you turn this back on.
+        </div>
+      ) : (
+        <>
+          <div className="divide-y divide-border overflow-hidden rounded-2xl border bg-card">
+            {memories.map((memory) =>
+              editingId === memory.id ? (
+                <div key={memory.id} className={cn(rowClass, "justify-between")}>
+                  <input
+                    autoFocus
+                    value={editingContent}
+                    onChange={(e) => setEditingContent(e.target.value)}
+                    maxLength={MAX_MEMORY_CONTENT_LENGTH}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") handleSaveEdit();
+                      if (e.key === "Escape") setEditingId(undefined);
+                    }}
+                    className="min-w-0 flex-1 bg-transparent text-sm outline-none"
+                  />
+                  <div className="flex shrink-0 items-center gap-1">
+                    <button
+                      type="button"
+                      onMouseDown={(e) => e.preventDefault()}
+                      onClick={handleSaveEdit}
+                      aria-label="Save memory"
+                      className="cursor-pointer rounded p-1 text-muted-foreground hover:text-foreground"
+                    >
+                      <Check className="h-3.5 w-3.5" />
+                    </button>
+                    <button
+                      type="button"
+                      onMouseDown={(e) => e.preventDefault()}
+                      onClick={() => setEditingId(undefined)}
+                      aria-label="Cancel edit"
+                      className="cursor-pointer rounded p-1 text-muted-foreground hover:text-foreground"
+                    >
+                      <X className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div key={memory.id} className={cn(rowClass, "justify-between")}>
+                  <p className="min-w-0 flex-1 truncate text-sm">
+                    {memory.content}
+                  </p>
+                  <div className="flex shrink-0 items-center gap-1">
+                    <button
+                      type="button"
+                      onClick={() => handleStartEdit(memory)}
+                      aria-label="Edit memory"
+                      className="cursor-pointer rounded p-1 text-muted-foreground hover:text-foreground"
+                    >
+                      <Pencil className="h-3.5 w-3.5" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setMemoryToDelete(memory)}
+                      aria-label="Delete memory"
+                      className="cursor-pointer rounded p-1 text-muted-foreground hover:text-foreground"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                </div>
+              ),
+            )}
+
+            {!atLimit && (
+              <div className={cn(rowClass, "justify-between")}>
+                <div className="flex min-w-0 flex-1 items-center gap-3">
+                  <Plus className="h-4 w-4 shrink-0 text-muted-foreground" />
+                  <input
+                    value={newMemory}
+                    onChange={(e) => setNewMemory(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") handleAddMemory();
+                    }}
+                    placeholder="Add a memory"
+                    maxLength={MAX_MEMORY_CONTENT_LENGTH}
+                    className="min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground"
+                  />
+                </div>
+                {newMemory.trim() && (
+                  <button
+                    type="button"
+                    onMouseDown={(e) => e.preventDefault()}
+                    onClick={handleAddMemory}
+                    aria-label="Save memory"
+                    className="shrink-0 cursor-pointer rounded p-1 text-muted-foreground hover:text-foreground"
+                  >
+                    <Check className="h-3.5 w-3.5" />
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
+        </>
+      )}
+
+      <ConfirmationDialog
+        open={Boolean(memoryToDelete)}
+        title="Delete this memory?"
+        description={
+          memoryToDelete
+            ? `Sakhi will forget: "${memoryToDelete.content}"`
+            : ""
+        }
+        confirmLabel="Delete"
+        isConfirming={deleteMemory.isPending}
+        onCancel={() => setMemoryToDelete(undefined)}
+        onConfirm={handleConfirmDelete}
+      />
     </div>
   );
 };

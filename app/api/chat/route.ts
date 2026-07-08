@@ -27,8 +27,13 @@ import {
   COMPOSIO_TOOLKIT_EXAMPLES,
   COMPOSIO_TOOL_NAME_PATTERN,
 } from "@/lib/types/composio-tool-slugs";
-import { IUser } from "@/lib/types/user";
+import { IUser, MAX_MEMORY_CONTENT_LENGTH } from "@/lib/types/user";
 import scheduledTaskServerService from "@/lib/services/scheduled-task-server-service";
+import {
+  addUserMemory,
+  deleteUserMemory,
+  updateUserMemory,
+} from "@/lib/user-memories-admin";
 
 export async function POST(req: Request) {
   const latency = createLatencyLogger();
@@ -111,6 +116,7 @@ export async function POST(req: Request) {
   );
   const needsComposioFileRule =
     Boolean(composioTools) && messagesWithFileUrls !== messages;
+  const memoryEnabled = userInfo?.memoryEnabled !== false;
   latency.step("message prep");
 
   const systemPrompt = `${getSystemPrompt(
@@ -119,6 +125,7 @@ export async function POST(req: Request) {
     needsComposioFileRule,
     mcpContext?.servers,
     userInfo,
+    memoryEnabled,
   )}\n${getScheduledTaskSystemPrompt()}`;
   latency.step("system prompt");
 
@@ -132,6 +139,7 @@ export async function POST(req: Request) {
       modelId,
       baseUrl: getBaseUrl(req),
     }),
+    ...(memoryEnabled ? createMemoryTools({ userId: verifiedUserId }) : {}),
     ...composioTools,
     ...mcpContext?.tools,
   } satisfies ToolSet;
@@ -286,10 +294,11 @@ const getSystemPrompt = (
       }>
     | undefined,
   userInfo: Partial<IUser>,
+  memoryEnabled: boolean,
 ) => {
   const requestHints = getRequestPromptFromHints(geo);
 
-  const { name, occupation, userPreferences } = userInfo;
+  const { name, occupation, userPreferences, memories } = userInfo;
 
   return `You are Sakhi, a trusted AI friend who talks in a natural way, helps people get things done, and keeps answers short unless they need more details. Give clear and well-formatted responses in markdown.
 
@@ -339,6 +348,17 @@ const getSystemPrompt = (
     ${name ? `User's name is ${name}` : ""}
     ${occupation ? `User's occupation is ${occupation}` : ""}
     ${userPreferences ? `User's preferences are ${userPreferences}` : ""}
+    ${
+      memoryEnabled && memories?.length
+        ? `What you remember about the user (id — use with update_memory/delete_memory):
+      ${memories.map((m) => `- [${m.id}] ${m.content}`).join("\n      ")}`
+        : ""
+    }
+    ${
+      memoryEnabled
+        ? `- Tools: save_memory, update_memory, delete_memory — for durable facts worth recalling across future conversations (preferences, ongoing projects, recurring context, explicit "remember this" requests), not one-off details. Check the list above first; update instead of duplicating. If save_memory errors (limit reached), update or delete an existing memory instead. Do this silently, no narration.`
+        : ""
+    }
     If a tool call fails, do not retry the same failing tool repeatedly. Briefly explain the failure, continue with a best-effort direct answer, and only ask for user input when necessary.
     ${requestHints}
     `;
@@ -578,6 +598,46 @@ function createScheduledTaskTools({
             "Automation created. The user can inspect and test it from Automations.",
         };
       },
+    }),
+  } satisfies ToolSet;
+}
+
+function createMemoryTools({ userId }: { userId?: string }): ToolSet {
+  if (!userId) {
+    return {};
+  }
+
+  return {
+    save_memory: tool({
+      description:
+        "Save a durable fact about the user worth recalling across future conversations (preferences, ongoing projects, recurring context, explicit 'remember this' requests). Not for one-off details.",
+      inputSchema: z.object({
+        content: z
+          .string()
+          .min(1)
+          .max(MAX_MEMORY_CONTENT_LENGTH)
+          .describe(
+            `The fact to remember, written concisely (max ${MAX_MEMORY_CONTENT_LENGTH} characters).`,
+          ),
+      }),
+      execute: async ({ content }) => addUserMemory(userId, content),
+    }),
+    update_memory: tool({
+      description:
+        "Update an existing memory, for example to refine or correct it instead of creating a duplicate.",
+      inputSchema: z.object({
+        memory_id: z.string().min(1),
+        content: z.string().min(1).max(MAX_MEMORY_CONTENT_LENGTH),
+      }),
+      execute: async ({ memory_id, content }) =>
+        updateUserMemory(userId, memory_id, content),
+    }),
+    delete_memory: tool({
+      description: "Delete a memory that is no longer accurate or relevant.",
+      inputSchema: z.object({
+        memory_id: z.string().min(1),
+      }),
+      execute: async ({ memory_id }) => deleteUserMemory(userId, memory_id),
     }),
   } satisfies ToolSet;
 }
