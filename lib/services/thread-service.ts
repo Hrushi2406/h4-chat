@@ -125,6 +125,7 @@ class ThreadService {
         ...defaultThread,
         id: threadId,
         title: title,
+        titleSource: "fallback" as const,
         isPinned: false,
         createdAt: now,
         updatedAt: now,
@@ -265,6 +266,7 @@ class ThreadService {
 
       const updateFields = {
         title: title,
+        titleSource: "manual" as const,
       };
 
       await updateDoc(docRef, removeUndefinedValues(updateFields));

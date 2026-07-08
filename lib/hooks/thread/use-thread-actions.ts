@@ -137,6 +137,7 @@ export const useThreadActions = () => {
       const optimisticThread: Thread = {
         id: threadId,
         title,
+        titleSource: "fallback",
         messages: [{ ...initialMessage, updatedAt: now.toISOString() }],
         createdAt: now,
         updatedAt: now,
@@ -179,10 +180,14 @@ export const useThreadActions = () => {
       qc.setQueryData(
         threadKeys.detail(threadId),
         (oldData: Thread | undefined) =>
-          oldData ? { ...oldData, title } : oldData
+          oldData ? { ...oldData, title, titleSource: "manual" } : oldData
       );
       qc.setQueryData<ThreadsInfiniteData>(threadKeys.all, (oldData) =>
-        updateThreadInList(oldData, threadId, (thread) => ({ ...thread, title }))
+        updateThreadInList(oldData, threadId, (thread) => ({
+          ...thread,
+          title,
+          titleSource: "manual",
+        }))
       );
       qc.invalidateQueries({ queryKey: threadKeys.all });
     },

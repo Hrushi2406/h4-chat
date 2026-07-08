@@ -33,6 +33,7 @@ export interface ThreadMessage extends UIMessage<ThreadMessageMetadata> {
 export interface Thread {
   id: string;
   title: string;
+  titleSource?: "fallback" | "generated" | "manual";
   messages: ThreadMessage[];
   createdAt: Date;
   updatedAt: Date;

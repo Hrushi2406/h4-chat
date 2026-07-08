@@ -6,13 +6,14 @@ import { ChatInput } from "@/components/chat/chat-input";
 import { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { getDefaultModel, type AIModel } from "@/lib/available-models";
 import { useThreadActions } from "@/lib/hooks/thread/use-thread-actions";
-import { useThread } from "@/lib/hooks/thread/use-threads";
+import { threadKeys, useThread } from "@/lib/hooks/thread/use-threads";
 import {
   Attachment,
   attachmentsToFileParts,
   generateDefaultErrorMessage,
   generateDefaultUserMessage,
   normalizeThreadMessage,
+  Thread,
   ThreadMessage,
   ThreadMessageMetadata,
 } from "@/lib/types/thread";
@@ -25,8 +26,9 @@ import {
   connectionKeys,
   useConnections,
 } from "@/lib/hooks/connections/use-connections";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQueryClient, type InfiniteData } from "@tanstack/react-query";
 import { useMcpServers } from "@/lib/hooks/mcp/use-mcp-servers";
+import type { ThreadCursor, ThreadsPage } from "@/lib/services/thread-service";
 
 interface ChatProps {
   threadId: string;
@@ -39,12 +41,38 @@ type QueuedChatMessage = {
   attachments: Attachment[];
 };
 
+type ThreadsInfiniteData = InfiniteData<ThreadsPage, ThreadCursor | null>;
+type GeneratedTitleResponse = {
+  title?: string;
+  skipped?: boolean;
+};
+
 let newThreadDraft = "";
 
 const readNewThreadDraft = () => newThreadDraft;
 
 const writeNewThreadDraft = (draft: string) => {
   newThreadDraft = draft;
+};
+
+const updateThreadTitleInList = (
+  data: ThreadsInfiniteData | undefined,
+  threadId: string,
+  title: string,
+): ThreadsInfiniteData | undefined => {
+  if (!data) return data;
+
+  return {
+    ...data,
+    pages: data.pages.map((page) => ({
+      ...page,
+      threads: page.threads.map((thread) =>
+        thread.id === threadId
+          ? { ...thread, title, titleSource: "generated" }
+          : thread,
+      ),
+    })),
+  };
 };
 
 export function Chat({ threadId, isNew = false }: ChatProps) {
@@ -249,6 +277,39 @@ export function Chat({ threadId, isNew = false }: ChatProps) {
     });
   };
 
+  const generateTitleForNewThread = async (firstMessage: string) => {
+    try {
+      const authToken = await auth.currentUser?.getIdToken();
+      if (!authToken) return;
+
+      const response = await fetch("/api/chat/title", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ threadId, firstMessage, authToken }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`Title generation failed with ${response.status}`);
+      }
+
+      const data = (await response.json()) as GeneratedTitleResponse;
+      if (!data.title || data.skipped) return;
+
+      queryClient.setQueryData(
+        threadKeys.detail(threadId),
+        (oldData: Thread | null | undefined) =>
+          oldData
+            ? { ...oldData, title: data.title!, titleSource: "generated" }
+            : oldData,
+      );
+      queryClient.setQueryData<ThreadsInfiniteData>(threadKeys.all, (oldData) =>
+        updateThreadTitleInList(oldData, threadId, data.title!),
+      );
+    } catch (error) {
+      console.error("Failed to generate chat title:", error);
+    }
+  };
+
   const persistUserMessageBeforeSend = async (
     title: string,
     message: ThreadMessage
@@ -267,6 +328,7 @@ export function Chat({ threadId, isNew = false }: ChatProps) {
           initialMessage: message,
         });
 
+        void generateTitleForNewThread(title);
         setIsNewThread(false);
       } finally {
         setIsCreatingThread(false);
