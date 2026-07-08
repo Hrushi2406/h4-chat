@@ -33,7 +33,6 @@ import ConfirmationDialog from "@/components/ui/confirmation-dialog";
 import { useUser } from "@/lib/hooks/user/use-user";
 import { useUserActions } from "@/lib/hooks/user/use-user-actions";
 import { Textarea } from "@/components/ui/textarea";
-import { Progress } from "@/components/ui/progress";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { useAuth } from "@/lib/hooks/auth/use-auth";
@@ -180,84 +179,15 @@ export default function SettingsPage() {
 
 const AccountSettings = () => {
   const { data: user } = useUser();
-  const { signOutUser } = useAuthActions();
-
-  return (
-    <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,2fr)]">
-      <section className="flex flex-col rounded-3xl border bg-card p-5 text-card-foreground shadow-xs">
-        <div className="flex flex-1 flex-col justify-center">
-          <div className="flex flex-col items-center text-center">
-            <div className="h-20 w-20 overflow-hidden rounded-full border bg-muted shadow-xs">
-              {user?.avatar ? (
-                <img
-                  src={user.avatar}
-                  loading="lazy"
-                  alt={user?.name || "User avatar"}
-                  className="h-full w-full object-cover"
-                  onError={(e) => {
-                    e.currentTarget.onerror = null;
-                    e.currentTarget.src =
-                      "https://via.placeholder.com/150?text=Error";
-                  }}
-                />
-              ) : (
-                <div className="h-full w-full bg-muted flex items-center justify-center">
-                  <span className="text-3xl font-medium text-muted-foreground">
-                    {user?.name?.charAt(0) || user?.email?.charAt(0) || "?"}
-                  </span>
-                </div>
-              )}
-            </div>
-            <div className="mt-4 min-w-0">
-              <p className="truncate font-medium">
-                {user?.name || "User"}
-              </p>
-              <p className="mt-1 break-all text-sm text-muted-foreground">
-                {user?.email || "No email provided"}
-              </p>
-            </div>
-          </div>
-
-          <div className="mx-auto mt-6 w-full max-w-48">
-            <div className="mb-2 flex items-center justify-between gap-3">
-              <p className="text-xs text-muted-foreground">Usage</p>
-              <div className="text-xs text-muted-foreground">{80}/400</div>
-            </div>
-            <Progress value={25} max={400} className="h-2 w-full" />
-          </div>
-        </div>
-        <Button
-          type="button"
-          variant="secondary"
-          size="sm"
-          className={cn(
-            settingsBtnClass,
-            "mt-6 h-7 w-full px-2.5 text-xs lg:mt-auto",
-          )}
-          onClick={() => signOutUser.mutate()}
-          disabled={signOutUser.isPending}
-        >
-          {signOutUser.isPending ? (
-            <Loader2 className="h-3.5 w-3.5 animate-spin" />
-          ) : (
-            <LogOut className="h-3.5 w-3.5" />
-          )}
-          Log out
-        </Button>
-      </section>
-      <CustomizationSettings />
-    </div>
-  );
-};
-
-const CustomizationSettings = () => {
-  const { data: user } = useUser();
   const { updateUser } = useUserActions();
+  const { signOutUser } = useAuthActions();
   const [name, setName] = React.useState(user?.name || "");
   const [occupation, setOccupation] = React.useState(user?.occupation || "");
   const [userPreferences, setUserPreferences] = React.useState(
     user?.userPreferences || "",
   );
+  const [isSigningOutConfirmOpen, setIsSigningOutConfirmOpen] =
+    React.useState(false);
 
   React.useEffect(() => {
     if (user) {
@@ -267,109 +197,182 @@ const CustomizationSettings = () => {
     }
   }, [user]);
 
-  const handleNameChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setName(e.target.value.slice(0, 50));
+  const isDirty =
+    name !== (user?.name || "") ||
+    occupation !== (user?.occupation || "") ||
+    userPreferences !== (user?.userPreferences || "");
+
+  const handleDiscardChanges = () => {
+    setName(user?.name || "");
+    setOccupation(user?.occupation || "");
+    setUserPreferences(user?.userPreferences || "");
   };
 
-  const handleOccupationChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setOccupation(e.target.value.slice(0, 50));
-  };
-
-  const handleUserPreferencesChange = (
-    e: React.ChangeEvent<HTMLTextAreaElement>,
-  ) => {
-    setUserPreferences(e.target.value.slice(0, 500));
-  };
-
-  const handleSaveChanges = (e: React.FormEvent) => {
-    e.preventDefault();
-
+  const handleSaveChanges = () => {
     if (!user?.uid) return;
 
     updateUser.mutate({
       uid: user.uid,
-      update: {
-        name,
-        occupation,
-        userPreferences,
-      },
+      update: { name, occupation, userPreferences },
     });
   };
 
+  const iosListClass =
+    "overflow-hidden rounded-[20px] bg-muted/50 divide-y divide-border/70";
+  const iosRowClass =
+    "flex min-h-11 items-center gap-3 px-4 py-2.5 transition-colors hover:bg-foreground/[0.03] focus-within:bg-foreground/[0.03]";
+
   return (
-    <div className="">
-      <form onSubmit={handleSaveChanges} className="space-y-4">
-        <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
-          <h2 className="text-lg font-semibold sm:text-xl">Customization</h2>
-          <Button
-            type="submit"
-            size="sm"
-            disabled={updateUser.isPending}
-            className={cn("shrink-0", settingsBtnClass)}
-          >
-            {updateUser.isPending && (
-              <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />
+    <div className="grid gap-4 lg:grid-cols-[260px_minmax(0,1fr)] lg:items-stretch lg:gap-6">
+      <div className="flex flex-col gap-4 lg:gap-3">
+        <section className="flex flex-col items-center gap-3 rounded-[20px] bg-muted/50 p-5 text-center">
+          <div className="h-16 w-16 shrink-0 overflow-hidden rounded-full bg-muted">
+            {user?.avatar ? (
+              <img
+                src={user.avatar}
+                loading="lazy"
+                alt={user?.name || "User avatar"}
+                className="h-full w-full object-cover"
+                onError={(e) => {
+                  e.currentTarget.onerror = null;
+                  e.currentTarget.src =
+                    "https://via.placeholder.com/150?text=Error";
+                }}
+              />
+            ) : (
+              <div className="flex h-full w-full items-center justify-center bg-muted">
+                <span className="text-xl font-medium text-muted-foreground">
+                  {user?.name?.charAt(0) || user?.email?.charAt(0) || "?"}
+                </span>
+              </div>
             )}
-            Save
-          </Button>
-        </div>
-        <div className="space-y-2">
-          <Label htmlFor="display-name">What should Sakhi Chat call you?</Label>
-          <div className="flex flex-col gap-1">
-            <Input
-              id="display-name"
-              value={name}
-              onChange={handleNameChange}
-              placeholder="Enter your name"
-              maxLength={50}
-              className={settingsControlClass}
-            />
-            <div className="flex justify-end">
-              <span className="text-xs text-muted-foreground">
-                {name.length}/50
-              </span>
-            </div>
+          </div>
+          <div className="min-w-0">
+            <p className="truncate text-[17px] font-semibold leading-tight">
+              {user?.name || "User"}
+            </p>
+            <p className="mt-0.5 truncate text-[13px] text-muted-foreground">
+              {user?.email || "No email provided"}
+            </p>
+          </div>
+        </section>
+
+        <div className="hidden lg:mt-auto lg:block">
+          <div className={iosListClass}>
+            <Button
+              type="button"
+              variant="ghost"
+              onClick={() => setIsSigningOutConfirmOpen(true)}
+              className="h-11 w-full rounded-none text-[15px] font-medium text-destructive hover:bg-transparent hover:text-destructive"
+            >
+              Log out
+            </Button>
           </div>
         </div>
-        <div className="space-y-2">
-          <Label htmlFor="occupation">What do you do?</Label>
-          <div className="flex flex-col gap-1">
-            <Input
-              id="occupation"
-              value={occupation}
-              onChange={handleOccupationChange}
-              placeholder="Indie Hacker, Designer, Developer, etc."
-              maxLength={50}
-              className={settingsControlClass}
-            />
-            <div className="flex justify-end">
-              <span className="text-xs text-muted-foreground">
-                {occupation.length}/50
-              </span>
+      </div>
+
+      <div className="flex flex-col gap-4 lg:gap-6">
+        <div className="space-y-1.5">
+          <div className={iosListClass}>
+            <label htmlFor="display-name" className={cn(iosRowClass, "cursor-text group")}>
+              <span className="w-24 shrink-0 text-[15px]">Name</span>
+              <Input
+                id="display-name"
+                value={name}
+                onChange={(e) => setName(e.target.value.slice(0, 50))}
+                placeholder="Not set"
+                maxLength={50}
+                className="h-auto flex-1 border-none bg-transparent px-0 text-right text-[15px] shadow-none focus-visible:ring-0"
+              />
+              <Pencil className="h-3.5 w-3.5 shrink-0 text-muted-foreground/60 transition-colors group-focus-within:text-primary" />
+            </label>
+            <label htmlFor="occupation" className={cn(iosRowClass, "cursor-text group")}>
+              <span className="w-24 shrink-0 text-[15px]">Occupation</span>
+              <Input
+                id="occupation"
+                value={occupation}
+                onChange={(e) => setOccupation(e.target.value.slice(0, 50))}
+                placeholder="Not set"
+                maxLength={50}
+                className="h-auto flex-1 border-none bg-transparent px-0 text-right text-[15px] shadow-none focus-visible:ring-0"
+              />
+              <Pencil className="h-3.5 w-3.5 shrink-0 text-muted-foreground/60 transition-colors group-focus-within:text-primary" />
+            </label>
+            <label
+              htmlFor="additional-info"
+              className="group block cursor-text px-4 py-2.5 transition-colors hover:bg-foreground/[0.03] focus-within:bg-foreground/[0.03]"
+            >
+              <div className="flex items-center gap-1.5">
+                <span className="text-[15px]">About you</span>
+                <Pencil className="h-3.5 w-3.5 shrink-0 text-muted-foreground/60 transition-colors group-focus-within:text-primary" />
+              </div>
+              <Textarea
+                id="additional-info"
+                value={userPreferences}
+                onChange={(e) =>
+                  setUserPreferences(e.target.value.slice(0, 500))
+                }
+                placeholder="Tell Sakhi anything worth remembering..."
+                maxLength={500}
+                className="mt-1.5 min-h-[72px] resize-none border-none bg-transparent px-0 text-[15px] shadow-none focus-visible:ring-0"
+              />
+            </label>
+          </div>
+          {isDirty && (
+            <div className="flex items-center justify-end gap-2 px-1 pt-2">
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={handleDiscardChanges}
+                disabled={updateUser.isPending}
+                className="h-8 px-3 text-[13px] font-medium text-muted-foreground"
+              >
+                Discard
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                onClick={handleSaveChanges}
+                disabled={updateUser.isPending}
+                className="h-8 rounded-full px-4 text-[13px] font-semibold shadow-sm"
+              >
+                {updateUser.isPending && (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                )}
+                Save changes
+              </Button>
             </div>
+          )}
+        </div>
+
+        <div className="space-y-1.5 lg:hidden">
+          <div className={iosListClass}>
+            <Button
+              type="button"
+              variant="ghost"
+              onClick={() => setIsSigningOutConfirmOpen(true)}
+              className="h-11 w-full rounded-none text-[15px] font-medium text-destructive hover:bg-transparent hover:text-destructive"
+            >
+              Log out
+            </Button>
           </div>
         </div>
-        <div className="space-y-2">
-          <Label htmlFor="additional-info">
-            Anything else you'd like us to know?
-          </Label>
-          <div className="flex flex-col gap-1">
-            <Textarea
-              id="additional-info"
-              value={userPreferences}
-              onChange={handleUserPreferencesChange}
-              placeholder="I love buying new domains every week..."
-              maxLength={500}
-              className="min-h-[100px] rounded-3xl text-sm shadow-xs placeholder:text-sm"
-            />
-            <div className="flex justify-end">
-              <span className="text-xs text-muted-foreground">
-                {userPreferences.length}/500
-              </span>
-            </div>
-          </div>
-        </div>
-      </form>
+      </div>
+
+      <ConfirmationDialog
+        open={isSigningOutConfirmOpen}
+        title="Log out of Sakhi?"
+        description="You'll need to sign in again to access your chats and memories."
+        confirmLabel="Log out"
+        isConfirming={signOutUser.isPending}
+        onCancel={() => setIsSigningOutConfirmOpen(false)}
+        onConfirm={() => {
+          signOutUser.mutate(undefined, {
+            onSuccess: () => setIsSigningOutConfirmOpen(false),
+          });
+        }}
+      />
     </div>
   );
 };
@@ -769,8 +772,8 @@ const MemorySettings = () => {
           <div>
             <h2 className="text-xl font-semibold">Memories</h2>
             <p className="mt-1 text-sm text-muted-foreground">
-              Sakhi remembers things you tell it, so it can help you better
-              next time.
+              Sakhi picks up things about you as you chat, so it can help
+              you better next time.
             </p>
           </div>
           <div className="h-5 w-9 shrink-0 animate-pulse rounded-full bg-muted" />
@@ -795,8 +798,8 @@ const MemorySettings = () => {
         <div>
           <h2 className="text-xl font-semibold">Memories</h2>
           <p className="mt-1 text-sm text-muted-foreground">
-            Sakhi remembers things you tell it, so it can help you better
-            next time.
+            Sakhi picks up things about you as you chat, so it can help
+            you better next time.
           </p>
         </div>
         <Switch
