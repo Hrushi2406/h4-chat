@@ -85,7 +85,7 @@ const ThreadSidebar = () => {
   const router = useRouter();
   const pathname = usePathname();
   const currentThreadId = pathname.split("/").pop() as string;
-  const isScheduledTasksActive = pathname.startsWith("/scheduled-tasks");
+  const isScheduledTasksActive = pathname.startsWith("/automations");
   const isConnectionsActive = pathname.startsWith("/apps");
   const { isMobile, setOpenMobile } = useSidebar();
 
@@ -113,7 +113,7 @@ const ThreadSidebar = () => {
   };
 
   const handleScheduledTasksClick = () => {
-    router.push("/scheduled-tasks");
+    router.push("/automations");
     if (isMobile) {
       setOpenMobile(false);
     }

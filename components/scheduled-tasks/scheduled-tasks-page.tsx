@@ -4,15 +4,17 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import {
   CalendarClock,
+  CheckCheck,
   ChevronDown,
+  ChevronRight,
+  Clock,
   Loader2,
-  Pause,
   Pencil,
-  Play,
   Plus,
   RotateCw,
   Trash2,
   X,
+  XCircle,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -28,6 +30,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
 import {
   useScheduledTaskRuns,
   useScheduledTasks,
@@ -46,11 +49,16 @@ import type {
   ScheduledTask,
   ScheduledTaskRun,
 } from "@/lib/types/scheduled-task";
-import { cn, navToolbarSecondaryBtnClass } from "@/lib/utils";
+import { cn } from "@/lib/utils";
 
-const cardClass = "rounded-3xl border bg-card/60 text-card-foreground";
+const cardClass = "rounded-3xl border bg-card text-card-foreground";
+const groupedListClass =
+  "overflow-hidden rounded-2xl border bg-card text-card-foreground divide-y divide-border";
+const rowClass = "flex items-center gap-3 px-4 py-3.5";
 const controlClass = "rounded-full shadow-xs";
 const pillClass = "rounded-full";
+const sectionCaptionClass =
+  "px-1 text-[11px] font-medium uppercase tracking-wide text-muted-foreground";
 
 type ScheduleMode = "daily" | "weekly" | "interval" | "custom";
 
@@ -132,7 +140,7 @@ export default function ScheduledTasksPage() {
             <h1 className="text-xl font-semibold tracking-tight">
               Automations
             </h1>
-            <p className="mt-1 text-sm text-muted-foreground">
+            <p className="mt-1.5 text-sm text-muted-foreground">
               {tasks.length === 0
                 ? "Let Sakhi run things for you automatically"
                 : `${tasks.length} automation${tasks.length === 1 ? "" : "s"} · ${activeCount} active`}
@@ -158,7 +166,7 @@ export default function ScheduledTasksPage() {
         ) : tasks.length === 0 ? (
           <EmptyTasks onCreate={openCreateDialog} />
         ) : (
-          <div className="space-y-3">
+          <div className={groupedListClass}>
             {tasks.map((task) => (
               <TaskCard
                 key={task.id}
@@ -259,108 +267,101 @@ function TaskCard({
   );
 
   return (
-    <div className={cardClass}>
-      <button
-        type="button"
-        onClick={onToggle}
-        className="flex w-full items-start gap-3.5 px-5 py-[1.125rem] text-left"
-      >
-        <div className="min-w-0 flex-1 space-y-2">
-          <div className="flex min-w-0 items-center gap-4">
-            <div className="flex min-w-0 flex-1 items-center gap-2">
-              <p className="truncate leading-5">{task.title}</p>
-              {task.status === "paused" && (
-                <span className="shrink-0 rounded-full bg-amber-500/15 px-2 py-0.5 text-xs font-medium text-amber-500">
-                  Paused
-                </span>
-              )}
-            </div>
-            <span className="max-w-[48%] shrink-0 truncate text-xs leading-5 text-muted-foreground">
-              Runs {scheduleSummary}
-            </span>
+    <div>
+      <div className={rowClass}>
+        <button
+          type="button"
+          onClick={onToggle}
+          className="flex min-w-0 flex-1 cursor-pointer items-center gap-3 text-left"
+        >
+          <div className="grid size-9 shrink-0 place-items-center rounded-xl bg-sidebar-automation-icon/15">
+            <Clock className="h-4 w-4 text-sidebar-automation-icon" />
           </div>
-          <div className="flex min-w-0 items-center gap-3.5">
-            <p className="line-clamp-1 min-w-0 max-w-[80%] text-sm leading-5 text-muted-foreground">
-              {task.instruction}
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-base font-normal leading-5">
+              {task.title}
             </p>
-            <ChevronDown
-              className={cn(
-                "ml-auto h-4 w-4 shrink-0 text-muted-foreground transition-transform",
-                isExpanded && "rotate-180",
-              )}
-            />
+            <p className="mt-1 truncate text-xs text-muted-foreground">
+              {task.status === "paused" ? "Paused · " : ""}
+              Runs {scheduleSummary}
+            </p>
           </div>
-        </div>
-      </button>
+        </button>
+        <Switch
+          checked={task.status === "active"}
+          onCheckedChange={onToggleStatus}
+          disabled={isUpdating}
+          aria-label={
+            task.status === "active" ? `Pause ${task.title}` : `Resume ${task.title}`
+          }
+          className="shrink-0 cursor-pointer"
+        />
+        <button
+          type="button"
+          onClick={onToggle}
+          aria-label={isExpanded ? "Collapse details" : "Expand details"}
+          className="shrink-0 cursor-pointer rounded p-1 text-muted-foreground hover:text-foreground"
+        >
+          <ChevronDown
+            className={cn(
+              "h-4 w-4 transition-transform",
+              isExpanded && "rotate-180",
+            )}
+          />
+        </button>
+      </div>
 
       {isExpanded ? (
-        <div className="space-y-5 border-t px-4 pb-4 pt-4">
-          <p className="whitespace-pre-wrap text-sm leading-6 text-muted-foreground">
-            {task.instruction}
-          </p>
-
-          <div className="grid grid-cols-2 gap-2 min-[380px]:grid-cols-3 sm:flex sm:flex-wrap sm:items-center">
-            <Button
-              variant="secondary"
-              size="sm"
-              className={cn(
-                navToolbarSecondaryBtnClass,
-                "w-full min-w-0 gap-1.5 px-3 sm:w-auto",
-              )}
-              onClick={onRunNow}
-              disabled={isRunning}
-            >
-              {isRunning ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                <RotateCw className="h-4 w-4" />
-              )}
-              Run now
-            </Button>
-            <Button
-              variant="secondary"
-              size="sm"
-              className={cn(
-                navToolbarSecondaryBtnClass,
-                "w-full min-w-0 gap-1.5 px-3 sm:w-auto",
-              )}
-              onClick={onToggleStatus}
-              disabled={isUpdating}
-            >
-              {task.status === "active" ? (
-                <Pause className="h-4 w-4" />
-              ) : (
-                <Play className="h-4 w-4" />
-              )}
-              {task.status === "active" ? "Pause" : "Resume"}
-            </Button>
-            <Button
-              variant="secondary"
-              size="sm"
-              className={cn(
-                navToolbarSecondaryBtnClass,
-                "w-full min-w-0 gap-1.5 px-3 sm:w-auto",
-              )}
-              onClick={onEdit}
-            >
-              <Pencil className="h-4 w-4" />
-              Edit
-            </Button>
-            <Button
-              variant="secondary"
-              size="icon"
-              className={cn(
-                navToolbarSecondaryBtnClass,
-                "col-span-2 w-8 justify-self-end hover:text-destructive min-[380px]:col-span-3 sm:col-span-1 sm:ml-auto",
-              )}
-              onClick={onDelete}
-            >
-              <Trash2 className="h-4 w-4" />
-              <span className="sr-only">Delete automation</span>
-            </Button>
+        <div className="space-y-5 border-t bg-muted/20 px-4 pb-4 pt-4">
+          <div className="space-y-1.5">
+            <p className={sectionCaptionClass}>Instructions</p>
+            <div className="max-h-48 overflow-y-auto rounded-xl border bg-background px-3.5 py-3">
+              <p className="whitespace-pre-wrap text-sm leading-6 text-muted-foreground">
+                {task.instruction}
+              </p>
+            </div>
           </div>
 
-          <TaskRuns taskId={task.id} />
+          <div className="space-y-1.5">
+            <p className={sectionCaptionClass}>Actions</p>
+            <div className="overflow-hidden rounded-xl border bg-background divide-y divide-border sm:flex sm:divide-y-0 sm:divide-x">
+              <button
+                type="button"
+                onClick={onRunNow}
+                disabled={isRunning}
+                className="flex w-full cursor-pointer items-center gap-3 px-3.5 py-3 text-left disabled:opacity-50 sm:flex-1 sm:justify-center sm:gap-2 sm:py-2.5"
+              >
+                {isRunning ? (
+                  <Loader2 className="h-4 w-4 shrink-0 animate-spin text-muted-foreground" />
+                ) : (
+                  <RotateCw className="h-4 w-4 shrink-0 text-muted-foreground" />
+                )}
+                <span className="flex-1 text-sm sm:flex-none">Run now</span>
+              </button>
+              <button
+                type="button"
+                onClick={onEdit}
+                className="flex w-full cursor-pointer items-center gap-3 px-3.5 py-3 text-left sm:flex-1 sm:justify-center sm:gap-2 sm:py-2.5"
+              >
+                <Pencil className="h-4 w-4 shrink-0 text-muted-foreground" />
+                <span className="flex-1 text-sm sm:flex-none">Edit</span>
+                <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground sm:hidden" />
+              </button>
+              <button
+                type="button"
+                onClick={onDelete}
+                className="flex w-full cursor-pointer items-center gap-3 px-3.5 py-3 text-left text-destructive sm:flex-1 sm:justify-center sm:gap-2 sm:py-2.5"
+              >
+                <Trash2 className="h-4 w-4 shrink-0" />
+                <span className="flex-1 text-sm sm:flex-none">Delete</span>
+              </button>
+            </div>
+          </div>
+
+          <div className="space-y-1.5">
+            <p className={sectionCaptionClass}>Recent runs</p>
+            <TaskRuns taskId={task.id} />
+          </div>
         </div>
       ) : null}
     </div>
@@ -372,42 +373,41 @@ function TaskRuns({ taskId }: { taskId: string }) {
 
   if (isLoading) {
     return (
-      <div className="h-16 animate-pulse rounded-2xl border bg-muted/30" />
+      <div className="h-16 animate-pulse rounded-xl border bg-muted/30" />
     );
   }
 
   if (!runs.length) {
     return (
-      <p className="text-xs text-muted-foreground">
-        No runs yet. Use Run now to test it.
-      </p>
+      <div className="rounded-xl border bg-background px-3.5 py-3">
+        <p className="text-xs text-muted-foreground">
+          No runs yet. Use Run now to test it.
+        </p>
+      </div>
     );
   }
 
   return (
-    <div>
-      <p className="mb-2 text-xs font-medium text-muted-foreground">
-        Recent runs
-      </p>
-      <div className="overflow-hidden rounded-2xl border bg-background">
-        {runs.slice(0, 5).map((run, index) => (
-          <RunRow key={run.id} run={run} isFirst={index === 0} />
-        ))}
-      </div>
+    <div className="overflow-hidden rounded-xl border bg-background">
+      {runs.slice(0, 5).map((run, index) => (
+        <RunRow key={run.id} run={run} isFirst={index === 0} />
+      ))}
     </div>
   );
 }
 
 function RunRow({ run, isFirst }: { run: ScheduledTaskRun; isFirst: boolean }) {
-  return (
-    <div
-      className={cn(
-        "flex items-center gap-3 px-3 py-2.5",
-        !isFirst && "border-t",
+  const content = (
+    <>
+      {run.status === "succeeded" ? (
+        <CheckCheck className="h-4 w-4 shrink-0 text-emerald-500" />
+      ) : run.status === "failed" ? (
+        <XCircle className="h-4 w-4 shrink-0 text-destructive" />
+      ) : (
+        <Loader2 className="h-4 w-4 shrink-0 animate-spin text-muted-foreground" />
       )}
-    >
       <div className="min-w-0 flex-1">
-        <p className="truncate text-sm font-medium leading-5">
+        <p className="truncate text-sm leading-5">
           {RUN_TRIGGER_LABEL[run.trigger]}
         </p>
         <p className="mt-0.5 truncate text-xs text-muted-foreground">
@@ -420,17 +420,31 @@ function RunRow({ run, isFirst }: { run: ScheduledTaskRun; isFirst: boolean }) {
         ) : null}
       </div>
       {run.outputThreadId ? (
-        <Button
-          asChild
-          variant="outline"
-          size="sm"
-          className={cn(pillClass, "shrink-0 text-xs shadow-none")}
-        >
-          <Link href={`/chat/${run.outputThreadId}`}>Open</Link>
-        </Button>
+        <span className="flex shrink-0 items-center gap-1 rounded-full border bg-muted/50 px-2.5 py-1 text-xs font-medium text-foreground">
+          Open
+          <ChevronRight className="h-3.5 w-3.5 text-muted-foreground" />
+        </span>
       ) : null}
-    </div>
+    </>
   );
+
+  const rowClassName = cn(
+    "flex items-center gap-3 px-3.5 py-3",
+    !isFirst && "border-t",
+  );
+
+  if (run.outputThreadId) {
+    return (
+      <Link
+        href={`/chat/${run.outputThreadId}`}
+        className={cn(rowClassName, "cursor-pointer")}
+      >
+        {content}
+      </Link>
+    );
+  }
+
+  return <div className={rowClassName}>{content}</div>;
 }
 
 const RUN_TRIGGER_LABEL: Record<ScheduledTaskRun["trigger"], string> = {
@@ -502,25 +516,21 @@ function TaskFormModal({
     value: TaskFormState[K],
   ) => setForm((current) => ({ ...current, [key]: value }));
 
+  const isValid = Boolean(form.title.trim() && form.instruction.trim());
+
   return (
     <Modal
       isOpen={open}
       closeModal={() => onOpenChange(false)}
       size="lg"
-      className="max-h-[90vh] overflow-y-auto rounded-3xl border bg-card p-6 text-card-foreground shadow-none"
+      className="max-h-[90vh] overflow-y-auto rounded-3xl border bg-card p-0 text-card-foreground shadow-none"
       clickOutsideToClose={!isSaving}
     >
-      <div className="space-y-5">
-        <div className="flex items-start justify-between gap-4">
-          <div className="space-y-1.5">
-            <h2 className="text-lg font-semibold tracking-tight">
-              {task ? "Edit automation" : "New automation"}
-            </h2>
-            <p className="text-sm leading-6 text-muted-foreground">
-              Tell Sakhi what to do and how often to do it. It runs on its own
-              and saves each result to your chats.
-            </p>
-          </div>
+      <div className="space-y-2 px-5 pb-3 pt-5">
+        <div className="flex items-center justify-between gap-3">
+          <h2 className="min-w-0 flex-1 truncate text-base font-semibold">
+            {task ? "Edit automation" : "New automation"}
+          </h2>
           <Button
             type="button"
             variant="ghost"
@@ -533,7 +543,13 @@ function TaskFormModal({
             <X className="h-4 w-4" />
           </Button>
         </div>
+        <p className="text-sm leading-6 text-muted-foreground">
+          Tell Sakhi what to do and how often to do it. It runs on its own and
+          saves each result to your chats.
+        </p>
+      </div>
 
+      <div className="space-y-5 px-5 pb-5">
         <div className="space-y-4">
           <div className="space-y-2">
             <Label htmlFor="task-title">Name</Label>
@@ -556,24 +572,27 @@ function TaskFormModal({
               }
               rows={4}
               placeholder="Summarize my unread important emails and list the top things I need to follow up on."
-              className="rounded-3xl text-sm shadow-xs"
+              className="max-h-40 overflow-y-auto rounded-3xl text-sm shadow-xs"
             />
           </div>
 
           <div className="space-y-2">
             <Label>How often?</Label>
-            <div className="flex flex-wrap gap-1.5">
+            <div className="grid grid-cols-2 gap-0.5 rounded-full bg-muted p-0.5 sm:grid-cols-4">
               {SCHEDULE_MODES.map((mode) => (
-                <Button
+                <button
                   key={mode.value}
                   type="button"
-                  variant={form.mode === mode.value ? "default" : "secondary"}
-                  size="sm"
-                  className={pillClass}
                   onClick={() => updateForm("mode", mode.value)}
+                  className={cn(
+                    "cursor-pointer rounded-full px-2 py-1.5 text-xs font-medium transition-colors",
+                    form.mode === mode.value
+                      ? "bg-background text-foreground shadow-xs"
+                      : "text-muted-foreground hover:text-foreground",
+                  )}
                 >
                   {mode.label}
-                </Button>
+                </button>
               ))}
             </div>
           </div>
@@ -613,7 +632,7 @@ function TaskFormModal({
                   type="time"
                   value={form.time}
                   onChange={(event) => updateForm("time", event.target.value)}
-                  className={controlClass}
+                  className={cn(controlClass, "w-auto max-w-max")}
                 />
               </div>
             ) : null}
@@ -685,50 +704,35 @@ function TaskFormModal({
           </div>
         </div>
 
-        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-          {!task ? (
-            <Button
-              asChild
-              variant="secondary"
-              size="sm"
-              className={cn(navToolbarSecondaryBtnClass, "justify-center")}
-            >
-              <Link href={createFromChatHref}>Create using chat</Link>
-            </Button>
-          ) : (
-            <div />
-          )}
+        <div className="space-y-3">
+          <Button
+            type="button"
+            className="w-full rounded-full"
+            onClick={() => {
+              onSubmit({
+                title: form.title,
+                instruction: form.instruction,
+                cron,
+                timezone: normalizeTaskTimezone(form.timezone),
+                humanText,
+              }).catch(() => undefined);
+            }}
+            disabled={isSaving || !isValid}
+          >
+            {isSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+            {task ? "Save changes" : "Add automation"}
+          </Button>
 
-          <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
-            <Button
-              variant="ghost"
-              className={pillClass}
-              onClick={() => onOpenChange(false)}
-              disabled={isSaving}
-            >
-              Cancel
-            </Button>
-            <Button
-              variant="secondary"
-              size="sm"
-              className={navToolbarSecondaryBtnClass}
-              onClick={() => {
-                onSubmit({
-                  title: form.title,
-                  instruction: form.instruction,
-                  cron,
-                  timezone: normalizeTaskTimezone(form.timezone),
-                  humanText,
-                }).catch(() => undefined);
-              }}
-              disabled={
-                isSaving || !form.title.trim() || !form.instruction.trim()
-              }
-            >
-              {isSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
-              {task ? "Save changes" : "Create automation"}
-            </Button>
-          </div>
+          {!task ? (
+            <div className="flex justify-center">
+              <Link
+                href={createFromChatHref}
+                className="text-sm font-medium text-primary hover:underline"
+              >
+                Create using chat instead
+              </Link>
+            </div>
+          ) : null}
         </div>
       </div>
     </Modal>
@@ -776,8 +780,8 @@ function EmptyTasks({ onCreate }: { onCreate: () => void }) {
         "flex flex-col items-center justify-center px-6 py-14 text-center",
       )}
     >
-      <div className="mb-4 flex size-12 items-center justify-center rounded-full bg-muted text-muted-foreground">
-        <CalendarClock className="h-6 w-6" />
+      <div className="mb-4 flex size-12 items-center justify-center rounded-2xl bg-sidebar-automation-icon/15">
+        <CalendarClock className="h-6 w-6 text-sidebar-automation-icon" />
       </div>
       <h2 className="font-medium">No automations</h2>
       <p className="mt-1.5 max-w-sm text-sm leading-6 text-muted-foreground">
@@ -826,40 +830,32 @@ function LoadError({
 
 function TaskListSkeleton() {
   return (
-    <div className="space-y-3">
+    <div className={groupedListClass}>
       {Array.from({ length: 3 }).map((_, index) => (
         <div
           key={index}
-          className={cn(
-            cardClass,
-            "px-5 py-[1.125rem]",
-            index === 2 && "hidden sm:block",
-          )}
+          className={cn(rowClass, index === 2 && "hidden sm:flex")}
         >
-          <div className="space-y-2">
-            <div className="flex min-w-0 items-center gap-4">
-              <div
-                className={cn(
-                  "h-4 animate-pulse rounded-full bg-muted",
-                  index === 0 && "w-44",
-                  index === 1 && "w-36",
-                  index === 2 && "w-52",
-                )}
-              />
-              <div className="ml-auto h-3 w-28 animate-pulse rounded-full bg-muted/80" />
-            </div>
-            <div className="flex min-w-0 items-center gap-3.5">
-              <div
-                className={cn(
-                  "h-3 animate-pulse rounded-full bg-muted/80",
-                  index === 0 && "w-3/4",
-                  index === 1 && "w-2/3",
-                  index === 2 && "w-5/6",
-                )}
-              />
-              <div className="ml-auto size-4 shrink-0 animate-pulse rounded-full bg-muted" />
-            </div>
+          <div className="size-9 shrink-0 animate-pulse rounded-xl bg-muted" />
+          <div className="min-w-0 flex-1 space-y-2">
+            <div
+              className={cn(
+                "h-3.5 animate-pulse rounded-full bg-muted",
+                index === 0 && "w-32",
+                index === 1 && "w-40",
+                index === 2 && "w-28",
+              )}
+            />
+            <div
+              className={cn(
+                "h-3 animate-pulse rounded-full bg-muted/80",
+                index === 0 && "w-1/2",
+                index === 1 && "w-2/3",
+                index === 2 && "w-1/3",
+              )}
+            />
           </div>
+          <div className="h-[1.15rem] w-8 shrink-0 animate-pulse rounded-full bg-muted" />
         </div>
       ))}
     </div>
