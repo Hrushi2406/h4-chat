@@ -6,11 +6,12 @@ import { Button } from "@/components/ui/button";
 import {
   Check,
   ChevronLeft,
+  ChevronRight,
   Loader2,
   LogOut,
   Pencil,
+  Plug,
   Plus,
-  Server,
   Trash2,
   X,
 } from "lucide-react";
@@ -33,7 +34,6 @@ import { useUser } from "@/lib/hooks/user/use-user";
 import { useUserActions } from "@/lib/hooks/user/use-user-actions";
 import { Textarea } from "@/components/ui/textarea";
 import { Progress } from "@/components/ui/progress";
-import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { useAuth } from "@/lib/hooks/auth/use-auth";
@@ -382,6 +382,7 @@ const McpSettings = () => {
     isLoading,
     refetch,
   } = useMcpServers(uid);
+  const [isAdding, setIsAdding] = React.useState(false);
   const [mcpName, setMcpName] = React.useState("");
   const [mcpId, setMcpId] = React.useState("");
   const [mcpUrl, setMcpUrl] = React.useState("");
@@ -463,6 +464,7 @@ const McpSettings = () => {
       setMcpUrl("");
       setMcpHeaders("");
       setMcpTransport("http");
+      setIsAdding(false);
       toast.success(`${name} MCP saved`);
     } catch (error) {
       console.error("Failed to save MCP server:", error);
@@ -508,181 +510,210 @@ const McpSettings = () => {
     }
   };
 
+  const mcpRowClass =
+    "flex items-center gap-3 px-4 py-3.5 first:rounded-t-2xl last:rounded-b-2xl";
+
   return (
-    <div className="space-y-5">
-      <div>
-        <h2 className="text-xl font-semibold">MCP Servers</h2>
-        <p className="text-sm text-muted-foreground">
-          Add any remote MCP server with HTTP or SSE transport.
-        </p>
-      </div>
-
-      <div className={settingsPanelClass}>
-        <div className="grid gap-3 sm:grid-cols-[1fr_0.8fr]">
-          <div className="space-y-1.5">
-            <Label htmlFor="mcp-name">Name</Label>
-            <Input
-              id="mcp-name"
-              value={mcpName}
-              onChange={(e) => setMcpName(e.target.value)}
-              placeholder="Zepto, Linear MCP, Docs"
-              className={cn(settingsControlClass, "text-sm")}
-            />
-          </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="mcp-id">Tool prefix</Label>
-            <Input
-              id="mcp-id"
-              value={mcpId}
-              onChange={(e) => setMcpId(slugifyMcpId(e.target.value))}
-              placeholder="zepto"
-              className={cn(settingsControlClass, "text-sm")}
-            />
-          </div>
-        </div>
-
-        <div className="mt-3 grid gap-3 sm:grid-cols-[1fr_120px_auto]">
-          <div className="space-y-1.5">
-            <Label htmlFor="mcp-url">Server URL</Label>
-            <Input
-              id="mcp-url"
-              value={mcpUrl}
-              onChange={(e) => setMcpUrl(e.target.value)}
-              placeholder="https://example.com/mcp"
-              className={cn(settingsControlClass, "text-sm")}
-            />
-          </div>
-          <div className="space-y-1.5">
-            <Label>Transport</Label>
-            <Select
-              value={mcpTransport}
-              onValueChange={(v) =>
-                setMcpTransport(v === "sse" ? "sse" : "http")
-              }
-            >
-              <SelectTrigger className={cn("w-full", settingsControlClass)}>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="http">HTTP</SelectItem>
-                <SelectItem value="sse">SSE</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-          <Button
-            type="button"
-            variant="secondary"
-            onClick={handleAddMcpServer}
-            className={cn("self-end border border-input", settingsBtnClass)}
-            disabled={isSavingMcp || !uid}
-          >
-            {isSavingMcp ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : (
-              <Plus className="h-4 w-4" />
-            )}
-            Add
-          </Button>
-        </div>
-
-        <div className="mt-3 space-y-1.5">
-          <Label htmlFor="mcp-headers">Headers JSON</Label>
-          <Textarea
-            id="mcp-headers"
-            value={mcpHeaders}
-            onChange={(e) => setMcpHeaders(e.target.value)}
-            placeholder='{"Authorization":"Bearer token"}'
-            className="min-h-[72px] rounded-3xl font-mono text-xs shadow-xs"
-          />
+    <div className="space-y-6">
+      <div className="flex items-center justify-between gap-4 px-1">
+        <div>
+          <h2 className="text-xl font-semibold">MCP Servers</h2>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Connect a remote MCP server over HTTP or SSE to extend what Sakhi
+            can do.
+          </p>
         </div>
       </div>
 
-      <div className="space-y-2">
+      <div className="overflow-hidden rounded-2xl border bg-card">
         {isLoading ? (
-          <div className="h-24 animate-pulse rounded-3xl border bg-card" />
-        ) : mcpServers.length === 0 ? (
-          <div className="rounded-3xl border border-dashed bg-card px-4 py-8 text-center text-sm text-muted-foreground">
-            No MCP servers added yet.
+          <div className={mcpRowClass}>
+            <div className="h-4 w-2/3 animate-pulse rounded bg-muted" />
           </div>
         ) : (
-          mcpServers.map((server) => (
-            <div
-              key={server.id}
-              className={cn(
-                "flex flex-col items-start gap-3 sm:flex-row sm:items-center sm:justify-between",
-                settingsPanelClass,
-              )}
-            >
-              <div className="flex min-w-0 items-center gap-3">
-                <div className="grid size-10 shrink-0 place-items-center rounded-lg border bg-background shadow-xs">
-                  <Server className="h-5 w-5 text-muted-foreground" />
+          <div className="divide-y divide-border">
+            {mcpServers.length === 0 && !isAdding && (
+              <div className="px-4 py-10 text-center">
+                <div className="mx-auto grid size-11 place-items-center rounded-full bg-muted">
+                  <Plug className="h-5 w-5 text-muted-foreground" />
                 </div>
-                <div className="min-w-0">
+                <p className="mt-3 text-sm text-muted-foreground">
+                  No MCP servers connected yet.
+                </p>
+              </div>
+            )}
+            {mcpServers.map((server) => (
+              <div key={server.id} className={cn(mcpRowClass, "gap-4")}>
+                <div className="grid size-9 shrink-0 place-items-center rounded-full bg-muted">
+                  <Plug className="h-4 w-4 text-muted-foreground" />
+                </div>
+                <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2">
-                    <p className="truncate font-medium">{server.name}</p>
-                    <Badge
-                      variant="outline"
-                      className={cn(settingsBtnClass, "px-3 py-0.5 text-xs")}
-                    >
+                    <p className="truncate text-sm font-medium">
+                      {server.name}
+                    </p>
+                    <span className="shrink-0 text-[11px] font-medium tracking-wide text-muted-foreground">
                       {server.transport.toUpperCase()}
-                    </Badge>
-                    {server.enabled && (
-                      <Badge
-                        variant="outline"
-                        className={cn(
-                          settingsBtnClass,
-                          "px-3 py-0.5 text-xs text-emerald-700",
-                        )}
-                      >
-                        Enabled
-                      </Badge>
-                    )}
+                    </span>
                   </div>
                   <p className="truncate text-xs text-muted-foreground">
-                    mcp_{server.id}_* / {server.url}
+                    {server.url}
                   </p>
                 </div>
+                <div className="flex shrink-0 items-center gap-3">
+                  <Switch
+                    checked={server.enabled}
+                    onCheckedChange={(enabled) =>
+                      handleToggleMcpServer(server, enabled)
+                    }
+                    disabled={pendingMcpId === server.id}
+                    aria-label={`Toggle ${server.name}`}
+                    className="cursor-pointer"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => handleRemoveMcpServer(server)}
+                    disabled={pendingMcpId === server.id}
+                    aria-label={`Remove ${server.name}`}
+                    className="cursor-pointer rounded p-1 text-muted-foreground hover:text-foreground disabled:opacity-50"
+                  >
+                    {pendingMcpId === server.id ? (
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    ) : (
+                      <Trash2 className="h-3.5 w-3.5" />
+                    )}
+                  </button>
+                </div>
               </div>
+            ))}
 
-              <div className="flex w-full items-center justify-between gap-2 sm:w-auto sm:shrink-0 sm:justify-start">
-                <Switch
-                  checked={server.enabled}
-                  onCheckedChange={(enabled) =>
-                    handleToggleMcpServer(server, enabled)
-                  }
-                  disabled={pendingMcpId === server.id}
-                  aria-label={`Toggle ${server.name}`}
-                />
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="icon"
-                  className={settingsBtnClass}
-                  onClick={() => handleRemoveMcpServer(server)}
-                  disabled={pendingMcpId === server.id}
-                  aria-label={`Remove ${server.name}`}
-                >
-                  {pendingMcpId === server.id ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                  ) : (
-                    <Trash2 className="h-4 w-4" />
-                  )}
-                </Button>
-              </div>
-            </div>
-          ))
+            {!isAdding && (
+              <button
+                type="button"
+                onClick={() => setIsAdding(true)}
+                disabled={!uid}
+                className={cn(mcpRowClass, "w-full cursor-pointer text-left disabled:opacity-50")}
+              >
+                <div className="grid size-9 shrink-0 place-items-center rounded-full bg-muted">
+                  <Plus className="h-4 w-4 text-muted-foreground" />
+                </div>
+                <span className="flex-1 text-sm font-medium">
+                  Add MCP server
+                </span>
+                <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
+              </button>
+            )}
+          </div>
         )}
       </div>
+
+      {isAdding && (
+        <div className={cn(settingsPanelClass, "space-y-4")}>
+          <div className="flex items-center justify-between">
+            <p className="text-sm font-medium">New server</p>
+            <button
+              type="button"
+              onClick={() => setIsAdding(false)}
+              aria-label="Cancel"
+              className="cursor-pointer rounded p-1 text-muted-foreground hover:text-foreground"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+
+          <div className="grid gap-3 sm:grid-cols-[1fr_0.8fr]">
+            <div className="space-y-1.5">
+              <Label htmlFor="mcp-name">Name</Label>
+              <Input
+                id="mcp-name"
+                value={mcpName}
+                onChange={(e) => setMcpName(e.target.value)}
+                placeholder="Zepto, Linear MCP, Docs"
+                className={cn(settingsControlClass, "text-sm")}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="mcp-id">Tool prefix</Label>
+              <Input
+                id="mcp-id"
+                value={mcpId}
+                onChange={(e) => setMcpId(slugifyMcpId(e.target.value))}
+                placeholder="zepto"
+                className={cn(settingsControlClass, "text-sm")}
+              />
+            </div>
+          </div>
+
+          <div className="grid gap-3 sm:grid-cols-[1fr_120px]">
+            <div className="space-y-1.5">
+              <Label htmlFor="mcp-url">Server URL</Label>
+              <Input
+                id="mcp-url"
+                value={mcpUrl}
+                onChange={(e) => setMcpUrl(e.target.value)}
+                placeholder="https://example.com/mcp"
+                className={cn(settingsControlClass, "text-sm")}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label>Transport</Label>
+              <Select
+                value={mcpTransport}
+                onValueChange={(v) =>
+                  setMcpTransport(v === "sse" ? "sse" : "http")
+                }
+              >
+                <SelectTrigger className={cn("w-full", settingsControlClass)}>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="http">HTTP</SelectItem>
+                  <SelectItem value="sse">SSE</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+
+          <div className="space-y-1.5">
+            <Label htmlFor="mcp-headers">Headers JSON</Label>
+            <Textarea
+              id="mcp-headers"
+              value={mcpHeaders}
+              onChange={(e) => setMcpHeaders(e.target.value)}
+              placeholder='{"Authorization":"Bearer token"}'
+              className="min-h-[72px] rounded-2xl font-mono text-xs shadow-xs"
+            />
+          </div>
+
+          <div className="flex justify-end">
+            <Button
+              type="button"
+              onClick={handleAddMcpServer}
+              className={cn(settingsBtnClass, "px-5")}
+              disabled={isSavingMcp || !uid}
+            >
+              {isSavingMcp && (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              )}
+              Add server
+            </Button>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
 
 const MemorySettings = () => {
-  const { data: user, isLoading } = useUser();
+  const { data: user, isLoading, refetch } = useUser();
   const { addMemory, updateMemory, deleteMemory, updateUser } = useUserActions();
   const memories = user?.memories ?? [];
   const memoryEnabled = user?.memoryEnabled !== false;
   const atLimit = memories.length >= MAX_USER_MEMORIES;
+
+  React.useEffect(() => {
+    refetch();
+  }, [refetch]);
 
   const [newMemory, setNewMemory] = React.useState("");
   const [editingId, setEditingId] = React.useState<string>();

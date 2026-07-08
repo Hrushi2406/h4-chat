@@ -1,3 +1,4 @@
+import { createElement } from "react";
 import {
   CalendarDays,
   Code2,
@@ -19,6 +20,13 @@ import {
   Sun,
 } from "lucide-react";
 import { COMPOSIO_META_TOOLS } from "@/lib/types/composio-tool-slugs";
+
+const SakhiLogoIcon = ({ className }: { className?: string }) =>
+  createElement("img", {
+    src: "/saaki-chat-transparent.png",
+    alt: "Sakhi",
+    className: `${className ?? ""} object-contain`.trim(),
+  });
 
 type ToolDisplay = {
   displayName: string;
@@ -371,7 +379,7 @@ const composioToolDisplay: Array<{
     appSlug: "composio",
     fallbackLoading: "Using Sakhi",
     fallbackDone: "Used Sakhi",
-    Icon: PlugZap,
+    Icon: SakhiLogoIcon,
   },
 ];
 
@@ -427,6 +435,19 @@ export const getToolDisplayName = (
     };
   }
 
+  if (toolName === "create_scheduled_task") {
+    return {
+      displayName: isCalling
+        ? "Creating Automation"
+        : isError
+          ? "Failed to create Automation"
+          : "Created Automation",
+      Icon: SakhiLogoIcon,
+      tooltip: `Tool: ${toolName}`,
+      source: "native",
+    };
+  }
+
   const normalizedToolName = toolName.toUpperCase();
   const storedDisplay = getStoredToolDisplay(toolPart);
   const toolContext = getToolContext(normalizedToolName, toolPart);
@@ -458,9 +479,12 @@ export const getToolDisplayName = (
         appSlugs,
       ),
       tooltip: getComposioTooltip(label, toolName, toolContext, appSlugs),
-      appSlugs: storedDisplay?.appSlugs?.length
-        ? storedDisplay.appSlugs
-        : getDisplayAppSlugs(appSlugs),
+      appSlugs:
+        composioTool.appSlug === "composio"
+          ? []
+          : storedDisplay?.appSlugs?.length
+            ? storedDisplay.appSlugs
+            : getDisplayAppSlugs(appSlugs),
       source: "composio",
     };
   }
