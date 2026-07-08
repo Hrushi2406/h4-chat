@@ -19,8 +19,10 @@ const getAuthToken = async () => {
 class ScheduledTaskService {
   async getTasks(): Promise<ScheduledTask[]> {
     const response = await fetch("/api/scheduled-tasks", {
+      cache: "no-store",
       headers: {
         Authorization: `Bearer ${await getAuthToken()}`,
+        "Cache-Control": "no-cache",
       },
     });
 

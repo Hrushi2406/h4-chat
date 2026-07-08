@@ -15,7 +15,14 @@ export async function GET(req: Request) {
 
     const tasks = await scheduledTaskServerService.listTasksForUser(userId);
 
-    return Response.json({ tasks });
+    return Response.json(
+      { tasks },
+      {
+        headers: {
+          "Cache-Control": "no-store, no-cache, must-revalidate",
+        },
+      },
+    );
   } catch (error) {
     return scheduledTaskErrorResponse(error);
   }

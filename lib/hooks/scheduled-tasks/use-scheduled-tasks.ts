@@ -15,7 +15,11 @@ export const useScheduledTasks = () => {
     queryKey: scheduledTaskKeys.list(uid),
     queryFn: () => scheduledTaskService.getTasks(),
     enabled: !!uid,
+    staleTime: 0,
+    gcTime: 0,
     refetchOnMount: "always",
+    refetchOnWindowFocus: "always",
+    refetchOnReconnect: "always",
   });
 };
 
