@@ -140,6 +140,14 @@ const connectionMetadata: Record<string, ConnectionMetadata> = {
     category: "Developer Tools",
     useCase: "Work with repos, issues, and PRs",
   },
+  vercel: {
+    category: "Developer Tools",
+    useCase: "Manage projects, deployments, and domains",
+  },
+  railway: {
+    category: "Developer Tools",
+    useCase: "Manage projects, services, and deployments",
+  },
   firecrawl: {
     category: "Developer Tools",
     useCase: "Crawl websites and extract data",

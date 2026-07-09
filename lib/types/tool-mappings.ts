@@ -100,6 +100,20 @@ const composioToolDisplay: Array<{
     Icon: PlugZap,
   },
   {
+    match: (context) => includesAny(context, ["VERCEL"]),
+    appSlug: "vercel",
+    fallbackLoading: "Working with Vercel",
+    fallbackDone: "Used Vercel",
+    Icon: PlugZap,
+  },
+  {
+    match: (context) => includesAny(context, ["RAILWAY"]),
+    appSlug: "railway",
+    fallbackLoading: "Working with Railway",
+    fallbackDone: "Used Railway",
+    Icon: PlugZap,
+  },
+  {
     match: (context) => includesAny(context, ["TRELLO"]),
     appSlug: "trello",
     fallbackLoading: "Working with Trello",
