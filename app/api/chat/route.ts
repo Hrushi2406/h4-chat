@@ -74,6 +74,10 @@ export async function POST(req: Request) {
   const verifiedUserId = await verifyFirebaseIdToken(authToken);
   latency.step("firebase auth");
 
+  if (!verifiedUserId) {
+    return new Response("Unauthorized", { status: 401 });
+  }
+
   const parallelStart = performance.now();
   const [composioTools, mcpContext, userInfo] = await Promise.all([
     (async () => {

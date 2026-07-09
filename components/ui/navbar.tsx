@@ -8,14 +8,28 @@ import { ThemeToggle } from "@/components/theme-toggle";
 import { navToolbarSecondaryBtnClass } from "@/lib/utils";
 import { PwaInstallButton } from "@/components/pwa-install-button";
 
+const THREAD_ID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+const getThreadIdFromPathname = (pathname: string) => {
+  const match = pathname.match(/^\/chat\/([^/]+)\/?$/);
+  const threadId = match?.[1];
+  return threadId && THREAD_ID_RE.test(threadId) ? threadId : undefined;
+};
+
 export default function Navbar() {
   const { shareThread } = useThreadActions();
   const pathname = usePathname();
-  const currentThreadId = pathname.split("/").pop() as string;
+  const currentThreadId = getThreadIdFromPathname(pathname);
   const router = useRouter();
 
   const handleNewThread = () => {
     router.push("/chat");
+  };
+
+  const handleShare = () => {
+    if (!currentThreadId) return;
+    shareThread.mutate({ threadId: currentThreadId });
   };
 
   return (
@@ -40,11 +54,9 @@ export default function Navbar() {
             variant="secondary"
             size="sm"
             className={navToolbarSecondaryBtnClass}
-            disabled={shareThread.isPending}
+            disabled={!currentThreadId || shareThread.isPending}
             aria-busy={shareThread.isPending}
-            onClick={() => {
-              shareThread.mutate({ threadId: currentThreadId });
-            }}
+            onClick={handleShare}
           >
             {shareThread.isPending ? (
               <Loader2 className="h-4 w-4 shrink-0 animate-spin" />

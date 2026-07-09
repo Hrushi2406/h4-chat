@@ -8,6 +8,7 @@ export type BrowserMcpServer = {
 };
 
 export const MCP_SERVERS_STORAGE_KEY = "h4-chat:mcp-servers";
+export const MCP_SERVERS_MIGRATED_KEY = "h4-chat:mcp-servers-migrated";
 
 export const getBrowserMcpServers = (): BrowserMcpServer[] => {
   if (typeof window === "undefined") {
@@ -33,6 +34,17 @@ export const getBrowserMcpServers = (): BrowserMcpServer[] => {
   } catch {
     return [];
   }
+};
+
+export const clearBrowserMcpServers = () => {
+  if (typeof window === "undefined") return;
+  window.localStorage.removeItem(MCP_SERVERS_STORAGE_KEY);
+  window.localStorage.setItem(MCP_SERVERS_MIGRATED_KEY, "1");
+};
+
+export const hasMigratedBrowserMcpServers = () => {
+  if (typeof window === "undefined") return true;
+  return window.localStorage.getItem(MCP_SERVERS_MIGRATED_KEY) === "1";
 };
 
 const normalizeBrowserMcpServer = (

@@ -9,8 +9,8 @@ import { Thread } from "@/lib/types/thread";
 import { useAuth } from "../auth/use-auth";
 
 export const threadKeys = {
-  all: ["threads", "infinite"] as const,
-  detail: (id: string) => ["threads", id] as const,
+  all: (uid: string) => ["threads", "infinite", uid] as const,
+  detail: (uid: string, id: string) => ["threads", uid, id] as const,
 };
 
 export const useThreads = () => {
@@ -18,7 +18,7 @@ export const useThreads = () => {
   const { uid } = useAuth();
 
   const query = useInfiniteQuery({
-    queryKey: threadKeys.all,
+    queryKey: threadKeys.all(uid ?? ""),
     queryFn: async ({ pageParam }) => {
       const page = await threadService.getThreads({
         userId: uid!,
@@ -26,8 +26,7 @@ export const useThreads = () => {
       });
 
       page.threads.forEach((thread: Thread) => {
-        console.log("Setting thread in cache: ", thread.id);
-        qc.setQueryData(threadKeys.detail(thread.id), thread);
+        qc.setQueryData(threadKeys.detail(uid!, thread.id), thread);
       });
 
       return page;
@@ -48,7 +47,7 @@ export const useThreads = () => {
 export const useThread = (threadId: string, isNew?: boolean) => {
   const qc = useQueryClient();
   const { uid } = useAuth();
-  const queryKey = threadKeys.detail(threadId);
+  const queryKey = threadKeys.detail(uid ?? "", threadId);
 
   return useQuery({
     queryKey,

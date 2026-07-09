@@ -6,6 +6,7 @@ import {
 import threadService from "@/lib/services/thread-service";
 import { getMessageContent, ThreadMessage, Thread } from "@/lib/types/thread";
 import { threadKeys } from "./use-threads";
+import { useAuth } from "../auth/use-auth";
 import { handleError } from "@/lib/utils";
 import { toast } from "sonner";
 import type { ThreadCursor, ThreadsPage } from "@/lib/services/thread-service";
@@ -122,16 +123,20 @@ const removeThreadFromList = (
 
 export const useThreadActions = () => {
   const qc = useQueryClient();
+  const { uid } = useAuth();
 
   const createThread = useMutation({
     mutationFn: threadService.createThread,
     onMutate: async ({ threadId, title, userId, initialMessage }) => {
-      await qc.cancelQueries({ queryKey: threadKeys.all });
+      const ownerId = userId ?? uid;
+      if (!ownerId) return;
+
+      await qc.cancelQueries({ queryKey: threadKeys.all(ownerId) });
 
       const previousThreadList =
-        qc.getQueryData<ThreadsInfiniteData>(threadKeys.all);
+        qc.getQueryData<ThreadsInfiniteData>(threadKeys.all(ownerId));
       const previousThread = qc.getQueryData<Thread>(
-        threadKeys.detail(threadId)
+        threadKeys.detail(ownerId, threadId)
       );
       const now = new Date();
       const optimisticThread: Thread = {
@@ -141,34 +146,43 @@ export const useThreadActions = () => {
         messages: [{ ...initialMessage, updatedAt: now.toISOString() }],
         createdAt: now,
         updatedAt: now,
-        userId,
+        userId: ownerId,
         messageCount: 1,
         lastMessagePreview: getMessageContent(initialMessage).substring(0, 100),
       };
 
-      qc.setQueryData(threadKeys.detail(threadId), optimisticThread);
-      qc.setQueryData<ThreadsInfiniteData>(threadKeys.all, (oldData) =>
+      qc.setQueryData(threadKeys.detail(ownerId, threadId), optimisticThread);
+      qc.setQueryData<ThreadsInfiniteData>(threadKeys.all(ownerId), (oldData) =>
         upsertThreadInList(oldData, optimisticThread)
       );
 
-      return { previousThreadList, previousThread };
+      return { previousThreadList, previousThread, ownerId };
     },
     onSuccess: (newThread) => {
-      qc.setQueryData(threadKeys.detail(newThread.id), newThread);
-      qc.setQueryData<ThreadsInfiniteData>(threadKeys.all, (oldData) =>
+      const ownerId = newThread.userId;
+      if (!ownerId) return;
+      qc.setQueryData(threadKeys.detail(ownerId, newThread.id), newThread);
+      qc.setQueryData<ThreadsInfiniteData>(threadKeys.all(ownerId), (oldData) =>
         upsertThreadInList(oldData, newThread)
       );
-      qc.invalidateQueries({ queryKey: threadKeys.all });
+      qc.invalidateQueries({ queryKey: threadKeys.all(ownerId) });
     },
     onError: (error, variables, context) => {
-      qc.setQueryData(threadKeys.all, context?.previousThreadList);
+      const ownerId = context?.ownerId ?? variables.userId ?? uid;
+      if (!ownerId) {
+        handleError(error, "Failed to create thread");
+        return;
+      }
+      qc.setQueryData(threadKeys.all(ownerId), context?.previousThreadList);
       if (context?.previousThread) {
         qc.setQueryData(
-          threadKeys.detail(variables.threadId),
+          threadKeys.detail(ownerId, variables.threadId),
           context.previousThread
         );
       } else {
-        qc.removeQueries({ queryKey: threadKeys.detail(variables.threadId) });
+        qc.removeQueries({
+          queryKey: threadKeys.detail(ownerId, variables.threadId),
+        });
       }
       handleError(error, "Failed to create thread");
     },
@@ -177,19 +191,20 @@ export const useThreadActions = () => {
   const updateThread = useMutation({
     mutationFn: threadService.updateThread,
     onSuccess: (_, { threadId, title }) => {
+      if (!uid) return;
       qc.setQueryData(
-        threadKeys.detail(threadId),
+        threadKeys.detail(uid, threadId),
         (oldData: Thread | undefined) =>
           oldData ? { ...oldData, title, titleSource: "manual" } : oldData
       );
-      qc.setQueryData<ThreadsInfiniteData>(threadKeys.all, (oldData) =>
+      qc.setQueryData<ThreadsInfiniteData>(threadKeys.all(uid), (oldData) =>
         updateThreadInList(oldData, threadId, (thread) => ({
           ...thread,
           title,
           titleSource: "manual",
         }))
       );
-      qc.invalidateQueries({ queryKey: threadKeys.all });
+      qc.invalidateQueries({ queryKey: threadKeys.all(uid) });
     },
     onError: (error) => handleError(error, "Failed to update thread"),
   });
@@ -197,11 +212,12 @@ export const useThreadActions = () => {
   const deleteThread = useMutation({
     mutationFn: threadService.deleteThread,
     onSuccess: (_, { threadId }) => {
-      qc.removeQueries({ queryKey: threadKeys.detail(threadId) });
-      qc.setQueryData<ThreadsInfiniteData>(threadKeys.all, (oldData) =>
+      if (!uid) return;
+      qc.removeQueries({ queryKey: threadKeys.detail(uid, threadId) });
+      qc.setQueryData<ThreadsInfiniteData>(threadKeys.all(uid), (oldData) =>
         removeThreadFromList(oldData, threadId)
       );
-      qc.invalidateQueries({ queryKey: threadKeys.all });
+      qc.invalidateQueries({ queryKey: threadKeys.all(uid) });
     },
     onError: (error) => handleError(error, "Failed to delete thread"),
   });
@@ -209,9 +225,10 @@ export const useThreadActions = () => {
   const addMessageToThread = useMutation({
     mutationFn: threadService.addMessageToThread,
     onSuccess: (_, { threadId, messageData }) => {
+      if (!uid) return;
       const updatedAt = new Date().toISOString();
       qc.setQueryData(
-        threadKeys.detail(threadId),
+        threadKeys.detail(uid, threadId),
         (oldData: Thread | undefined) => {
           if (!oldData) return oldData;
           return {
@@ -228,7 +245,7 @@ export const useThreadActions = () => {
           };
         }
       );
-      qc.setQueryData<ThreadsInfiniteData>(threadKeys.all, (oldData) =>
+      qc.setQueryData<ThreadsInfiniteData>(threadKeys.all(uid), (oldData) =>
         updateThreadInList(oldData, threadId, (thread) => ({
           ...thread,
           messageCount: thread.messageCount + 1,
@@ -243,13 +260,15 @@ export const useThreadActions = () => {
   const shareThread = useMutation({
     mutationFn: threadService.shareThread,
     onSuccess: async (shareId, { threadId }) => {
-      qc.setQueryData(
-        threadKeys.detail(threadId),
-        (oldData: Thread | undefined) => {
-          if (!oldData) return oldData;
-          return { ...oldData, shareId: shareId };
-        }
-      );
+      if (uid) {
+        qc.setQueryData(
+          threadKeys.detail(uid, threadId),
+          (oldData: Thread | undefined) => {
+            if (!oldData) return oldData;
+            return { ...oldData, shareId: shareId };
+          }
+        );
+      }
       const shareUrl = `${window.location.origin}/share/${shareId}`;
       if (!isInstalledApp()) {
         if (await copyToClipboard(shareUrl)) {

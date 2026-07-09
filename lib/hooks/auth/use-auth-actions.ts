@@ -1,4 +1,4 @@
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   GoogleAuthProvider,
   signInWithPopup,
@@ -10,9 +10,14 @@ import { toast } from "sonner";
 import userService from "@/lib/services/user-service";
 
 export const useAuthActions = () => {
+  const queryClient = useQueryClient();
+
   const signOutUser = useMutation({
     mutationFn: () => signOut(auth),
-    onSuccess: () => toast.success("Signed out successfully"),
+    onSuccess: () => {
+      queryClient.clear();
+      toast.success("Signed out successfully");
+    },
     onError: (error) => handleError(error, "Failed to sign out"),
   });
 

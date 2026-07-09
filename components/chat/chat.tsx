@@ -48,11 +48,29 @@ type GeneratedTitleResponse = {
 };
 
 let newThreadDraft = "";
+let consumedPromptFromUrl: string | undefined;
+
+const promptFromUrlStorageKey = (prompt: string) =>
+  `prompt-from-url-sent:${prompt}`;
 
 const readNewThreadDraft = () => newThreadDraft;
 
 const writeNewThreadDraft = (draft: string) => {
   newThreadDraft = draft;
+};
+
+const clearPromptFromUrl = () => {
+  if (typeof window === "undefined") return;
+
+  const url = new URL(window.location.href);
+  if (!url.searchParams.has("prompt")) return;
+
+  url.searchParams.delete("prompt");
+  window.history.replaceState(
+    {},
+    "",
+    `${url.pathname}${url.search}${url.hash}`,
+  );
 };
 
 const updateThreadTitleInList = (
@@ -76,9 +94,8 @@ const updateThreadTitleInList = (
 };
 
 export function Chat({ threadId, isNew = false }: ChatProps) {
-  const [selectedModel, setSelectedModel] = useState<AIModel>(
-    getDefaultModel()
-  );
+  const [selectedModel, setSelectedModel] =
+    useState<AIModel>(getDefaultModel());
 
   const [attachments, setAttachments] = useState<Array<Attachment>>([]);
   const [isNewThread, setIsNewThread] = useState(isNew);
@@ -109,44 +126,39 @@ export function Chat({ threadId, isNew = false }: ChatProps) {
   // Load thread data if threadId exists
   const { data: threadData } = useThread(threadId || "", isNewThread);
 
-  const {
-    messages,
-    setMessages,
-    sendMessage,
-    status,
-    stop,
-  } = useChat<ThreadMessage>({
-    transport: new DefaultChatTransport({
-      api: "/api/chat",
-    }),
-    onError: (error) => {
-      const msg = generateDefaultErrorMessage(
-        error.message ||
-          "I'm sorry, I'm having trouble processing your request. Please try again later."
-      );
-      setMessages((prevMessages) => [...prevMessages, msg]);
-    },
-    onToolCall: ({ toolCall }) => {
-      console.log("Tool call: ", toolCall);
-    },
-    onFinish: ({ message, messages: finishedMessages }) => {
-      console.log("threadId: ", threadId);
+  const { messages, setMessages, sendMessage, status, stop } =
+    useChat<ThreadMessage>({
+      transport: new DefaultChatTransport({
+        api: "/api/chat",
+      }),
+      onError: (error) => {
+        const msg = generateDefaultErrorMessage(
+          error.message ||
+            "I'm sorry, I'm having trouble processing your request. Please try again later.",
+        );
+        setMessages((prevMessages) => [...prevMessages, msg]);
+      },
+      onToolCall: ({ toolCall }) => {
+        console.log("Tool call: ", toolCall);
+      },
+      onFinish: ({ message, messages: finishedMessages }) => {
+        console.log("threadId: ", threadId);
 
-      // Save assistant message to thread when response is complete
-      if (threadId) {
-        enqueueThreadWrite(() =>
-          saveMessageToThread(normalizeThreadMessage(message))
-        ).catch((error) => {
-          console.error("Failed to save assistant message:", error);
-        });
-      }
-    },
-  });
+        // Save assistant message to thread when response is complete
+        if (threadId) {
+          enqueueThreadWrite(() =>
+            saveMessageToThread(normalizeThreadMessage(message)),
+          ).catch((error) => {
+            console.error("Failed to save assistant message:", error);
+          });
+        }
+      },
+    });
 
   const isLoading = status === "submitted" || status === "streaming";
   const visibleMessages = useMemo(
     () => (loadedThreadIdRef.current === threadId ? messages : []),
-    [threadId, messages]
+    [threadId, messages],
   );
   // Token context calculation disabled for performance.
   const totalTokenUsage: ThreadMessageMetadata | undefined = undefined;
@@ -229,7 +241,7 @@ export function Chat({ threadId, isNew = false }: ChatProps) {
   }, [isNewThread]);
 
   const handleInputChangeWithClearSuggestions = (
-    e: React.ChangeEvent<HTMLTextAreaElement>
+    e: React.ChangeEvent<HTMLTextAreaElement>,
   ) => {
     const nextInput = e.target.value;
     setInput(nextInput);
@@ -242,15 +254,15 @@ export function Chat({ threadId, isNew = false }: ChatProps) {
   const handleSuggestionClick = async (suggestion: string) => {
     writeNewThreadDraft("");
     const msg = generateDefaultUserMessage(suggestion);
-    enqueueThreadWrite(() => persistUserMessageBeforeSend(suggestion, msg)).catch(
-      (error) => {
-        console.error("Failed to save user message:", error);
-      }
-    );
+    enqueueThreadWrite(() =>
+      persistUserMessageBeforeSend(suggestion, msg),
+    ).catch((error) => {
+      console.error("Failed to save user message:", error);
+    });
     sendMessage({ text: suggestion }, await getChatRequestOptions()).catch(
       (error) => {
         console.error("Failed to send message:", error);
-      }
+      },
     );
   };
 
@@ -295,15 +307,17 @@ export function Chat({ threadId, isNew = false }: ChatProps) {
       const data = (await response.json()) as GeneratedTitleResponse;
       if (!data.title || data.skipped) return;
 
+      if (!uid) return;
       queryClient.setQueryData(
-        threadKeys.detail(threadId),
+        threadKeys.detail(uid, threadId),
         (oldData: Thread | null | undefined) =>
           oldData
             ? { ...oldData, title: data.title!, titleSource: "generated" }
             : oldData,
       );
-      queryClient.setQueryData<ThreadsInfiniteData>(threadKeys.all, (oldData) =>
-        updateThreadTitleInList(oldData, threadId, data.title!),
+      queryClient.setQueryData<ThreadsInfiniteData>(
+        threadKeys.all(uid),
+        (oldData) => updateThreadTitleInList(oldData, threadId, data.title!),
       );
     } catch (error) {
       console.error("Failed to generate chat title:", error);
@@ -312,7 +326,7 @@ export function Chat({ threadId, isNew = false }: ChatProps) {
 
   const persistUserMessageBeforeSend = async (
     title: string,
-    message: ThreadMessage
+    message: ThreadMessage,
   ) => {
     if (!threadId) return;
 
@@ -351,7 +365,11 @@ export function Chat({ threadId, isNew = false }: ChatProps) {
     const storageKey = `composio-auth-resumed:${threadId}`;
     if (sessionStorage.getItem(storageKey)) {
       url.searchParams.delete("composioAuth");
-      window.history.replaceState({}, "", `${url.pathname}${url.search}${url.hash}`);
+      window.history.replaceState(
+        {},
+        "",
+        `${url.pathname}${url.search}${url.hash}`,
+      );
       return;
     }
 
@@ -366,17 +384,17 @@ export function Chat({ threadId, isNew = false }: ChatProps) {
         window.history.replaceState(
           {},
           "",
-          `${url.pathname}${url.search}${url.hash}`
+          `${url.pathname}${url.search}${url.hash}`,
         );
 
         const text = "Connected. Please continue with my previous request.";
         const message = generateDefaultUserMessage(text);
 
-        enqueueThreadWrite(() => persistUserMessageBeforeSend(text, message)).catch(
-          (error) => {
-            console.error("Failed to save Composio resume message:", error);
-          }
-        );
+        enqueueThreadWrite(() =>
+          persistUserMessageBeforeSend(text, message),
+        ).catch((error) => {
+          console.error("Failed to save Composio resume message:", error);
+        });
 
         await sendMessage({ text }, await getChatRequestOptions());
 
@@ -413,14 +431,14 @@ export function Chat({ threadId, isNew = false }: ChatProps) {
 
   const submitMessage = async (
     text: string,
-    submittedAttachments: Attachment[]
+    submittedAttachments: Attachment[],
   ) => {
     const submittedTitle =
       text || submittedAttachments[0]?.name || "File attachment";
     const msg = generateDefaultUserMessage(text, submittedAttachments);
 
     enqueueThreadWrite(() =>
-      persistUserMessageBeforeSend(submittedTitle, msg)
+      persistUserMessageBeforeSend(submittedTitle, msg),
     ).catch((error) => {
       console.error("Failed to save user message:", error);
     });
@@ -430,7 +448,7 @@ export function Chat({ threadId, isNew = false }: ChatProps) {
         text,
         files: attachmentsToFileParts(submittedAttachments),
       },
-      await getChatRequestOptions()
+      await getChatRequestOptions(),
     );
   };
   const submitMessageRef = useRef(submitMessage);
@@ -438,12 +456,7 @@ export function Chat({ threadId, isNew = false }: ChatProps) {
 
   // Auto-send shared links: /chat?prompt=...
   useEffect(() => {
-    if (
-      !isNewThread ||
-      !uid ||
-      status !== "ready" ||
-      promptFromUrlSentRef.current
-    ) {
+    if (!isNewThread || !uid || status !== "ready" || promptFromUrlSentRef.current) {
       return;
     }
     if (typeof window === "undefined") return;
@@ -452,29 +465,44 @@ export function Chat({ threadId, isNew = false }: ChatProps) {
     const prompt = url.searchParams.get("prompt")?.replace(/\+/g, " ").trim();
     if (!prompt) return;
 
+    // Survive Chat remounts (e.g. settings → back to /chat) when Next restores ?prompt
+    // after history.replaceState cleared it from the address bar only.
+    const storageKey = promptFromUrlStorageKey(prompt);
+    const alreadySent =
+      consumedPromptFromUrl === prompt ||
+      sessionStorage.getItem(storageKey) === "true";
+
+    if (alreadySent) {
+      clearPromptFromUrl();
+      return;
+    }
+
     promptFromUrlSentRef.current = true;
-    url.searchParams.delete("prompt");
-    window.history.replaceState({}, "", `${url.pathname}${url.search}${url.hash}`);
+    consumedPromptFromUrl = prompt;
+    sessionStorage.setItem(storageKey, "true");
+    clearPromptFromUrl();
     writeNewThreadDraft("");
     setInput("");
 
     void submitMessageRef.current(prompt, []).catch((error) => {
       console.error("Failed to auto-send prompt from URL:", error);
       promptFromUrlSentRef.current = false;
+      consumedPromptFromUrl = undefined;
+      sessionStorage.removeItem(storageKey);
     });
   }, [isNewThread, status, uid]);
 
   const sendQueuedMessage = useCallback(
     async (queuedMessageId: string) => {
       const queuedMessage = queuedMessages.find(
-        (message) => message.id === queuedMessageId
+        (message) => message.id === queuedMessageId,
       );
 
       if (!queuedMessage || isSendingQueuedMessage) return;
 
       setIsSendingQueuedMessage(true);
       setQueuedMessages((messages) =>
-        messages.filter((message) => message.id !== queuedMessageId)
+        messages.filter((message) => message.id !== queuedMessageId),
       );
 
       try {
@@ -486,7 +514,7 @@ export function Chat({ threadId, isNew = false }: ChatProps) {
         setIsSendingQueuedMessage(false);
       }
     },
-    [isSendingQueuedMessage, queuedMessages, submitMessage]
+    [isSendingQueuedMessage, queuedMessages, submitMessage],
   );
 
   useEffect(() => {
@@ -499,16 +527,23 @@ export function Chat({ threadId, isNew = false }: ChatProps) {
       return;
     }
 
-    const queuedMessageId = pendingQueuedMessageIdRef.current ?? queuedMessages[0].id;
+    const queuedMessageId =
+      pendingQueuedMessageIdRef.current ?? queuedMessages[0].id;
     pendingQueuedMessageIdRef.current = null;
     void sendQueuedMessage(queuedMessageId);
-  }, [isCreatingThread, isSendingQueuedMessage, queuedMessages, sendQueuedMessage, status]);
+  }, [
+    isCreatingThread,
+    isSendingQueuedMessage,
+    queuedMessages,
+    sendQueuedMessage,
+    status,
+  ]);
 
   const handleQueuedMessageChange = (queuedMessageId: string, text: string) => {
     setQueuedMessages((messages) =>
       messages.map((message) =>
-        message.id === queuedMessageId ? { ...message, text } : message
-      )
+        message.id === queuedMessageId ? { ...message, text } : message,
+      ),
     );
   };
 
@@ -518,7 +553,7 @@ export function Chat({ threadId, isNew = false }: ChatProps) {
     }
 
     setQueuedMessages((messages) =>
-      messages.filter((message) => message.id !== queuedMessageId)
+      messages.filter((message) => message.id !== queuedMessageId),
     );
   };
 
@@ -551,9 +586,7 @@ export function Chat({ threadId, isNew = false }: ChatProps) {
     } satisfies QueuedChatMessage;
   };
 
-  const handleChatSubmit = async (
-    e: React.FormEvent<HTMLFormElement>
-  ) => {
+  const handleChatSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
 
     const submittedMessage = prepareSubmittedMessage();
@@ -564,13 +597,15 @@ export function Chat({ threadId, isNew = false }: ChatProps) {
       return;
     }
 
-    submitMessage(submittedMessage.text, submittedMessage.attachments).catch((error) => {
-      console.error("Failed to send message:", error);
-    });
+    submitMessage(submittedMessage.text, submittedMessage.attachments).catch(
+      (error) => {
+        console.error("Failed to send message:", error);
+      },
+    );
   };
 
   const handleInstantChatSubmit = async (
-    e: React.FormEvent<HTMLFormElement>
+    e: React.FormEvent<HTMLFormElement>,
   ) => {
     e.preventDefault();
 
@@ -586,9 +621,11 @@ export function Chat({ threadId, isNew = false }: ChatProps) {
       return;
     }
 
-    submitMessage(submittedMessage.text, submittedMessage.attachments).catch((error) => {
-      console.error("Failed to send message:", error);
-    });
+    submitMessage(submittedMessage.text, submittedMessage.attachments).catch(
+      (error) => {
+        console.error("Failed to send message:", error);
+      },
+    );
   };
 
   async function getChatRequestOptions(): Promise<ChatRequestOptions> {
@@ -721,7 +758,8 @@ const INSTAGRAM_HOME_PROMPTS: PromptSuggestion[] = [
     logo: "https://logos.composio.dev/api/instagram",
   },
   {
-    label: "Generate sub topics that I could create based on the content that is working",
+    label:
+      "Generate sub topics that I could create based on the content that is working",
     appName: "Instagram",
     logo: "https://logos.composio.dev/api/instagram",
   },
@@ -753,7 +791,7 @@ const HomeSuggestions = ({
     useConnections(uid);
   const connectedApps = useMemo(
     () => toolkits.filter((toolkit) => toolkit.isConnected),
-    [toolkits]
+    [toolkits],
   );
   const arePromptsReady = !!uid && !areConnectionsLoading;
 
@@ -793,7 +831,7 @@ const HomeSuggestions = ({
     const genericPrompts = DEFAULT_PROMPTS.map((label) => ({ label }));
     return [...INSTAGRAM_HOME_PROMPTS, ...appPrompts, ...genericPrompts].slice(
       0,
-      8
+      8,
     );
   }, [connectedApps]);
 

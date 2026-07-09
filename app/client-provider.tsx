@@ -5,7 +5,7 @@ import { ThemeProvider } from "next-themes";
 import { Toaster } from "@/components/ui/sonner";
 import { queryClient } from "@/lib/clients/query-client";
 import { useAuth } from "@/lib/hooks/auth/use-auth";
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { userQueryOptions } from "@/lib/hooks/user/use-user";
 import { connectionsQueryOptions } from "@/lib/hooks/connections/use-connections";
 import { usePathname, useRouter } from "next/navigation";
@@ -49,10 +49,18 @@ const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const pathname = usePathname();
   const router = useRouter();
   const shouldRedirectHomeToChat = pathname === "/" && !!uid;
+  const previousUidRef = useRef<string | undefined>(undefined);
 
   useEffect(() => {
-    if (!uid) return;
+    if (!uid) {
+      if (previousUidRef.current) {
+        queryClient.clear();
+      }
+      previousUidRef.current = undefined;
+      return;
+    }
 
+    previousUidRef.current = uid;
     void queryClient.prefetchQuery(userQueryOptions(uid));
     void queryClient.prefetchQuery(connectionsQueryOptions(uid));
   }, [queryClient, uid]);

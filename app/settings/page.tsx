@@ -37,7 +37,11 @@ import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { useAuth } from "@/lib/hooks/auth/use-auth";
 import { useAuthActions } from "@/lib/hooks/auth/use-auth-actions";
-import { getBrowserMcpServers } from "@/lib/mcp-browser";
+import {
+  clearBrowserMcpServers,
+  getBrowserMcpServers,
+  hasMigratedBrowserMcpServers,
+} from "@/lib/mcp-browser";
 import { useMcpServers, mcpServerKeys } from "@/lib/hooks/mcp/use-mcp-servers";
 import mcpServerService from "@/lib/services/mcp-server-service";
 import {
@@ -396,18 +400,25 @@ const McpSettings = () => {
   const [pendingMcpId, setPendingMcpId] = React.useState<string>();
 
   React.useEffect(() => {
-    if (!uid || mcpServers.length > 0 || isLoading) return;
+    if (!uid || isLoading || hasMigratedBrowserMcpServers()) return;
 
     const localServers = getBrowserMcpServers();
-
     if (localServers.length === 0) {
+      clearBrowserMcpServers();
+      return;
+    }
+    if (mcpServers.length > 0) {
+      clearBrowserMcpServers();
       return;
     }
 
     Promise.all(
       localServers.map((server) => mcpServerService.saveServer(uid, server)),
     )
-      .then(() => refetch())
+      .then(() => {
+        clearBrowserMcpServers();
+        return refetch();
+      })
       .catch((error) => {
         console.error("Failed to migrate local MCP servers:", error);
       });
