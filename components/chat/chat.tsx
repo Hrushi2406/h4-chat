@@ -95,7 +95,6 @@ export function Chat({ threadId, isNew = false }: ChatProps) {
   const pendingQueuedMessageIdRef = useRef<string | null>(null);
 
   const { uid } = useAuth();
-  const { data: user, isLoading: isUserLoading } = useUser();
   const queryClient = useQueryClient();
   const { data: toolApps = [], refetch: refetchConnections } =
     useConnections(uid);
@@ -437,12 +436,11 @@ export function Chat({ threadId, isNew = false }: ChatProps) {
   const submitMessageRef = useRef(submitMessage);
   submitMessageRef.current = submitMessage;
 
-  // Auto-send shared links: /chat?prompt=... (wait for user so userInfo is present)
+  // Auto-send shared links: /chat?prompt=...
   useEffect(() => {
     if (
       !isNewThread ||
       !uid ||
-      isUserLoading ||
       status !== "ready" ||
       promptFromUrlSentRef.current
     ) {
@@ -464,7 +462,7 @@ export function Chat({ threadId, isNew = false }: ChatProps) {
       console.error("Failed to auto-send prompt from URL:", error);
       promptFromUrlSentRef.current = false;
     });
-  }, [isNewThread, isUserLoading, status, uid]);
+  }, [isNewThread, status, uid]);
 
   const sendQueuedMessage = useCallback(
     async (queuedMessageId: string) => {
@@ -599,13 +597,6 @@ export function Chat({ threadId, isNew = false }: ChatProps) {
         modelId: selectedModel.id,
         authToken: await auth.currentUser?.getIdToken(),
         threadId,
-        userInfo: {
-          name: user?.name,
-          occupation: user?.occupation,
-          userPreferences: user?.userPreferences,
-          memories: user?.memories,
-          memoryEnabled: user?.memoryEnabled,
-        },
       },
     };
   }

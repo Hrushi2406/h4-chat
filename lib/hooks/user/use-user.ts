@@ -12,10 +12,13 @@ export const userQueryOptions = (uid: string) => ({
   queryFn: () => userService.getUserInfo(uid),
 });
 
-export const useUser = () => {
+export const useUser = (options?: { fresh?: boolean }) => {
   const { uid } = useAuth();
   return useQuery({
     ...userQueryOptions(uid ?? ""),
     enabled: !!uid,
+    ...(options?.fresh
+      ? { staleTime: 0, refetchOnMount: "always" as const }
+      : {}),
   });
 };

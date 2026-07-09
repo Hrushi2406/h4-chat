@@ -178,7 +178,7 @@ export default function SettingsPage() {
 }
 
 const AccountSettings = () => {
-  const { data: user } = useUser();
+  const { data: user } = useUser({ fresh: true });
   const { updateUser } = useUserActions();
   const { signOutUser } = useAuthActions();
   const [name, setName] = React.useState(user?.name || "");
@@ -384,7 +384,7 @@ const McpSettings = () => {
     data: mcpServers = [],
     isLoading,
     refetch,
-  } = useMcpServers(uid);
+  } = useMcpServers(uid, { fresh: true });
   const [isAdding, setIsAdding] = React.useState(false);
   const [mcpName, setMcpName] = React.useState("");
   const [mcpId, setMcpId] = React.useState("");
@@ -708,15 +708,11 @@ const McpSettings = () => {
 };
 
 const MemorySettings = () => {
-  const { data: user, isLoading, refetch } = useUser();
+  const { data: user, isLoading } = useUser({ fresh: true });
   const { addMemory, updateMemory, deleteMemory, updateUser } = useUserActions();
   const memories = user?.memories ?? [];
   const memoryEnabled = user?.memoryEnabled !== false;
   const atLimit = memories.length >= MAX_USER_MEMORIES;
-
-  React.useEffect(() => {
-    refetch();
-  }, [refetch]);
 
   const [newMemory, setNewMemory] = React.useState("");
   const [editingId, setEditingId] = React.useState<string>();

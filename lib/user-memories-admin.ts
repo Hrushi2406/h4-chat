@@ -2,6 +2,7 @@ import { v4 } from "uuid";
 import { getAdminFirestore } from "@/lib/clients/firebase-admin";
 import {
   IMemory,
+  IUser,
   MAX_MEMORY_CONTENT_LENGTH,
   MAX_USER_MEMORIES,
 } from "@/lib/types/user";
@@ -9,6 +10,27 @@ import {
 const getMemoriesFromDoc = (data: FirebaseFirestore.DocumentData | undefined): IMemory[] => {
   const memories = data?.memories;
   return Array.isArray(memories) ? (memories as IMemory[]) : [];
+};
+
+export const getUserInfoFromFirestore = async (
+  userId?: string,
+): Promise<Partial<IUser> | undefined> => {
+  if (!userId) return undefined;
+
+  const db = getAdminFirestore();
+  if (!db) return undefined;
+
+  try {
+    const snap = await db.doc(`users/${userId}`).get();
+    if (!snap.exists) return undefined;
+    return snap.data() as IUser;
+  } catch (error) {
+    console.error(
+      "Failed to load user from Firestore:",
+      error instanceof Error ? error.message : error,
+    );
+    return undefined;
+  }
 };
 
 export const addUserMemory = async (userId: string, content: string) => {

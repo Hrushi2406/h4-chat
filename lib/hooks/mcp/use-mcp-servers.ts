@@ -12,8 +12,11 @@ export const mcpServersQueryOptions = (uid: string) => ({
   staleTime: 60 * 1000,
 });
 
-export const useMcpServers = (uid?: string) =>
+export const useMcpServers = (uid?: string, options?: { fresh?: boolean }) =>
   useQuery({
     ...mcpServersQueryOptions(uid ?? ""),
     enabled: Boolean(uid),
+    ...(options?.fresh
+      ? { staleTime: 0, refetchOnMount: "always" as const }
+      : {}),
   });

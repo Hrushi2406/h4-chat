@@ -32,6 +32,7 @@ import scheduledTaskServerService from "@/lib/services/scheduled-task-server-ser
 import {
   addUserMemory,
   deleteUserMemory,
+  getUserInfoFromFirestore,
   updateUserMemory,
 } from "@/lib/user-memories-admin";
 
@@ -41,19 +42,10 @@ export async function POST(req: Request) {
   const {
     messages,
     modelId = "deepseek/deepseek-v4-flash",
-    userInfo,
     authToken,
     threadId,
   } = await req.json();
   latency.step("parse body", { threadId, modelId });
-  console.log("chat userInfo:", {
-    threadId,
-    hasName: Boolean(userInfo?.name),
-    hasOccupation: Boolean(userInfo?.occupation),
-    hasPreferences: Boolean(userInfo?.userPreferences),
-    memories: userInfo?.memories?.length ?? 0,
-    memoryEnabled: userInfo?.memoryEnabled,
-  });
 
   const geo = geolocation(req);
   const model = getModelById(modelId);
@@ -83,7 +75,7 @@ export async function POST(req: Request) {
   latency.step("firebase auth");
 
   const parallelStart = performance.now();
-  const [composioTools, mcpContext] = await Promise.all([
+  const [composioTools, mcpContext, userInfo] = await Promise.all([
     (async () => {
       const start = performance.now();
       const tools = await getComposioTools(
@@ -111,11 +103,29 @@ export async function POST(req: Request) {
       );
       return ctx;
     })(),
+    (async () => {
+      const start = performance.now();
+      const info = await getUserInfoFromFirestore(verifiedUserId);
+      console.log(
+        `user firestore: +${Math.round(performance.now() - start)}ms (${Math.round(performance.now() - parallelStart)}ms since parallel start)`,
+      );
+      return info;
+    })(),
   ]);
-  latency.step("parallel tools (composio + mcp)", {
+  latency.step("parallel tools (composio + mcp + user)", {
     composioToolCount: composioTools ? Object.keys(composioTools).length : 0,
     mcpToolCount: mcpContext?.tools ? Object.keys(mcpContext.tools).length : 0,
     mcpServerCount: mcpContext?.servers?.length ?? 0,
+  });
+
+  const resolvedUserInfo: Partial<IUser> = userInfo ?? {};
+  console.log("chat userInfo:", {
+    threadId,
+    hasName: Boolean(resolvedUserInfo.name),
+    hasOccupation: Boolean(resolvedUserInfo.occupation),
+    hasPreferences: Boolean(resolvedUserInfo.userPreferences),
+    memories: resolvedUserInfo.memories?.length ?? 0,
+    memoryEnabled: resolvedUserInfo.memoryEnabled,
   });
 
   const messagesWithFileUrls = appendUnsupportedFileUrlsToMessages(
@@ -124,7 +134,7 @@ export async function POST(req: Request) {
   );
   const needsComposioFileRule =
     Boolean(composioTools) && messagesWithFileUrls !== messages;
-  const memoryEnabled = userInfo?.memoryEnabled !== false;
+  const memoryEnabled = resolvedUserInfo.memoryEnabled !== false;
   latency.step("message prep");
 
   const systemPrompt = `${getSystemPrompt(
@@ -132,7 +142,7 @@ export async function POST(req: Request) {
     Boolean(composioTools),
     needsComposioFileRule,
     mcpContext?.servers,
-    userInfo,
+    resolvedUserInfo,
     memoryEnabled,
   )}\n${getScheduledTaskSystemPrompt()}`;
   latency.step("system prompt");
