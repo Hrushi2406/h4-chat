@@ -2,16 +2,21 @@
 
 import { Chat } from "@/components/chat/chat";
 import { v4 } from "uuid";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
 
 export default function ChatPage() {
   const pathname = usePathname();
-  const [threadId, setThreadId] = useState<string>(v4());
-  const [key, setKey] = useState<string>(threadId);
+  const previousPathnameRef = useRef(pathname);
+  const [threadId, setThreadId] = useState(() => v4());
+  const [key, setKey] = useState(() => threadId);
 
   useEffect(() => {
-    if (pathname === "/chat") {
+    const wasOnNewChat = previousPathnameRef.current === "/chat";
+    previousPathnameRef.current = pathname;
+
+    // Remount only when navigating to /chat from another route
+    if (pathname === "/chat" && !wasOnNewChat) {
       const newThreadId = v4();
       setThreadId(newThreadId);
       setKey(newThreadId);

@@ -91,10 +91,11 @@ export function Chat({ threadId, isNew = false }: ChatProps) {
   const loadedThreadIdRef = useRef<string | null>(null);
   const previousThreadIdRef = useRef(threadId);
   const composioAuthResumeStartedRef = useRef(false);
+  const promptFromUrlSentRef = useRef(false);
   const pendingQueuedMessageIdRef = useRef<string | null>(null);
 
   const { uid } = useAuth();
-  const { data: user } = useUser();
+  const { data: user, isLoading: isUserLoading } = useUser();
   const queryClient = useQueryClient();
   const { data: toolApps = [], refetch: refetchConnections } =
     useConnections(uid);
@@ -433,6 +434,37 @@ export function Chat({ threadId, isNew = false }: ChatProps) {
       await getChatRequestOptions()
     );
   };
+  const submitMessageRef = useRef(submitMessage);
+  submitMessageRef.current = submitMessage;
+
+  // Auto-send shared links: /chat?prompt=... (wait for user so userInfo is present)
+  useEffect(() => {
+    if (
+      !isNewThread ||
+      !uid ||
+      isUserLoading ||
+      status !== "ready" ||
+      promptFromUrlSentRef.current
+    ) {
+      return;
+    }
+    if (typeof window === "undefined") return;
+
+    const url = new URL(window.location.href);
+    const prompt = url.searchParams.get("prompt")?.replace(/\+/g, " ").trim();
+    if (!prompt) return;
+
+    promptFromUrlSentRef.current = true;
+    url.searchParams.delete("prompt");
+    window.history.replaceState({}, "", `${url.pathname}${url.search}${url.hash}`);
+    writeNewThreadDraft("");
+    setInput("");
+
+    void submitMessageRef.current(prompt, []).catch((error) => {
+      console.error("Failed to auto-send prompt from URL:", error);
+      promptFromUrlSentRef.current = false;
+    });
+  }, [isNewThread, isUserLoading, status, uid]);
 
   const sendQueuedMessage = useCallback(
     async (queuedMessageId: string) => {

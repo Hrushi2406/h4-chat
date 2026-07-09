@@ -46,6 +46,14 @@ export async function POST(req: Request) {
     threadId,
   } = await req.json();
   latency.step("parse body", { threadId, modelId });
+  console.log("chat userInfo:", {
+    threadId,
+    hasName: Boolean(userInfo?.name),
+    hasOccupation: Boolean(userInfo?.occupation),
+    hasPreferences: Boolean(userInfo?.userPreferences),
+    memories: userInfo?.memories?.length ?? 0,
+    memoryEnabled: userInfo?.memoryEnabled,
+  });
 
   const geo = geolocation(req);
   const model = getModelById(modelId);

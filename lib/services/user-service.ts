@@ -26,14 +26,25 @@ class UserService {
 
   async createUserGoogle(uid: string, fbUser: User) {
     const userRef = doc(db, `users/${uid}`);
-    const user = generateDefaultUser(uid);
-    const updated = {
-      ...user,
+    const snap = await getDoc(userRef);
+
+    // Existing users: only refresh Google profile fields, never wipe prefs/memories.
+    if (snap.exists()) {
+      await updateDoc(userRef, {
+        email: fbUser.email ?? "",
+        name: fbUser.displayName ?? snap.data()?.name ?? "",
+        avatar: fbUser.photoURL ?? snap.data()?.avatar ?? "",
+        updatedAt: new Date().toISOString(),
+      });
+      return;
+    }
+
+    await setDoc(userRef, {
+      ...generateDefaultUser(uid),
       email: fbUser.email ?? "",
       name: fbUser.displayName ?? "",
       avatar: fbUser.photoURL ?? "",
-    };
-    await setDoc(userRef, updated, { merge: true });
+    });
   }
 
   //   async migrateUserFromAnon(uid: string, email: string) {
