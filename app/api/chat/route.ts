@@ -12,8 +12,7 @@ import {
   getModelById,
 } from "@/lib/available-models";
 import {
-  createComposioSession,
-  getWrappedComposioTools,
+  getComposioSessionTools,
   isComposioConfigured,
 } from "@/lib/composio";
 import { verifyFirebaseIdToken } from "@/lib/firebase-auth-server";
@@ -517,11 +516,7 @@ async function getComposioTools(
   }
 
   try {
-    const session = await createComposioSession(userId, {
-      callbackUrl,
-      threadId,
-    });
-    return getWrappedComposioTools(await session.tools());
+    return await getComposioSessionTools(userId, { callbackUrl, threadId });
   } catch (error) {
     console.error("Failed to load Composio tools:", error);
     return undefined;

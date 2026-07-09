@@ -125,11 +125,26 @@ type CreateComposioSessionOptions = {
 // thread is deleted; an in-memory mirror lets warm instances skip the read.
 // Sessions are scoped per thread because each thread has its own connection
 // callback URL — reusing across threads would redirect auth to the wrong chat.
+//
+// session.tools() is a second Composio round-trip that returns stable meta tools
+// (search / schemas / execute / manage-connections). Cache the wrapped ToolSet
+// per sessionId on warm instances so follow-up messages skip both use() and tools().
 const COMPOSIO_SESSION_FIELD = "composioSessionId";
+const TOOLS_CACHE_TTL_MS = 5 * 60_000;
 const sessionIdCache = new Map<string, string>();
+const toolsCache = new Map<string, { expiresAt: number; tools: ToolSet }>();
+const toolsInflight = new Map<string, Promise<ToolSet>>();
 
 const getSessionCacheKey = (userId: string, threadId?: string) =>
   threadId ?? `user:${userId}`;
+
+const resolveStoredSessionId = async (userId: string, threadId?: string) => {
+  const cacheKey = getSessionCacheKey(userId, threadId);
+  return (
+    sessionIdCache.get(cacheKey) ??
+    (threadId ? await readStoredSessionId(threadId) : undefined)
+  );
+};
 
 const readStoredSessionId = async (
   threadId: string
@@ -188,9 +203,7 @@ export const createComposioSession = async (
   const { threadId } = options;
   const cacheKey = getSessionCacheKey(userId, threadId);
 
-  const storedSessionId =
-    sessionIdCache.get(cacheKey) ??
-    (threadId ? await readStoredSessionId(threadId) : undefined);
+  const storedSessionId = await resolveStoredSessionId(userId, threadId);
 
   if (storedSessionId) {
     try {
@@ -200,6 +213,7 @@ export const createComposioSession = async (
     } catch (error) {
       // Session likely expired or was revoked; fall through to recreate it.
       sessionIdCache.delete(cacheKey);
+      toolsCache.delete(storedSessionId);
       console.warn(
         `Composio session ${storedSessionId} could not be reused, recreating:`,
         error instanceof Error ? error.message : error
@@ -225,6 +239,43 @@ export const createComposioSession = async (
   }
 
   return session;
+};
+
+/** Meta tools for a session; warm instances reuse a short-lived in-memory ToolSet. */
+export const getComposioSessionTools = async (
+  userId: string,
+  options: CreateComposioSessionOptions = {}
+): Promise<ToolSet> => {
+  const cacheKey = getSessionCacheKey(userId, options.threadId);
+  const storedSessionId = await resolveStoredSessionId(userId, options.threadId);
+
+  if (storedSessionId) {
+    const cached = toolsCache.get(storedSessionId);
+    if (cached && cached.expiresAt > Date.now()) {
+      sessionIdCache.set(cacheKey, storedSessionId);
+      return cached.tools;
+    }
+  }
+
+  const inflight = toolsInflight.get(cacheKey);
+  if (inflight) {
+    return inflight;
+  }
+
+  const promise = (async () => {
+    const session = await createComposioSession(userId, options);
+    const tools = getWrappedComposioTools(await session.tools());
+    toolsCache.set(session.sessionId, {
+      expiresAt: Date.now() + TOOLS_CACHE_TTL_MS,
+      tools,
+    });
+    return tools;
+  })().finally(() => {
+    toolsInflight.delete(cacheKey);
+  });
+
+  toolsInflight.set(cacheKey, promise);
+  return promise;
 };
 
 export const getWrappedComposioTools = (tools: ToolSet): ToolSet =>

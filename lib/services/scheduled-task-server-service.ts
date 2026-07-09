@@ -4,8 +4,7 @@ import { getDefaultModel, getModelById } from "@/lib/available-models";
 import { getAdminFirestore } from "@/lib/clients/firebase-admin";
 import { getQstashClient } from "@/lib/clients/qstash";
 import {
-  createComposioSession,
-  getWrappedComposioTools,
+  getComposioSessionTools,
   isComposioConfigured,
 } from "@/lib/composio";
 import { closeMcpClients, createMcpToolContext } from "@/lib/mcp";
@@ -557,8 +556,7 @@ async function getScheduledComposioTools(userId: string, callbackUrl: string) {
   }
 
   try {
-    const session = await createComposioSession(userId, { callbackUrl });
-    return getWrappedComposioTools(await session.tools());
+    return await getComposioSessionTools(userId, { callbackUrl });
   } catch (error) {
     console.error("Failed to load automation Composio tools:", error);
     return undefined;
