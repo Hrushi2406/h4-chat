@@ -466,7 +466,12 @@ export function Chat({ threadId, isNew = false }: ChatProps) {
 
   // Auto-send shared links: /chat?prompt=...
   useEffect(() => {
-    if (!isNewThread || !uid || status !== "ready" || promptFromUrlSentRef.current) {
+    if (
+      !isNewThread ||
+      !uid ||
+      status !== "ready" ||
+      promptFromUrlSentRef.current
+    ) {
       return;
     }
     if (typeof window === "undefined") return;
