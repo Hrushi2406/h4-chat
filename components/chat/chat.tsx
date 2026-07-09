@@ -115,11 +115,17 @@ export function Chat({ threadId, isNew = false }: ChatProps) {
   const queryClient = useQueryClient();
   const { data: toolApps = [], refetch: refetchConnections } =
     useConnections(uid);
-  const { data: savedMcpServers = [] } = useMcpServers(uid);
+  const { data: savedMcpServers = [], isFetched: mcpServersFetched } =
+    useMcpServers(uid);
   const mcpServers = useMemo(
     () => savedMcpServers.filter((server) => server.enabled),
     [savedMcpServers],
   );
+  // Only skip MCP on the server when we know the user has none; while loading,
+  // omit the flag so the API still fetches (safe for first paint / cache miss).
+  const hasMcpServers = mcpServersFetched ? mcpServers.length > 0 : undefined;
+  const hasMcpServersRef = useRef(hasMcpServers);
+  hasMcpServersRef.current = hasMcpServers;
 
   const { createThread, addMessageToThread } = useThreadActions();
 
@@ -130,6 +136,10 @@ export function Chat({ threadId, isNew = false }: ChatProps) {
     useChat<ThreadMessage>({
       transport: new DefaultChatTransport({
         api: "/api/chat",
+        body: () =>
+          hasMcpServersRef.current === undefined
+            ? {}
+            : { hasMcpServers: hasMcpServersRef.current },
       }),
       onError: (error) => {
         const msg = generateDefaultErrorMessage(
@@ -634,6 +644,9 @@ export function Chat({ threadId, isNew = false }: ChatProps) {
         modelId: selectedModel.id,
         authToken: await auth.currentUser?.getIdToken(),
         threadId,
+        ...(hasMcpServersRef.current !== undefined
+          ? { hasMcpServers: hasMcpServersRef.current }
+          : {}),
       },
     };
   }

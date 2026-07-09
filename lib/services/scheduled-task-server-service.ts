@@ -474,7 +474,7 @@ class ScheduledTaskServerService {
       userId: task.userId,
     });
     const [composioTools, mcpContext] = await Promise.all([
-      getScheduledComposioTools(task.userId, `${baseUrl}/scheduled-tasks`),
+      getScheduledComposioTools(task.userId, baseUrl),
       createMcpToolContext(task.userId, mcpServers),
     ]);
     const tools = {
@@ -550,13 +550,19 @@ class ScheduledTaskServerService {
   }
 }
 
-async function getScheduledComposioTools(userId: string, callbackUrl: string) {
+async function getScheduledComposioTools(userId: string, baseUrl: string) {
   if (!isComposioConfigured()) {
     return undefined;
   }
 
   try {
-    return await getComposioSessionTools(userId, { callbackUrl });
+    return await getComposioSessionTools(userId, {
+      callbackUrl: `${baseUrl}/api/composio/callback`,
+      authContext: {
+        baseUrl,
+        source: "automations",
+      },
+    });
   } catch (error) {
     console.error("Failed to load automation Composio tools:", error);
     return undefined;

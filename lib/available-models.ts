@@ -38,7 +38,8 @@ export const availableModels: AIModel[] = [
   {
     id: DEFAULT_IMAGE_ANALYSIS_MODEL_ID,
     name: "GPT-5 Nano",
-    description: "Low-cost OpenAI model for image analysis and everyday vision tasks",
+    description:
+      "Low-cost OpenAI model for image analysis and everyday vision tasks",
     provider: "openai",
     maxTokens: 400000,
     capabilities: multimodalToolModel,
@@ -143,7 +144,8 @@ export const availableModels: AIModel[] = [
   {
     id: "google/gemma-4-31b-it",
     name: "Gemma 4 31B",
-    description: "Open Google model for general chat, tool use, files, and vision",
+    description:
+      "Open Google model for general chat, tool use, files, and vision",
     provider: "google",
     maxTokens: 262144,
     capabilities: multimodalToolModel,

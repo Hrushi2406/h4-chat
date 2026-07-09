@@ -1,6 +1,7 @@
 import {
   COMPOSIO_TOOLKIT_LABELS,
   COMPOSIO_TOOLKITS,
+  createComposioConnectionRequest,
   createComposioSession,
   isComposioConfigured,
   isSupportedComposioToolkit,
@@ -89,8 +90,14 @@ export async function POST(req: Request) {
       new URL(req.url).origin
     ).replace(/\/$/, "");
     const session = await createComposioSession(userId);
-    const connectionRequest = await session.authorize(toolkit, {
-      callbackUrl: `${origin}/apps`,
+    const connectionRequest = await createComposioConnectionRequest({
+      userId,
+      session,
+      toolkit,
+      authContext: {
+        baseUrl: origin,
+        source: "apps",
+      },
     });
 
     return Response.json({ redirectUrl: connectionRequest.redirectUrl });

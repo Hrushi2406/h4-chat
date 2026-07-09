@@ -10,7 +10,7 @@ import { blurBackground } from "@/lib/utils";
 import { getBrandLogo } from "@/lib/brand-logos";
 
 const selectableModels = availableModels.filter(
-  (model) => model.provider === "deepseek"
+  (model) => model.provider === "deepseek",
 );
 
 interface ModelSelectorProps {

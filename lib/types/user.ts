@@ -15,6 +15,8 @@ export interface IUser {
   userPreferences: string;
   memories: IMemory[];
   memoryEnabled: boolean;
+  composioSessionId?: string;
+  composioSessionUpdatedAt?: string;
 }
 
 export const MAX_USER_MEMORIES = 40;

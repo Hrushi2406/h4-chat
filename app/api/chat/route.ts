@@ -11,15 +11,9 @@ import {
   DEFAULT_IMAGE_ANALYSIS_MODEL_ID,
   getModelById,
 } from "@/lib/available-models";
-import {
-  getComposioSessionTools,
-  isComposioConfigured,
-} from "@/lib/composio";
+import { getComposioSessionTools, isComposioConfigured } from "@/lib/composio";
 import { verifyFirebaseIdToken } from "@/lib/firebase-auth-server";
-import {
-  closeMcpClients,
-  createMcpToolContext,
-} from "@/lib/mcp";
+import { closeMcpClients, createMcpToolContext } from "@/lib/mcp";
 import { getUserMcpServersFromFirestore } from "@/lib/mcp-firestore";
 import {
   COMPOSIO_META_TOOLS,
@@ -43,8 +37,9 @@ export async function POST(req: Request) {
     modelId = "deepseek/deepseek-v4-flash",
     authToken,
     threadId,
+    hasMcpServers,
   } = await req.json();
-  latency.step("parse body", { threadId, modelId });
+  latency.step("parse body", { threadId, modelId, hasMcpServers });
 
   const geo = geolocation(req);
   const model = getModelById(modelId);
@@ -78,13 +73,23 @@ export async function POST(req: Request) {
   }
 
   const parallelStart = performance.now();
+  const userInfoPromise = (async () => {
+    const start = performance.now();
+    const info = await getUserInfoFromFirestore(verifiedUserId);
+    console.log(
+      `user firestore: +${Math.round(performance.now() - start)}ms (${Math.round(performance.now() - parallelStart)}ms since parallel start)`,
+    );
+    return info;
+  })();
   const [composioTools, mcpContext, userInfo] = await Promise.all([
     (async () => {
       const start = performance.now();
+      const info = await userInfoPromise;
       const tools = await getComposioTools(
         verifiedUserId,
-        getChatCallbackUrl(req, threadId),
+        getBaseUrl(req),
         threadId,
+        info?.composioSessionId,
       );
       console.log(
         `composio tools: +${Math.round(performance.now() - start)}ms (${Math.round(performance.now() - parallelStart)}ms since parallel start)`,
@@ -92,6 +97,16 @@ export async function POST(req: Request) {
       return tools;
     })(),
     (async () => {
+      // Frontend already knows the MCP list; skip Firestore + client setup when empty.
+      if (hasMcpServers === false) {
+        console.log("mcp skipped: frontend reported no MCP servers");
+        return undefined;
+      }
+      if (hasMcpServers !== true) {
+        console.log(
+          `mcp fetch: hasMcpServers=${String(hasMcpServers)} (frontend did not confirm; fetching)`,
+        );
+      }
       const start = performance.now();
       const mcpServers = await getUserMcpServersFromFirestore({
         userId: verifiedUserId,
@@ -106,14 +121,7 @@ export async function POST(req: Request) {
       );
       return ctx;
     })(),
-    (async () => {
-      const start = performance.now();
-      const info = await getUserInfoFromFirestore(verifiedUserId);
-      console.log(
-        `user firestore: +${Math.round(performance.now() - start)}ms (${Math.round(performance.now() - parallelStart)}ms since parallel start)`,
-      );
-      return info;
-    })(),
+    userInfoPromise,
   ]);
   latency.step("parallel tools (composio + mcp + user)", {
     composioToolCount: composioTools ? Object.keys(composioTools).length : 0,
@@ -177,6 +185,16 @@ export async function POST(req: Request) {
     system: systemPrompt,
     messages: modelMessages,
     stopWhen: stepCountIs(100),
+    ...(effectiveModel.id === "openai/gpt-oss-120b"
+      ? {
+          providerOptions: {
+            gateway: {
+              sort: "tps" as const,
+              order: ["cerebras", "groq", "nebius"],
+            },
+          },
+        }
+      : {}),
     onError: async (error) => {
       console.log("error: ", error);
       await closeMcpClientsOnce();
@@ -331,6 +349,7 @@ const getSystemPrompt = (
     - Include a follow-up question only when it is needed to move the conversation forward.
     - Suggest next steps only when they are useful and specific.
     - If asked what model you use, answer: "I'm Sakhi, using Sakhi 1."
+    - Sakhi sharable prompt link: create links to start a new Sakhi chat with /chat?draft=<encoded text> for prefill-only links or /chat?prompt=<encoded text> for auto-send links; the href must begin with /chat, must not include a protocol or domain, must encode the actual prompt text instead of using placeholders, and must be the markdown link target; include or offer one when a user is creating a prompt or asks for one.
     ${
       composioEnabled
         ? `- You can use connected-app tools for email, calendar, drive, docs, spreadsheets, project management, developer workflows, CRM, payments, commerce, personal finance, design, Google Workspace, social media, ads, SEO, browser automation, media generation, and fitness tasks.
@@ -422,7 +441,10 @@ function appendUnsupportedFileUrlsToMessages(
       const mediaType =
         typeof filePart.mediaType === "string" ? filePart.mediaType : undefined;
 
-      if (filePart.type !== "file" || isFileTypeSupportedByModel(mediaType, model)) {
+      if (
+        filePart.type !== "file" ||
+        isFileTypeSupportedByModel(mediaType, model)
+      ) {
         return true;
       }
 
@@ -508,31 +530,31 @@ function isFileTypeSupportedByModel(
 
 async function getComposioTools(
   userId?: string,
-  callbackUrl?: string,
+  baseUrl?: string,
   threadId?: string,
+  userComposioSessionId?: string,
 ): Promise<ToolSet | undefined> {
   if (!userId || !isComposioConfigured()) {
     return undefined;
   }
 
   try {
-    return await getComposioSessionTools(userId, { callbackUrl, threadId });
+    return await getComposioSessionTools(userId, {
+      callbackUrl: baseUrl ? `${baseUrl}/api/composio/callback` : undefined,
+      skipStoredSessionRead: true,
+      userComposioSessionId,
+      authContext: baseUrl
+        ? {
+            baseUrl,
+            source: "chat",
+            threadId,
+          }
+        : undefined,
+    });
   } catch (error) {
     console.error("Failed to load Composio tools:", error);
     return undefined;
   }
-}
-
-function getChatCallbackUrl(req: Request, threadId?: string) {
-  const origin = (
-    process.env.NEXT_PUBLIC_BASE_URL ||
-    process.env.APP_URL ||
-    new URL(req.url).origin
-  ).replace(/\/$/, "");
-
-  return threadId
-    ? `${origin}/chat/${threadId}?composioAuth=complete`
-    : `${origin}/chat?composioAuth=complete`;
 }
 
 function getBaseUrl(req: Request) {
