@@ -5,7 +5,6 @@ import {
   WAITLIST_USE_CASE_CATEGORIES,
 } from "@/lib/waitlist-use-cases";
 import { motion, useReducedMotion } from "framer-motion";
-import { ChevronDown } from "lucide-react";
 
 const ease = [0.22, 1, 0.36, 1] as const;
 
@@ -174,17 +173,3 @@ export const UseCasesSection = () => {
     </section>
   );
 };
-
-export const ScrollHint = () => (
-  <motion.a
-    href="#use-cases"
-    aria-label="Scroll to use cases"
-    className="absolute bottom-8 left-1/2 z-20 flex -translate-x-1/2 flex-col items-center gap-1 text-neutral-500 transition-colors hover:text-neutral-300"
-    initial={{ opacity: 0 }}
-    animate={{ opacity: 1 }}
-    transition={{ delay: 1.4, duration: 0.6 }}
-  >
-    <span className="text-[11px] tracking-widest uppercase">Explore</span>
-    <ChevronDown className="scroll-hint-animate size-4" />
-  </motion.a>
-);

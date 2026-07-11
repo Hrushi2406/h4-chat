@@ -5,11 +5,9 @@ import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { WaitlistFooter } from "@/components/waitlist/waitlist-footer";
-import {
-  ScrollHint,
-  UseCasesSection,
-} from "@/components/waitlist/use-cases-section";
+import { UseCasesSection } from "@/components/waitlist/use-cases-section";
 import { WaitlistHeroBackground } from "@/components/waitlist/waitlist-hero-background";
+import { TrustedBySection } from "@/components/waitlist/trusted-by-section";
 import { useWaitlistActions } from "@/lib/hooks/waitlist/use-waitlist-actions";
 import { markWaitlistJoined } from "@/lib/waitlist-session";
 import { motion, useReducedMotion, type Variants } from "framer-motion";
@@ -126,7 +124,7 @@ export default function WaitlistPage() {
           </motion.div>
         </main>
 
-        <ScrollHint />
+        <TrustedBySection />
 
         <WaitlistHeroBackground />
       </section>

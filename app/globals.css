@@ -455,18 +455,6 @@
     }
   }
 
-  @keyframes scroll-hint-bounce {
-    0%,
-    100% {
-      transform: translateY(0);
-      opacity: 0.35;
-    }
-    50% {
-      transform: translateY(6px);
-      opacity: 0.7;
-    }
-  }
-
   .hero-glow-animate {
     animation: hero-glow-breathe 8s ease-in-out infinite;
   }
@@ -474,10 +462,6 @@
   .hero-bar-animate {
     transform-origin: bottom;
     animation: hero-bar-wave 4.5s ease-in-out infinite;
-  }
-
-  .scroll-hint-animate {
-    animation: scroll-hint-bounce 2.4s ease-in-out infinite;
   }
 
   @property --pill-glow-x {
@@ -537,7 +521,6 @@
   @media (prefers-reduced-motion: reduce) {
     .hero-glow-animate,
     .hero-bar-animate,
-    .scroll-hint-animate,
     .pill-border-animate,
     .pill-glow-travel-fill,
     .pill-glow-travel-border {
