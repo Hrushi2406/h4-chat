@@ -234,10 +234,12 @@ export function Chat({ threadId, isNew = false }: ChatProps) {
 
     if (typeof window !== "undefined") {
       const url = new URL(window.location.href);
-      const draft = url.searchParams.get("draft");
+      const sharedDraft = sessionStorage.getItem("shared-draft");
+      const draft = sharedDraft ?? url.searchParams.get("draft");
 
       if (draft !== null) {
         writeNewThreadDraft(draft);
+        sessionStorage.removeItem("shared-draft");
         url.searchParams.delete("draft");
         window.history.replaceState(
           {},
@@ -477,8 +479,12 @@ export function Chat({ threadId, isNew = false }: ChatProps) {
     if (typeof window === "undefined") return;
 
     const url = new URL(window.location.href);
-    const prompt = url.searchParams.get("prompt")?.replace(/\+/g, " ").trim();
+    const sharedPrompt = sessionStorage.getItem("shared-prompt");
+    const prompt = (sharedPrompt ?? url.searchParams.get("prompt"))
+      ?.replace(/\+/g, " ")
+      .trim();
     if (!prompt) return;
+    sessionStorage.removeItem("shared-prompt");
 
     // Survive Chat remounts (e.g. settings → back to /chat) when Next restores ?prompt
     // after history.replaceState cleared it from the address bar only.

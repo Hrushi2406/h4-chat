@@ -28,6 +28,7 @@ import {
   getUserInfoFromFirestore,
   updateUserMemory,
 } from "@/lib/user-memories-admin";
+import { createPromptLink } from "@/lib/prompt-links-admin";
 
 export async function POST(req: Request) {
   const latency = createLatencyLogger();
@@ -169,6 +170,10 @@ export async function POST(req: Request) {
       baseUrl: getBaseUrl(req),
     }),
     ...(memoryEnabled ? createMemoryTools({ userId: verifiedUserId }) : {}),
+    ...createPromptLinkTools({
+      userId: verifiedUserId,
+      baseUrl: getBaseUrl(req),
+    }),
     ...composioTools,
     ...mcpContext?.tools,
   } satisfies ToolSet;
@@ -349,7 +354,7 @@ const getSystemPrompt = (
     - Include a follow-up question only when it is needed to move the conversation forward.
     - Suggest next steps only when they are useful and specific.
     - If asked what model you use, answer: "I'm Sakhi, using Sakhi 1."
-    - Sakhi sharable prompt link: create links to start a new Sakhi chat with /chat?draft=<encoded text> for prefill-only links or /chat?prompt=<encoded text> for auto-send links; the href must begin with /chat, must not include a protocol or domain, must encode the actual prompt text instead of using placeholders, and must be the markdown link target; include or offer one when a user is creating a prompt or asks for one.
+    - Sakhi shareable prompt links: when the user asks to create or share a prompt link, call create_prompt_share_link with the complete prompt text. Use mode "draft" to prefill it or "prompt" only when the user explicitly wants it auto-sent. Return the exact short URL from the tool; never create a /chat?draft= or /chat?prompt= link yourself.
     ${
       composioEnabled
         ? `- You can use connected-app tools for email, calendar, drive, docs, spreadsheets, project management, developer workflows, CRM, payments, commerce, personal finance, design, Google Workspace, social media, ads, SEO, browser automation, media generation, and fitness tasks.
@@ -636,6 +641,32 @@ function createScheduledTaskTools({
           message:
             "Automation created. The user can inspect and test it from Automations.",
         };
+      },
+    }),
+  } satisfies ToolSet;
+}
+
+function createPromptLinkTools({
+  userId,
+  baseUrl,
+}: {
+  userId: string;
+  baseUrl: string;
+}): ToolSet {
+  return {
+    create_prompt_share_link: tool({
+      description:
+        "Create a short Sakhi URL that opens a complete prompt. Call this whenever the user asks for a prompt sharing link.",
+      inputSchema: z.object({
+        text: z.string().min(1).max(20_000).describe("The complete prompt text"),
+        mode: z
+          .enum(["draft", "prompt"])
+          .default("draft")
+          .describe("draft prefills the composer; prompt auto-sends it"),
+      }),
+      execute: async ({ text, mode }) => {
+        const code = await createPromptLink({ text, mode, userId });
+        return { url: `${baseUrl}/p/${code}`, mode };
       },
     }),
   } satisfies ToolSet;
