@@ -10,6 +10,7 @@ import { userQueryOptions } from "@/lib/hooks/user/use-user";
 import { connectionsQueryOptions } from "@/lib/hooks/connections/use-connections";
 import { usePathname, useRouter } from "next/navigation";
 import { PwaServiceWorkerRegistrar } from "@/components/pwa-service-worker-registrar";
+import { getFirebaseAnalytics } from "@/lib/clients/firebase-analytics";
 
 interface ClientProviderProps {
   children: React.ReactNode;
@@ -63,6 +64,21 @@ const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     void queryClient.prefetchQuery(userQueryOptions(uid));
     void queryClient.prefetchQuery(connectionsQueryOptions(uid));
   }, [queryClient, uid]);
+
+  useEffect(() => {
+    let isCurrent = true;
+
+    void getFirebaseAnalytics().then(async (analytics) => {
+      if (!analytics || !isCurrent) return;
+
+      const { setUserId } = await import("firebase/analytics");
+      if (isCurrent) setUserId(analytics, uid ?? null);
+    });
+
+    return () => {
+      isCurrent = false;
+    };
+  }, [uid]);
 
   useEffect(() => {
     if (shouldRedirectHomeToChat) {
