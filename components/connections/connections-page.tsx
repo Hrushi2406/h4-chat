@@ -269,7 +269,7 @@ export default function ConnectionsPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [pendingSlug, setPendingSlug] = React.useState<string>();
-  const [connectionSearch, setConnectionSearch] = React.useState("");
+  const connectionSearch = searchParams.get("q") ?? "";
   const {
     data: toolkits = [],
     error,
@@ -277,6 +277,18 @@ export default function ConnectionsPage() {
     refetch,
   } = useConnections(uid);
   const normalizedSearch = connectionSearch.trim().toLowerCase();
+
+  const updateConnectionSearch = (search: string) => {
+    const params = new URLSearchParams(searchParams.toString());
+    if (search) {
+      params.set("q", search);
+    } else {
+      params.delete("q");
+    }
+    router.replace(`/apps${params.size ? `?${params}` : ""}`, {
+      scroll: false,
+    });
+  };
 
   useEffect(() => {
     if (!searchParams.get("connected_account_id")) return;
@@ -497,7 +509,7 @@ export default function ConnectionsPage() {
               <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
               <Input
                 value={connectionSearch}
-                onChange={(event) => setConnectionSearch(event.target.value)}
+                onChange={(event) => updateConnectionSearch(event.target.value)}
                 placeholder="Search apps"
                 className={cn(
                   "h-9 rounded-full pl-9 text-sm shadow-none bg-secondary",
