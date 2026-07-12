@@ -227,7 +227,7 @@ const ThreadSidebar = () => {
             />
           )}
         </SidebarContent>
-        <SidebarFooter className="px-2 pb-3 pt-3">
+        <SidebarFooter className="gap-2 px-2 pb-3 pt-3">
           <SidebarUserFooter
             name={user?.name}
             email={user?.email}

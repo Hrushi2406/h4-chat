@@ -7,6 +7,8 @@ import Link from "next/link";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { navToolbarSecondaryBtnClass } from "@/lib/utils";
 import { PwaInstallButton } from "@/components/pwa-install-button";
+import { WhatsAppLogo } from "@/lib/brand-logos";
+import { WHATSAPP_COMMUNITY_URL } from "@/lib/constants";
 
 const THREAD_ID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -41,6 +43,24 @@ export default function Navbar() {
         <div className="flex items-center gap-2">
           <PwaInstallButton />
           <ThemeToggle />
+          <Button
+            asChild
+            variant="secondary"
+            size="sm"
+            className={navToolbarSecondaryBtnClass}
+          >
+            <a
+              href={WHATSAPP_COMMUNITY_URL}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="gap-0 md:gap-1.5"
+            >
+              <WhatsAppLogo className="h-4 w-4 shrink-0" />
+              <span className="sr-only md:not-sr-only md:inline">
+                Join Community
+              </span>
+            </a>
+          </Button>
           <Button
             variant="secondary"
             size="sm"

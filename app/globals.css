@@ -144,8 +144,7 @@
   --shimmer-gradient: rgb(219 234 254);
 }
 
-.neem,
-.macha {
+.matcha {
   --background: oklch(0.98 0.025 112);
   --foreground: oklch(0.23 0.055 135);
   --card: oklch(0.955 0.035 112);

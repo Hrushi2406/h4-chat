@@ -25,8 +25,7 @@ export const ClientProvider = ({ children }: ClientProviderProps) => {
         themes={[
           "light",
           "dark",
-          "neem",
-          "macha",
+          "matcha",
           "graphite",
           "ocean",
           "jaipur-pink",

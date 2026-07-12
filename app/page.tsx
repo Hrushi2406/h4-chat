@@ -12,6 +12,8 @@ import { useWaitlistActions } from "@/lib/hooks/waitlist/use-waitlist-actions";
 import { markWaitlistJoined } from "@/lib/waitlist-session";
 import { motion, useReducedMotion, type Variants } from "framer-motion";
 import { Loader2, Mail } from "lucide-react";
+import { WhatsAppLogo as WhatsAppIcon } from "@/lib/brand-logos";
+import { WHATSAPP_COMMUNITY_URL } from "@/lib/constants";
 
 const ease = [0.22, 1, 0.36, 1] as const;
 
@@ -121,6 +123,16 @@ export default function WaitlistPage() {
                 </Button>
               </div>
             </form>
+
+            <a
+              href={WHATSAPP_COMMUNITY_URL}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="group/wa mt-6 inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.04] px-4 py-2 text-sm text-neutral-300 shadow-[0_0_0_1px_rgba(255,255,255,0.04)_inset] backdrop-blur-xl transition-all duration-300 hover:scale-[1.02] hover:border-blue-400/30 hover:bg-white/[0.08] hover:text-blue-400/90 active:scale-[0.98]"
+            >
+              <WhatsAppIcon className="size-4 text-neutral-500 transition-colors duration-300 group-hover/wa:text-blue-400/90" />
+              Join WhatsApp community for faster access
+            </a>
           </motion.div>
         </main>
 

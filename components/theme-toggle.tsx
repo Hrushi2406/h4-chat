@@ -34,8 +34,8 @@ const themeOptions = [
     palette: ["#171717", "#404040", "#f5f5f5"],
   },
   {
-    value: "neem",
-    label: "Neem",
+    value: "matcha",
+    label: "Matcha",
     vibe: "Fresh herbal daylight",
     palette: ["#fbfdf3", "#8faf55", "#2f5f35"],
   },
