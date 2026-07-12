@@ -367,6 +367,13 @@ const composioToolDisplay: Array<{
     Icon: Flame,
   },
   {
+    match: (context) => includesAny(context, ["APIFY"]),
+    appSlug: "apify",
+    fallbackLoading: "Working with Apify",
+    fallbackDone: "Used Apify",
+    Icon: Globe,
+  },
+  {
     match: (context) => includesAny(context, ["GEMINI"]),
     appSlug: "gemini",
     fallbackLoading: "Working with Gemini",

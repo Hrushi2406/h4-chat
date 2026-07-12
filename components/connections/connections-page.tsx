@@ -48,6 +48,7 @@ const toolkitIcons: Record<string, React.ElementType> = {
   canva: Image,
   whatsapp: MessageCircle,
   firecrawl: Flame,
+  apify: Globe,
   browser_tool: Globe,
 };
 
@@ -151,6 +152,10 @@ const connectionMetadata: Record<string, ConnectionMetadata> = {
   firecrawl: {
     category: "Developer Tools",
     useCase: "Crawl websites and extract data",
+  },
+  apify: {
+    category: "Developer Tools",
+    useCase: "Run actors and manage web scraping data",
   },
   gemini: {
     category: "Developer Tools",
