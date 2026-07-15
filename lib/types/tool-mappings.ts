@@ -18,6 +18,7 @@ import {
   PlugZap,
   Receipt,
   Sun,
+  BookOpen,
 } from "lucide-react";
 import { COMPOSIO_META_TOOLS } from "@/lib/types/composio-tool-slugs";
 
@@ -435,6 +436,7 @@ export const getToolDisplayName = (
 ): ToolDisplay => {
   const isCalling = isToolCalling(status);
   const isError = isToolError(status);
+  const storedDisplay = getStoredToolDisplay(toolPart);
 
   if (isMcpToolName(toolName)) {
     const details = getMcpToolDetails(toolName, mcpServerNames);
@@ -456,6 +458,23 @@ export const getToolDisplayName = (
     };
   }
 
+  if (toolName === "use_helper") {
+    const helperName = getHelperName(toolPart);
+    const helperLabel = helperName ? `${helperName} Helper` : "Helper";
+    return {
+      displayName: isCalling
+        ? `Using ${helperLabel}`
+        : isError
+          ? `Could not use ${helperLabel}`
+          : `Used ${helperLabel}`,
+      Icon: BookOpen,
+      tooltip: helperName
+        ? `Sakhi is using the ${helperName} Helper`
+        : "Sakhi is using a Helper",
+      source: "native",
+    };
+  }
+
   if (toolName === "create_scheduled_task") {
     return {
       displayName: isCalling
@@ -470,7 +489,6 @@ export const getToolDisplayName = (
   }
 
   const normalizedToolName = toolName.toUpperCase();
-  const storedDisplay = getStoredToolDisplay(toolPart);
   const toolContext = getToolContext(normalizedToolName, toolPart);
   const appSlugs = getComposioAppSlugs(normalizedToolName, toolContext);
   const context = [
@@ -542,6 +560,35 @@ export const getToolDisplayName = (
     tooltip: `Tool: ${toolName}`,
     source: "native",
   };
+};
+
+const getHelperName = (toolPart?: unknown) => {
+  if (!toolPart || typeof toolPart !== "object") return undefined;
+  const part = toolPart as Record<string, unknown>;
+  const containers = [part.output, part.result, part.input, part.args, part];
+
+  for (const container of containers) {
+    if (!container || typeof container !== "object") continue;
+    const value = container as Record<string, unknown>;
+    const candidates = [
+      value,
+      typeof value.preview === "string" ? parseJsonObject(value.preview) : undefined,
+    ];
+
+    for (const candidate of candidates) {
+      if (!candidate) continue;
+      if (typeof candidate.title === "string" && candidate.title.trim()) {
+        return candidate.title.trim().replace(/\s+Helper$/i, "");
+      }
+      if (typeof candidate.slug === "string" && candidate.slug.trim()) {
+        return formatReadableSlug(
+          candidate.slug.trim().replace(/-[0-9a-f]{6}$/i, ""),
+        ).replace(/\s+Helper$/i, "");
+      }
+    }
+  }
+
+  return undefined;
 };
 
 const isToolCalling = (status: string) =>

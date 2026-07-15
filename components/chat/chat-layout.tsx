@@ -35,6 +35,7 @@ import {
   PlusSquare,
   Edit,
   Blocks,
+  BookOpen,
 } from "lucide-react";
 import Link from "next/link";
 import { useRouter, usePathname } from "next/navigation";
@@ -87,6 +88,7 @@ const ThreadSidebar = () => {
   const currentThreadId = pathname.split("/").pop() as string;
   const isScheduledTasksActive = pathname.startsWith("/automations");
   const isConnectionsActive = pathname.startsWith("/apps");
+  const isHelpersActive = pathname.startsWith("/helpers");
   const { isMobile, setOpenMobile } = useSidebar();
 
   const { deleteThread } = useThreadActions();
@@ -114,6 +116,13 @@ const ThreadSidebar = () => {
 
   const handleScheduledTasksClick = () => {
     router.push("/automations");
+    if (isMobile) {
+      setOpenMobile(false);
+    }
+  };
+
+  const handleHelpersClick = () => {
+    router.push("/helpers");
     if (isMobile) {
       setOpenMobile(false);
     }
@@ -179,6 +188,17 @@ const ThreadSidebar = () => {
               >
                 <Edit className="h-4 w-4" />
                 <span>New Chat</span>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+            <SidebarMenuItem>
+              <SidebarMenuButton
+                tooltip="Helpers"
+                isActive={isHelpersActive}
+                onClick={handleHelpersClick}
+                className="cursor-pointer gap-2.5"
+              >
+                <BookOpen className="h-4 w-4" />
+                <span>Helpers</span>
               </SidebarMenuButton>
             </SidebarMenuItem>
             <SidebarMenuItem>
