@@ -269,13 +269,6 @@ const composioToolDisplay: Array<{
     Icon: PlugZap,
   },
   {
-    match: (context) => includesAny(context, ["STRAVA"]),
-    appSlug: "strava",
-    fallbackLoading: "Working with Strava",
-    fallbackDone: "Used Strava",
-    Icon: PlugZap,
-  },
-  {
     match: (context) => includesAny(context, ["YOUTUBE"]),
     appSlug: "youtube",
     fallbackLoading: "Working with YouTube",
@@ -1237,7 +1230,6 @@ const appLabels: Record<string, string> = {
   salesforce: "Salesforce",
   shopify: "Shopify",
   splitwise: "Splitwise",
-  strava: "Strava",
   stripe: "Stripe",
   todoist: "Todoist",
   trello: "Trello",

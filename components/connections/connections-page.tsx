@@ -250,10 +250,6 @@ const connectionMetadata: Record<string, ConnectionMetadata> = {
     useCase: "Track shared expenses and balances",
     popularOrder: 7,
   },
-  strava: {
-    category: "Personal",
-    useCase: "Review activities and fitness data",
-  },
   outlook: { category: "Utilities", useCase: "Read and send Outlook email" },
   cats: { category: "Utilities", useCase: "Access the connected toolkit" },
 };

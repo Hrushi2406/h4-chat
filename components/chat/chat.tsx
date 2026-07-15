@@ -746,7 +746,6 @@ const CONNECTED_APP_PROMPTS: Record<string, string> = {
   figma: "Summarize Figma project context",
   instagram: "Review recent Instagram activity",
   whatsapp: "Draft or send WhatsApp Business messages",
-  strava: "Summarize my Strava activity",
   youtube: "Analyze my YouTube channel and videos",
   elevenlabs: "Create or manage ElevenLabs voice assets",
   vapi: "Review my Vapi assistants and calls",
