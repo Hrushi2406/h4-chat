@@ -140,12 +140,15 @@ export async function POST(req: Request) {
     memoryEnabled: resolvedUserInfo.memoryEnabled,
   });
 
-  const messagesWithFileUrls = appendUnsupportedFileUrlsToMessages(
+  const {
+    messages: messagesWithFileUrls,
+    hasUnsupportedFiles,
+  } = appendFileUrlsToMessages(
     messages,
     effectiveModel,
   );
   const needsComposioFileRule =
-    Boolean(composioTools) && messagesWithFileUrls !== messages;
+    Boolean(composioTools) && hasUnsupportedFiles;
   const memoryEnabled = resolvedUserInfo.memoryEnabled !== false;
   latency.step("message prep");
 
@@ -409,17 +412,17 @@ const getSystemPrompt = (
     `;
 };
 
-function appendUnsupportedFileUrlsToMessages(
+function appendFileUrlsToMessages(
   messages: unknown,
   model: NonNullable<ReturnType<typeof getModelById>>,
 ) {
   if (!Array.isArray(messages)) {
-    return [];
+    return { messages: [], hasUnsupportedFiles: false };
   }
 
   const unsupportedFiles: string[] = [];
+  const threadImageUrls = new Map<string, string>();
   const latestMessageIndex = messages.length - 1;
-  let removedAnyUnsupportedFile = false;
   const sanitizedMessages = messages.map((message, messageIndex) => {
     if (typeof message !== "object" || message === null) {
       return message;
@@ -445,6 +448,18 @@ function appendUnsupportedFileUrlsToMessages(
       };
       const mediaType =
         typeof filePart.mediaType === "string" ? filePart.mediaType : undefined;
+      const isImage = mediaType?.startsWith("image/") ?? false;
+
+      if (
+        filePart.type === "file" &&
+        isImage &&
+        typeof filePart.url === "string"
+      ) {
+        threadImageUrls.set(
+          filePart.url,
+          formatFileUrl(filePart, "uploaded image"),
+        );
+      }
 
       if (
         filePart.type !== "file" ||
@@ -454,17 +469,8 @@ function appendUnsupportedFileUrlsToMessages(
       }
 
       removedUnsupportedFile = true;
-      removedAnyUnsupportedFile = true;
-      if (messageIndex === latestMessageIndex) {
-        unsupportedFiles.push(
-          `- ${typeof filePart.filename === "string" ? filePart.filename : "uploaded file"}${
-            mediaType ? ` (${mediaType})` : ""
-          }: ${
-            typeof filePart.url === "string"
-              ? filePart.url
-              : "No accessible file URL was provided."
-          }`,
-        );
+      if (messageIndex === latestMessageIndex && !isImage) {
+        unsupportedFiles.push(formatFileUrl(filePart, "uploaded file"));
       }
       return false;
     });
@@ -474,19 +480,34 @@ function appendUnsupportedFileUrlsToMessages(
       : message;
   });
 
-  if (unsupportedFiles.length === 0) {
-    if (removedAnyUnsupportedFile) {
-      return sanitizedMessages;
-    }
+  const fileContextSections: string[] = [];
 
-    return messages;
+  if (threadImageUrls.size > 0) {
+    // Put the registry on the newest message so it survives the context slice
+    // and remains available to tools on later turns.
+    fileContextSections.push(
+      `Image URLs available in this thread:\n${[...threadImageUrls.values()].join("\n")}`,
+    );
   }
 
-  const fileContext = `Uploaded file URLs for this message:\n${unsupportedFiles.join(
-    "\n",
-  )}`;
+  if (unsupportedFiles.length > 0) {
+    fileContextSections.push(
+      `Uploaded file URLs for this message:\n${unsupportedFiles.join("\n")}`,
+    );
+  }
 
-  return sanitizedMessages.map((message, index) => {
+  if (fileContextSections.length === 0) {
+    return {
+      messages: sanitizedMessages,
+      hasUnsupportedFiles: sanitizedMessages.some(
+        (message, index) => message !== messages[index],
+      ),
+    };
+  }
+
+  const fileContext = fileContextSections.join("\n\n");
+
+  const messagesWithFileContext = sanitizedMessages.map((message, index) => {
     if (
       index !== sanitizedMessages.length - 1 ||
       typeof message !== "object" ||
@@ -504,6 +525,29 @@ function appendUnsupportedFileUrlsToMessages(
 
     return { ...message, parts };
   });
+
+  return {
+    messages: messagesWithFileContext,
+    hasUnsupportedFiles: sanitizedMessages.some(
+      (message, index) => message !== messages[index],
+    ),
+  };
+}
+
+function formatFileUrl(
+  filePart: { filename?: unknown; mediaType?: unknown; url?: unknown },
+  fallbackName: string,
+) {
+  const filename =
+    typeof filePart.filename === "string" ? filePart.filename : fallbackName;
+  const mediaType =
+    typeof filePart.mediaType === "string" ? ` (${filePart.mediaType})` : "";
+  const url =
+    typeof filePart.url === "string"
+      ? filePart.url
+      : "No accessible file URL was provided.";
+
+  return `- ${filename}${mediaType}: ${url}`;
 }
 
 function isFileTypeSupportedByModel(

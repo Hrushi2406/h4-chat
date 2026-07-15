@@ -813,7 +813,10 @@ const HomeSuggestions = ({
   const { data: toolkits = [], isLoading: areConnectionsLoading } =
     useConnections(uid);
   const connectedApps = useMemo(
-    () => toolkits.filter((toolkit) => toolkit.isConnected),
+    () =>
+      toolkits.filter(
+        (toolkit) => toolkit.isConnected && !toolkit.isNoAuth,
+      ),
     [toolkits],
   );
   const arePromptsReady = !!uid && !areConnectionsLoading;
