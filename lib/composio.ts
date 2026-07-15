@@ -552,6 +552,16 @@ const manageConnectionsForRequest = async (
     toolkits.map(async (toolkit) => {
       const toolkitState = toolkitsBySlug.get(toolkit);
 
+      if (toolkitState?.isNoAuth) {
+        return {
+          toolkit,
+          name: COMPOSIO_TOOLKIT_LABELS[toolkit],
+          isConnected: true,
+          isNoAuth: true,
+          status: "ready",
+        };
+      }
+
       if (toolkitState?.connection?.isActive) {
         return {
           toolkit,

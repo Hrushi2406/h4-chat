@@ -355,12 +355,19 @@ export default function ConnectionsPage() {
       });
       const data = await readJsonResponse<{
         error?: string;
+        isNoAuth?: boolean;
         redirectUrl?: string;
       }>(response);
       if (!response.ok) {
         throw new Error(
           getApiErrorMessage(response, data, "Unable to start connection"),
         );
+      }
+      if (data?.isNoAuth) {
+        toast.success("This app is ready to use without a connection");
+        setPendingSlug(undefined);
+        await refetch();
+        return;
       }
       if (!data?.redirectUrl) {
         throw new Error("Connection link was not returned");
@@ -429,7 +436,11 @@ export default function ConnectionsPage() {
           </p>
         </div>
         <div className="shrink-0">
-          {toolkit.isConnected ? (
+          {toolkit.isNoAuth ? (
+            <span className="inline-flex h-8 items-center rounded-full bg-secondary px-3 text-xs font-medium text-muted-foreground">
+              Ready
+            </span>
+          ) : toolkit.isConnected ? (
             <Button
               type="button"
               variant="secondary"
