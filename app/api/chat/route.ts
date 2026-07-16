@@ -193,16 +193,7 @@ export async function POST(req: Request) {
     system: systemPrompt,
     messages: modelMessages,
     stopWhen: stepCountIs(100),
-    ...(effectiveModel.id === "openai/gpt-oss-120b"
-      ? {
-          providerOptions: {
-            gateway: {
-              sort: "tps" as const,
-              order: ["cerebras", "groq", "nebius"],
-            },
-          },
-        }
-      : {}),
+    ...getProviderOptions(effectiveModel.id),
     onError: async (error) => {
       console.log("error: ", error);
       await closeMcpClientsOnce();
@@ -754,6 +745,20 @@ function createMemoryTools({ userId }: { userId?: string }): ToolSet {
       execute: async ({ memory_id }) => deleteUserMemory(userId, memory_id),
     }),
   } satisfies ToolSet;
+}
+
+function getProviderOptions(modelId: string) {
+  if (modelId === "deepseek/deepseek-v4-flash") {
+    return {
+      providerOptions: {
+        gateway: {
+          order: ["deepinfra", "deepseek", "fireworks"],
+        },
+      },
+    };
+  }
+
+  return {};
 }
 
 function getScheduledTaskSystemPrompt() {
