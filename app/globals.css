@@ -144,6 +144,54 @@
   --shimmer-gradient: rgb(219 234 254);
 }
 
+.m4-red {
+  --background: oklch(0.985 0.018 55);
+  --foreground: oklch(0.24 0.035 25);
+  --card: oklch(0.998 0.012 55);
+  --card-foreground: oklch(0.24 0.035 25);
+  --popover: oklch(0.998 0.012 55);
+  --popover-foreground: oklch(0.24 0.035 25);
+  --primary: oklch(0.53 0.16 18);
+  --primary-foreground: oklch(0.995 0.012 55);
+  --secondary: oklch(0.93 0.035 42);
+  --secondary-foreground: oklch(0.32 0.055 25);
+  --muted: oklch(0.94 0.028 42);
+  --muted-foreground: oklch(0.52 0.045 28);
+  --accent: oklch(0.9 0.055 28);
+  --accent-foreground: oklch(0.32 0.065 22);
+  --destructive: oklch(0.58 0.2 25);
+  --border: oklch(0.86 0.035 40);
+  --input: oklch(0.86 0.035 40);
+  --ring: oklch(0.53 0.16 18);
+  --chart-1: oklch(0.53 0.16 18);
+  --chart-2: oklch(0.62 0.13 330);
+  --chart-3: oklch(0.64 0.12 65);
+  --chart-4: oklch(0.55 0.11 175);
+  --chart-5: oklch(0.48 0.1 260);
+  --sidebar: oklch(0.955 0.025 42);
+  --sidebar-foreground: oklch(0.24 0.035 25);
+  --sidebar-primary: oklch(0.53 0.16 18);
+  --sidebar-primary-foreground: oklch(0.995 0.012 55);
+  --sidebar-accent: oklch(0.91 0.04 35);
+  --sidebar-accent-foreground: oklch(0.32 0.065 22);
+  --sidebar-border: oklch(0.86 0.035 40);
+  --sidebar-ring: oklch(0.53 0.16 18);
+  --sidebar-automation-icon: oklch(0.53 0.16 18);
+  --tool-call-bg: color-mix(in oklch, var(--primary) 10%, white);
+  --tool-call-text: var(--primary);
+  --tool-call-border: color-mix(in oklch, var(--primary) 24%, transparent);
+  --tool-call-icon: var(--primary);
+  --tool-call-label-bg: color-mix(in oklch, var(--primary) 14%, white);
+  --tool-call-label-text: var(--primary);
+  --tool-call-label-border: color-mix(in oklch, var(--primary) 24%, transparent);
+  --tool-call-mcp-bg: var(--primary);
+  --tool-call-mcp-text: var(--primary-foreground);
+  --tool-call-shimmer-base: oklch(0.46 0.12 18);
+  --tool-call-shimmer-gradient: oklch(0.84 0.1 28);
+  --shimmer-base: oklch(0.46 0.12 18);
+  --shimmer-gradient: oklch(0.84 0.1 28);
+}
+
 .matcha {
   --background: oklch(0.98 0.025 112);
   --foreground: oklch(0.23 0.055 135);

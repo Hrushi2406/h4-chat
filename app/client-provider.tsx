@@ -28,6 +28,7 @@ export const ClientProvider = ({ children }: ClientProviderProps) => {
           "dark",
           "matcha",
           "graphite",
+          "m4-red",
           "ocean",
           "jaipur-pink",
           "jaipur",
