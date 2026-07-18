@@ -189,6 +189,25 @@ export const serializeThreadMessageForFirestore = (
 ): ThreadMessage =>
   sanitizeFirestoreValue(compactThreadMessage(normalizeThreadMessage(message)), true);
 
+/** Slim history for LLM calls: drop reasoning, compact prior tool I/O. UI stays full. */
+export const prepareMessagesForModel = <T extends UIMessage>(messages: T[]): T[] =>
+  messages.map((message, index) => {
+    const isLatest = index === messages.length - 1;
+    const parts = getArrayLikeParts(message.parts)
+      .filter((part) => part.type !== "reasoning")
+      .map((part) => {
+        if (
+          isLatest ||
+          (part.type !== "dynamic-tool" && !part.type.startsWith("tool-"))
+        ) {
+          return part;
+        }
+        return compactToolPart(part);
+      });
+
+    return { ...message, parts };
+  });
+
 const compactThreadMessage = (message: ThreadMessage): ThreadMessage => {
   const compactContent = truncateString(message.content, MAX_STORED_TEXT_CHARS);
 

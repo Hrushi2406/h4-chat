@@ -7,6 +7,7 @@ export type ConnectionToolkit = {
   name: string;
   providerName: string;
   logo?: string;
+  isNoAuth: boolean;
   isConnected: boolean;
   connectedAccountId?: string;
   status?: string;

@@ -46,6 +46,12 @@ const themeOptions = [
     palette: ["#171512", "#3b3730", "#d6c7a1"],
   },
   {
+    value: "m4-red",
+    label: "M4 Red",
+    vibe: "Warm editorial",
+    palette: ["#fff7f3", "#ffe4d6", "#be3455"],
+  },
+  {
     value: "ocean",
     label: "Malabar Blue",
     vibe: "Deep coastal blue",

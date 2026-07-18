@@ -37,7 +37,6 @@ export const COMPOSIO_TOOLKITS = [
   "canva",
   "instagram",
   "whatsapp",
-  "strava",
   "youtube",
   "elevenlabs",
   "vapi",
@@ -87,7 +86,6 @@ export const COMPOSIO_TOOLKIT_LABELS: Record<ComposioToolkit, string> = {
   canva: "Canva",
   instagram: "Instagram",
   whatsapp: "WhatsApp",
-  strava: "Strava",
   youtube: "YouTube",
   elevenlabs: "ElevenLabs",
   vapi: "Vapi",
@@ -553,6 +551,16 @@ const manageConnectionsForRequest = async (
   const results = await Promise.all(
     toolkits.map(async (toolkit) => {
       const toolkitState = toolkitsBySlug.get(toolkit);
+
+      if (toolkitState?.isNoAuth) {
+        return {
+          toolkit,
+          name: COMPOSIO_TOOLKIT_LABELS[toolkit],
+          isConnected: true,
+          isNoAuth: true,
+          status: "ready",
+        };
+      }
 
       if (toolkitState?.connection?.isActive) {
         return {

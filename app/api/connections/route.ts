@@ -48,7 +48,8 @@ export async function GET(req: Request) {
           ] ?? toolkit.name,
         providerName: toolkit.name,
         logo: toolkit.logo ?? `https://logos.composio.dev/api/${toolkit.slug}`,
-        isConnected: toolkit.connection?.isActive ?? false,
+        isNoAuth: toolkit.isNoAuth,
+        isConnected: toolkit.isNoAuth || (toolkit.connection?.isActive ?? false),
         connectedAccountId: toolkit.connection?.connectedAccount?.id,
         status: toolkit.connection?.connectedAccount?.status,
       })),
@@ -90,6 +91,13 @@ export async function POST(req: Request) {
       new URL(req.url).origin
     ).replace(/\/$/, "");
     const session = await createComposioSession(userId);
+    const { items } = await session.toolkits({ toolkits: [toolkit], limit: 1 });
+    const toolkitState = items.find((item) => item.slug === toolkit);
+
+    if (toolkitState?.isNoAuth) {
+      return Response.json({ isConnected: true, isNoAuth: true });
+    }
+
     const connectionRequest = await createComposioConnectionRequest({
       userId,
       session,

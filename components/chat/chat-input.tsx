@@ -162,7 +162,13 @@ export const ChatInput = ({
   };
 
   const handleKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
-    if (e.key === "Enter" && !e.shiftKey) {
+    if (e.nativeEvent.isComposing) {
+      return;
+    }
+
+    const usesFinePointer = window.matchMedia("(pointer: fine)").matches;
+
+    if (usesFinePointer && e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
       if ((input.trim() || hasAttachments) && !uploadFiles.isPending) {
         if ((e.metaKey || e.ctrlKey) && handleInstantSubmit) {
@@ -366,6 +372,7 @@ export const ChatInput = ({
                     onChange={handleTextareaChange}
                     onKeyDown={handleKeyDown}
                     onPaste={handlePaste}
+                    enterKeyHint="enter"
                     placeholder={
                       isDragActive
                         ? "Drop files here..."
