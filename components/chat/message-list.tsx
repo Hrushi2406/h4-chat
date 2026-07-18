@@ -13,7 +13,6 @@ import {
   useMemo,
   useState,
 } from "react";
-import { useVirtualizer } from "@tanstack/react-virtual";
 import { AnimatePresence, motion } from "framer-motion";
 import { TextShimmer } from "@/components/ui/text-shimmer";
 import clsx from "clsx";
@@ -54,7 +53,6 @@ type ToolAppIcon = {
 const markdownRemarkPlugins = [remarkGfm, remarkToc];
 const scrollBottomThreshold = 120;
 const streamingRenderThrottleMs = 0;
-const virtualMessageGap = 16;
 
 const markdownComponents = {
   code: ({ children, className }) => {
@@ -142,9 +140,6 @@ export const MessageList = memo(function MessageList({
 
   // Show loading indicator only when status is "submitted" (before streaming starts)
   const showLoadingIndicator = status === "submitted";
-  const loadingIndicatorIndex = messages.length;
-  const bottomSpacerIndex = messages.length + (showLoadingIndicator ? 1 : 0);
-  const rowCount = bottomSpacerIndex + 1;
   const isActiveResponse = status === "submitted" || status === "streaming";
   const latestMessage = messages.at(-1);
   const isSettlingResponse =
@@ -166,41 +161,6 @@ export const MessageList = memo(function MessageList({
   }
 
   const shouldLockActiveResponseScroll = activeResponseScrollLockRef.current;
-  const activeResponseIndex = showLoadingIndicator
-    ? loadingIndicatorIndex
-    : shouldLockActiveResponseScroll && latestMessage?.role === "assistant"
-      ? messages.length - 1
-      : -1;
-  const virtualizer = useVirtualizer({
-    count: rowCount,
-    getScrollElement: () => scrollContainerRef.current,
-    estimateSize: (index) => {
-      if (index === bottomSpacerIndex) return 4;
-      if (index === loadingIndicatorIndex && showLoadingIndicator) {
-        return getActiveResponseEstimate();
-      }
-
-      const message = messages[index];
-      if (message?.role === "assistant" && index === messages.length - 1) {
-        return getActiveResponseEstimate();
-      }
-
-      return message?.role === "user" ? 96 : 180;
-    },
-    getItemKey: (index) => {
-      if (index === bottomSpacerIndex) return "bottom-spacer";
-      if (index === activeResponseIndex && shouldLockActiveResponseScroll) {
-        return "active-response";
-      }
-
-      return messages[index]?.id ?? index;
-    },
-    overscan: 5,
-    useAnimationFrameWithResizeObserver: true,
-  });
-  virtualizer.shouldAdjustScrollPositionOnItemSizeChange = () =>
-    !shouldLockActiveResponseScroll;
-  const virtualItems = virtualizer.getVirtualItems();
 
   useLayoutEffect(() => {
     const previousSnapshot = previousMessageSnapshotRef.current;
@@ -436,58 +396,38 @@ export const MessageList = memo(function MessageList({
         onScroll={updateNearBottom}
         className="h-full min-h-0 flex-1 overflow-y-auto overscroll-contain [overflow-anchor:none] px-3 pt-3 pb-4 sm:p-4"
       >
-        <div ref={contentRef} className="mx-auto w-full min-w-0 max-w-4xl">
-          <div
-            className="relative min-w-0 w-full"
-            style={{ height: `${virtualizer.getTotalSize()}px` }}
-          >
-            {virtualItems.map((virtualItem) => {
-              const index = virtualItem.index;
-              const message = messages[index];
-              const isLastAssistantMessage =
-                message?.role === "assistant" && index === messages.length - 1;
-              const isStreaming =
-                isLastAssistantMessage &&
-                (status === "streaming" || status === "submitted");
+        <div
+          ref={contentRef}
+          className="mx-auto w-full min-w-0 max-w-4xl space-y-4"
+        >
+          {messages.map((message, index) => {
+            const isLastAssistantMessage =
+              message.role === "assistant" && index === messages.length - 1;
+            const isStreaming =
+              isLastAssistantMessage &&
+              (status === "streaming" || status === "submitted");
 
-              return (
-                <div
-                  key={virtualItem.key}
-                  data-index={index}
-                  ref={virtualizer.measureElement}
-                  className="absolute left-0 top-0 w-full min-w-0"
-                  style={{
-                    transform: `translateY(${virtualItem.start}px)`,
-                    paddingBottom:
-                      index === bottomSpacerIndex ? 0 : virtualMessageGap,
-                  }}
-                >
-                  {message ? (
-                    isStreaming ? (
-                      <ActiveMessageItem
-                        message={message}
-                        toolApps={toolApps}
-                        mcpServerNames={mcpServerNames}
-                        isLastAssistantMessage={isLastAssistantMessage}
-                        isStreaming={isStreaming}
-                      />
-                    ) : (
-                      <CompletedMessageItem
-                        message={message}
-                        toolApps={toolApps}
-                        mcpServerNames={mcpServerNames}
-                        isLastAssistantMessage={isLastAssistantMessage}
-                      />
-                    )
-                  ) : index === loadingIndicatorIndex && showLoadingIndicator ? (
-                    <LoadingMessage />
-                  ) : (
-                    <div className="h-1" />
-                  )}
-                </div>
-              );
-            })}
-          </div>
+            return isStreaming ? (
+              <ActiveMessageItem
+                key={message.id}
+                message={message}
+                toolApps={toolApps}
+                mcpServerNames={mcpServerNames}
+                isLastAssistantMessage={isLastAssistantMessage}
+                isStreaming={isStreaming}
+              />
+            ) : (
+              <CompletedMessageItem
+                key={message.id}
+                message={message}
+                toolApps={toolApps}
+                mcpServerNames={mcpServerNames}
+                isLastAssistantMessage={isLastAssistantMessage}
+              />
+            );
+          })}
+          {showLoadingIndicator && <LoadingMessage />}
+          <div className="h-1" />
         </div>
       </div>
       <AnimatePresence>
@@ -623,13 +563,7 @@ const MessageItemContent = memo(
       message.role === "user" && shouldDockCopyButton(content, attachments.length);
 
     return (
-      <div
-        className={clsx(
-          "group/message min-w-0",
-          !isLastAssistantMessage &&
-            "[content-visibility:auto] [contain-intrinsic-size:0_160px]",
-        )}
-      >
+      <div className="group/message min-w-0">
         <div
           className={clsx(
             "flex min-w-0 w-full",
@@ -1347,12 +1281,6 @@ const ReasoningBlock = ({
 };
 
 const heightClass = `min-h-[calc(100dvh-19rem)] md:min-h-[calc(100dvh-20rem)]`;
-const getActiveResponseEstimate = () => {
-  if (typeof window === "undefined") return 480;
-
-  const offset = window.matchMedia("(min-width: 768px)").matches ? 320 : 304;
-  return Math.max(220, window.innerHeight - offset);
-};
 
 const isNearBottom = (element: HTMLElement | null) => {
   if (!element) return true;
