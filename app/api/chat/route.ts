@@ -29,6 +29,7 @@ import {
   updateUserMemory,
 } from "@/lib/user-memories-admin";
 import { createPromptLink } from "@/lib/prompt-links-admin";
+import { prepareMessagesForModel } from "@/lib/types/thread";
 
 export async function POST(req: Request) {
   const latency = createLatencyLogger();
@@ -180,7 +181,9 @@ export async function POST(req: Request) {
     ...composioTools,
     ...mcpContext?.tools,
   } satisfies ToolSet;
-  const contextMessages = messagesWithFileUrls.slice(-10);
+  const contextMessages = prepareMessagesForModel(
+    messagesWithFileUrls.slice(-10),
+  );
 
   const modelMessages = await convertToModelMessages(contextMessages, {
     tools,
