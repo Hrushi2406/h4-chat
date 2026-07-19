@@ -2,6 +2,7 @@ export type HelperStatus =
   | "draft"
   | "pending_review"
   | "published"
+  | "rejected"
   | "removed";
 export type HelperVerificationStatus = "unverified" | "verified";
 
@@ -17,7 +18,9 @@ export interface Helper {
   authorId: string;
   authorName: string;
   status: HelperStatus;
+  rejectionReason?: string;
   verificationStatus: HelperVerificationStatus;
+  usageCount: number;
   createdAt: string;
   updatedAt: string;
 }

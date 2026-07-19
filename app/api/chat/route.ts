@@ -419,7 +419,7 @@ const getSystemPrompt = (
       ${availableHelpers
         .map(
           (helper) =>
-            `- ${helper.slug}: ${JSON.stringify(helper.whenToUse.replace(/\s+/g, " "))}`,
+            `- ${helper.slug} (${JSON.stringify(helper.title)}): ${JSON.stringify(helper.whenToUse.replace(/\s+/g, " "))}`,
         )
         .join("\n      ")}`
         : ""
@@ -729,6 +729,9 @@ function createUseHelperTools({
         if (!helper) {
           return { used: false, error: "Helper is unavailable" };
         }
+        helperServerService.recordUsage(helper.id).catch((error) => {
+          console.error("helper usage tracking failed:", error);
+        });
         return {
           used: true,
           helperId: helper.id,

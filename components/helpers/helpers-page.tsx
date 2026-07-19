@@ -1,12 +1,10 @@
 "use client";
 
-import { useDeferredValue, useEffect, useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { AnimatePresence, motion } from "framer-motion";
 import {
-  ArrowRight,
   Check,
-  ChevronLeft,
   ChevronRight,
   BookOpen,
   Loader2,
@@ -15,9 +13,9 @@ import {
   Pencil,
   Trash2,
   ImagePlus,
+  Share,
   X,
   BadgeCheck,
-  Sparkles,
   RotateCcw,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -25,15 +23,16 @@ import { Button } from "@/components/ui/button";
 import ConfirmationDialog from "@/components/ui/confirmation-dialog";
 import Modal from "@/components/ui/modal";
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
-import { useHelperActions, useHelpers } from "@/lib/hooks/helpers/use-helpers";
+import {
+  useHelper,
+  useHelperActions,
+  useHelpers,
+} from "@/lib/hooks/helpers/use-helpers";
 import { useStorageActions } from "@/lib/hooks/storage/use-storage-actions";
 import { useAuth } from "@/lib/hooks/auth/use-auth";
 import { auth } from "@/lib/clients/firebase";
@@ -41,43 +40,12 @@ import type { Helper } from "@/lib/types/helper";
 
 const helperEmojis = ["📖", "💼", "✍️", "🎯", "💡", "📚", "🧭", "✨"];
 
-const ideaPrompts = [
-  "Review my emails before I send them",
-  "Plan a simple weekly meal menu",
-  "Turn long docs into short bullet points",
-];
-
 const generatingMessages = [
   "Reading your idea…",
   "Naming your Helper…",
   "Writing the instructions…",
   "Almost there…",
 ];
-
-function AiOrb({
-  size = 56,
-  spin = false,
-  className,
-}: {
-  size?: number;
-  spin?: boolean;
-  className?: string;
-}) {
-  return (
-    <div className={cn("relative shrink-0", className)} style={{ width: size, height: size }}>
-      <span
-        aria-hidden="true"
-        className={cn(
-          "absolute -inset-3 rounded-full bg-[conic-gradient(from_0deg,var(--primary),transparent_55%,var(--primary))] opacity-40 blur-2xl",
-          spin && "animate-spin [animation-duration:5s]",
-        )}
-      />
-      <div className="relative grid h-full w-full place-items-center rounded-[1.1rem] bg-gradient-to-b from-primary to-primary/75 text-primary-foreground shadow-[0_12px_28px_-10px] shadow-primary/60">
-        <Sparkles className={cn("size-6", spin && "animate-pulse")} />
-      </div>
-    </div>
-  );
-}
 
 const tones = [
   ["#eaf2ff", "#3978f6"],
@@ -93,9 +61,20 @@ const toneFor = (value: string) => {
   return tones[Math.abs(hash) % tones.length];
 };
 
+const MIN_VISIBLE_USAGE_COUNT = 5;
+
+const formatUsageCount = (count: number) => {
+  const value = Intl.NumberFormat("en", { notation: "compact" }).format(count);
+  return `Used ${value} times`;
+};
+
 export default function HelpersPage() {
   const router = useRouter();
-  const { data, isLoading } = useHelpers();
+  const searchParams = useSearchParams();
+  const sharedHelperId = searchParams.get("helper");
+  const { data, isLoading, fetchNextPage, hasNextPage, isFetchingNextPage } =
+    useHelpers();
+  const { data: sharedHelper } = useHelper(sharedHelperId);
   const actions = useHelperActions();
   const [tab, setTab] = useState<"discover" | "mine">("discover");
   const [query, setQuery] = useState("");
@@ -104,6 +83,10 @@ export default function HelpersPage() {
   const [creating, setCreating] = useState(false);
   const [editing, setEditing] = useState<Helper | null>(null);
   const [deleting, setDeleting] = useState<Helper | null>(null);
+
+  useEffect(() => {
+    if (sharedHelper) setSelected(sharedHelper);
+  }, [sharedHelper]);
 
   const added = useMemo(() => new Set(data?.addedHelperIds ?? []), [data]);
   const owned = useMemo(() => new Set(data?.ownedHelperIds ?? []), [data]);
@@ -129,7 +112,7 @@ export default function HelpersPage() {
     (helper) => helper.verificationStatus !== "verified",
   );
 
-  const useHelper = async (helper: Helper) => {
+  const startHelperChat = async (helper: Helper) => {
     const isAvailable =
       helper.verificationStatus === "verified" ||
       owned.has(helper.id) ||
@@ -150,6 +133,23 @@ export default function HelpersPage() {
     }
   };
 
+  const shareHelper = async (helper: Helper) => {
+    const isVerified = helper.verificationStatus === "verified";
+    const url = isVerified
+      ? `${window.location.origin}/chat?draft=${encodeURIComponent(`Use the ${helper.title} Helper for my next request. `)}`
+      : `${window.location.origin}/helpers?helper=${encodeURIComponent(helper.id)}`;
+    try {
+      await navigator.clipboard.writeText(url);
+      toast.success("Link copied", {
+        description: isVerified
+          ? "Opens a chat with this Helper ready to go."
+          : "Opens this Helper's page.",
+      });
+    } catch {
+      toast.error("Could not copy the link");
+    }
+  };
+
   const toggleAdded = async (helper: Helper) => {
     try {
       if (added.has(helper.id)) {
@@ -167,11 +167,11 @@ export default function HelpersPage() {
   };
 
   return (
-    <div className="h-full overflow-y-auto bg-[oklch(0.985_0.004_250)] text-[oklch(0.18_0.01_250)] dark:bg-background dark:text-foreground">
+    <div className="h-full overflow-y-auto bg-background text-foreground">
       <main className="mx-auto w-full max-w-[1120px] px-5 pb-24 pt-8 sm:px-8 lg:px-10">
         <header className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <h1 className="text-xl font-semibold tracking-tight">
+            <h1 className="text-xl font-semibold">
               Helpers
             </h1>
             <p className="mt-1 text-sm text-muted-foreground">
@@ -199,7 +199,7 @@ export default function HelpersPage() {
           </div>
         </header>
 
-        <div className="mt-6 border-b border-border pb-4">
+        <div className="mt-6">
           <div className="inline-flex rounded-full bg-secondary p-1">
             {(["discover", "mine"] as const).map((value) => (
               <button
@@ -224,33 +224,20 @@ export default function HelpersPage() {
         ) : helpers.length === 0 ? (
           <EmptyState tab={tab} onCreate={() => setCreating(true)} />
         ) : (
-          <div className="mt-10 space-y-14">
-            {verified.length > 0 ? (
-              <HelperSection
-                title="Made for everyone"
-                subtitle="Reviewed by Sakhi"
-                helpers={verified}
-                added={added}
-                owned={owned}
-                onOpen={setSelected}
-                onAdd={toggleAdded}
-                onUse={useHelper}
-              />
-            ) : null}
-            {community.length > 0 ? (
-              <HelperSection
-                title={tab === "mine" ? "Your collection" : "From the community"}
-                subtitle={
-                  tab === "mine"
-                    ? "Created or added by you"
-                    : "Reviewed and approved by Sakhi"
-                }
-                helpers={community}
-                added={added}
-                owned={owned}
-                onOpen={setSelected}
-                onAdd={toggleAdded}
-                onUse={useHelper}
+          <div className="mt-10">
+            <HelperSection
+              helpers={[...verified, ...community]}
+              added={added}
+              owned={owned}
+              onOpen={setSelected}
+              onAdd={toggleAdded}
+              onUse={startHelperChat}
+              onShare={shareHelper}
+            />
+            {tab === "discover" && hasNextPage ? (
+              <LoadMoreSentinel
+                loading={isFetchingNextPage}
+                onLoadMore={fetchNextPage}
               />
             ) : null}
           </div>
@@ -262,9 +249,13 @@ export default function HelpersPage() {
         isAdded={selected ? added.has(selected.id) : false}
         isOwned={selected ? owned.has(selected.id) : false}
         busy={actions.addHelper.isPending || actions.unaddHelper.isPending}
-        onClose={() => setSelected(null)}
+        submitting={actions.updateHelper.isPending}
+        onClose={() => {
+          setSelected(null);
+          if (sharedHelperId) router.replace("/helpers", { scroll: false });
+        }}
         onAdd={toggleAdded}
-        onUse={useHelper}
+        onUse={startHelperChat}
         onEdit={(helper) => {
           setSelected(null);
           setEditing(helper);
@@ -274,12 +265,16 @@ export default function HelpersPage() {
           setDeleting(helper);
         }}
         onSubmitForReview={async (helper) => {
-          await actions.updateHelper.mutateAsync({
-            helperId: helper.id,
-            status: "pending_review",
-          });
-          setSelected(null);
-          toast.success("Helper submitted for review");
+          try {
+            await actions.updateHelper.mutateAsync({
+              helperId: helper.id,
+              status: "pending_review",
+            });
+            setSelected(null);
+            toast.success("Helper submitted for review");
+          } catch {
+            // The mutation hook owns the error toast.
+          }
         }}
       />
       <HelperEditor
@@ -320,32 +315,24 @@ export default function HelpersPage() {
 }
 
 function HelperSection({
-  title,
-  subtitle,
   helpers,
   added,
   owned,
   onOpen,
   onAdd,
   onUse,
+  onShare,
 }: {
-  title: string;
-  subtitle: string;
   helpers: Helper[];
   added: Set<string>;
   owned: Set<string>;
   onOpen: (helper: Helper) => void;
   onAdd: (helper: Helper) => void;
   onUse: (helper: Helper) => void;
+  onShare: (helper: Helper) => void;
 }) {
   return (
     <section>
-      <div className="mb-5 flex items-end justify-between">
-        <div>
-          <h2 className="text-xl font-semibold tracking-[-0.025em]">{title}</h2>
-          <p className="mt-1 text-sm text-black/42 dark:text-white/45">{subtitle}</p>
-        </div>
-      </div>
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
         {helpers.map((helper) => (
           <HelperCard
@@ -356,6 +343,7 @@ function HelperSection({
             onOpen={() => onOpen(helper)}
             onAdd={() => onAdd(helper)}
             onUse={() => onUse(helper)}
+            onShare={() => onShare(helper)}
           />
         ))}
       </div>
@@ -382,7 +370,7 @@ function HelperArtwork({
 
   return (
     <span
-      className={cn("grid place-items-center text-[23px] leading-none", className)}
+      className={cn("grid place-items-center text-[26px] leading-none sm:text-[22px]", className)}
       aria-hidden="true"
     >
       {helper.emoji}
@@ -397,6 +385,7 @@ function HelperCard({
   onOpen,
   onAdd,
   onUse,
+  onShare,
 }: {
   helper: Helper;
   isAdded: boolean;
@@ -404,54 +393,79 @@ function HelperCard({
   onOpen: () => void;
   onAdd: () => void;
   onUse: () => void;
+  onShare: () => void;
 }) {
   const [background, foreground] = toneFor(helper.slug);
-  const isAvailable = helper.verificationStatus === "verified" || isOwned || isAdded;
   return (
-    <article className="group flex min-h-[284px] flex-col rounded-[26px] border border-black/[0.07] bg-white/85 p-5 shadow-[0_1px_2px_rgb(0_0_0/0.03),0_10px_35px_rgb(0_0_0/0.035)] transition duration-300 hover:-translate-y-0.5 hover:shadow-[0_2px_4px_rgb(0_0_0/0.04),0_18px_45px_rgb(0_0_0/0.07)] dark:border-white/10 dark:bg-white/[0.055]">
-      <button onClick={onOpen} className="flex flex-1 flex-col text-left outline-none">
+    <article className="group flex min-h-[284px] flex-col rounded-[26px] border border-border/60 bg-card p-5 text-card-foreground shadow-[0_1px_2px_rgb(0_0_0/0.03),0_10px_35px_rgb(0_0_0/0.035)] transition duration-300 hover:-translate-y-0.5 hover:shadow-[0_2px_4px_rgb(0_0_0/0.04),0_18px_45px_rgb(0_0_0/0.07)]">
+      <button onClick={onOpen} className="flex flex-1 cursor-pointer flex-col text-left outline-none">
         <div className="flex items-start justify-between">
           <div
-            className="flex size-12 items-center justify-center rounded-[14px]"
-            style={{ background, color: foreground }}
+            className="flex size-14 items-center justify-center rounded-[15px] border sm:size-12 sm:rounded-[13px]"
+            style={{ background, color: foreground, borderColor: `${foreground}33` }}
           >
-            <HelperArtwork helper={helper} className="size-full rounded-[14px]" />
+            <HelperArtwork helper={helper} className="size-full rounded-[13px]" />
           </div>
           {helper.verificationStatus === "verified" ? (
-            <span className="flex items-center gap-1 rounded-full bg-[#eaf3ff] px-2.5 py-1 text-[11px] font-semibold text-[#2870d8] dark:bg-blue-500/15 dark:text-blue-300">
-              <BadgeCheck className="size-3.5" /> Sakhi approved
-            </span>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <span>
+                  <BadgeCheck aria-label="Verified and Approved by Sakhi" className="size-5 fill-[var(--tool-call-icon)] stroke-card" />
+                </span>
+              </TooltipTrigger>
+              <TooltipContent>Verified and Approved by Sakhi</TooltipContent>
+            </Tooltip>
           ) : helper.status === "pending_review" ? (
             <span className="rounded-full bg-amber-50 px-2.5 py-1 text-[11px] font-medium text-amber-700 dark:bg-amber-500/10 dark:text-amber-300">
               In review
             </span>
+          ) : helper.status === "rejected" ? (
+            <span className="rounded-full bg-red-50 px-2.5 py-1 text-[11px] font-medium text-red-700 dark:bg-red-500/10 dark:text-red-300">
+              Not approved
+            </span>
           ) : helper.status === "draft" ? (
-            <span className="rounded-full bg-black/[0.05] px-2.5 py-1 text-[11px] font-medium text-black/45 dark:bg-white/10 dark:text-white/45">
+            <span className="rounded-full bg-muted px-2.5 py-1 text-[11px] font-medium text-muted-foreground">
               Only me
             </span>
           ) : null}
         </div>
-        <h3 className="mt-5 text-[20px] font-semibold tracking-[-0.03em]">
+        <h3 className="mt-5 text-[18px] font-medium">
           {helper.title}
         </h3>
-        <p className="mt-2 line-clamp-3 text-[14px] leading-6 text-black/48 dark:text-white/50">
+        <p className="mt-2 line-clamp-2 text-[13px] leading-6 text-muted-foreground">
           {helper.whenToUse}
         </p>
-        <div className="mt-auto flex items-center gap-1 pt-5 text-xs font-medium text-black/35 dark:text-white/35">
-          {isOwned ? "Made by you" : `By ${helper.authorName}`}
-          <ChevronRight className="size-3.5 opacity-0 transition group-hover:translate-x-0.5 group-hover:opacity-100" />
-        </div>
       </button>
-      <div className="mt-4 flex gap-2 border-t border-black/[0.06] pt-4 dark:border-white/10">
-        {isAvailable ? (
-          <Button onClick={onUse} className="h-9 flex-1 rounded-full">
-            Use Helper <ArrowRight className="size-3.5" />
-          </Button>
-        ) : (
-          <Button onClick={onUse} className="h-9 flex-1 rounded-full">
-            Use Helper <ArrowRight className="size-3.5" />
-          </Button>
-        )}
+      <div className="mt-auto flex items-center justify-between gap-2 pt-5">
+        <button
+          onClick={onOpen}
+          className="flex min-w-0 cursor-pointer items-center gap-1 text-xs font-medium text-muted-foreground/80 outline-none"
+        >
+          <span className="truncate">
+            {isOwned ? "Made by you" : `By ${helper.authorName}`}
+          </span>
+          <ChevronRight className="size-3.5 shrink-0 opacity-0 transition group-hover:translate-x-0.5 group-hover:opacity-100" />
+        </button>
+        {helper.status === "published" ? (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <button
+                type="button"
+                onClick={onShare}
+                aria-label="Share Helper"
+                className="-mr-1.5 ml-auto grid size-7 shrink-0 cursor-pointer place-items-center rounded-full text-muted-foreground/70 transition-colors hover:bg-muted hover:text-foreground"
+              >
+                <Share className="size-4" />
+              </button>
+            </TooltipTrigger>
+            <TooltipContent>Share Helper</TooltipContent>
+          </Tooltip>
+        ) : null}
+      </div>
+      <div className="mt-4 flex gap-2 border-t border-border/60 pt-4">
+        <Button variant="secondary" onClick={onUse} className="h-9 flex-1 rounded-full">
+          Use Helper
+        </Button>
         {isAdded && !isOwned ? (
           <Button variant="ghost" onClick={onAdd} className="size-9 rounded-full p-0" aria-label="Remove from My Helpers">
             <Check className="size-4" />
@@ -467,6 +481,7 @@ function HelperDetail({
   isAdded,
   isOwned,
   busy,
+  submitting,
   onClose,
   onAdd,
   onUse,
@@ -478,6 +493,7 @@ function HelperDetail({
   isAdded: boolean;
   isOwned: boolean;
   busy: boolean;
+  submitting: boolean;
   onClose: () => void;
   onAdd: (helper: Helper) => void;
   onUse: (helper: Helper) => void;
@@ -489,66 +505,110 @@ function HelperDetail({
   const [background, foreground] = toneFor(helper.slug);
   const available = helper.verificationStatus === "verified" || isOwned || isAdded;
   return (
-    <Dialog open onOpenChange={(open) => (!open ? onClose() : undefined)}>
-      <DialogContent className="max-h-[88vh] overflow-y-auto rounded-[28px] border-black/10 bg-[oklch(0.99_0.003_250)] p-0 shadow-2xl sm:max-w-[620px] dark:border-white/10 dark:bg-background">
-        <div className="p-7 sm:p-9">
-          <div className="flex size-14 items-center justify-center rounded-[17px]" style={{ background, color: foreground }}>
-            <HelperArtwork helper={helper} className="size-full rounded-[17px]" />
-          </div>
-          <DialogHeader className="mt-6 pr-7 text-left">
-            <DialogTitle className="text-3xl tracking-[-0.045em]">{helper.title}</DialogTitle>
-            <DialogDescription className="text-[15px] leading-6">
+    <Modal
+      isOpen
+      closeModal={onClose}
+      size="xl"
+      className="relative flex max-h-[88vh] flex-col gap-0 rounded-[28px] border border-border/60 bg-card p-0 text-card-foreground shadow-2xl"
+    >
+        <button
+          type="button"
+          onClick={onClose}
+          aria-label="Close"
+          className="absolute right-4 top-4 z-10 flex size-7 cursor-pointer items-center justify-center rounded-full bg-muted/80 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+        >
+          <X className="size-3.5" strokeWidth={2.5} />
+        </button>
+        <div className="min-h-0 flex-1 overflow-y-auto px-8 pb-8 pt-12 sm:px-10">
+          <div className="flex flex-col items-start text-left">
+            <div
+              className="flex size-16 shrink-0 items-center justify-center rounded-[18px] border"
+              style={{ background, color: foreground, borderColor: `${foreground}33` }}
+            >
+              <HelperArtwork helper={helper} className="size-full rounded-[18px]" />
+            </div>
+            <h2 className="mt-6 text-[24px] font-semibold leading-tight">
+              {helper.title}
+            </h2>
+            <div className="mt-2 flex items-center gap-1.5 text-[13px] leading-5 text-muted-foreground">
+              <span>{isOwned ? "Made by you" : `Made by ${helper.authorName}`}</span>
+              {helper.usageCount >= MIN_VISIBLE_USAGE_COUNT ? (
+                <span>· {formatUsageCount(helper.usageCount)}</span>
+              ) : null}
+              {helper.verificationStatus === "verified" ? (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <span>
+                      <BadgeCheck aria-label="Verified and Approved by Sakhi" className="size-4 fill-[var(--tool-call-icon)] stroke-card" />
+                    </span>
+                  </TooltipTrigger>
+                  <TooltipContent>Verified and Approved by Sakhi</TooltipContent>
+                </Tooltip>
+              ) : null}
+            </div>
+            <p className="mt-6 max-w-[46ch] text-[15px] leading-7 text-muted-foreground">
               {helper.whenToUse}
-            </DialogDescription>
-          </DialogHeader>
-          <div className="mt-7 rounded-2xl bg-black/[0.035] p-5 dark:bg-white/[0.06]">
-            <p className="mb-2 text-xs font-semibold uppercase tracking-[0.08em] text-black/38 dark:text-white/40">
+            </p>
+          </div>
+          {isOwned && helper.status === "rejected" ? (
+            <div className="-mx-3 mt-6 rounded-2xl border border-red-200 bg-red-50 px-5 py-4 text-left dark:border-red-500/25 dark:bg-red-500/10 sm:-mx-5">
+              <p className="text-[13px] font-semibold leading-5 text-red-700 dark:text-red-300">
+                Not approved for sharing
+              </p>
+              <p className="mt-1.5 text-[14px] leading-6 text-red-700/90 dark:text-red-300/90">
+                {helper.rejectionReason?.trim() ||
+                  "This Helper did not pass review. Edit it and submit again."}
+              </p>
+            </div>
+          ) : null}
+          <div className="-mx-3 mt-6 rounded-2xl border border-border/70 bg-muted/60 px-5 py-3 text-left sm:-mx-5">
+            <p className="text-[13px] font-medium leading-5 text-muted-foreground">
               What Sakhi will do
             </p>
-            <p className="whitespace-pre-wrap text-[14px] leading-6 text-black/65 dark:text-white/65">
-              {helper.instructions}
-            </p>
-          </div>
-          <div className="mt-5 flex items-center justify-between text-sm text-black/42 dark:text-white/45">
-            <span>{isOwned ? "Made by you" : `Made by ${helper.authorName}`}</span>
-            {helper.verificationStatus === "verified" ? (
-              <span className="flex items-center gap-1 text-[#2870d8]"><BadgeCheck className="size-4" /> Sakhi approved</span>
-            ) : null}
+            <div className="mt-3 h-48 overflow-y-auto pr-3 [mask-image:linear-gradient(to_bottom,black_calc(100%-24px),transparent)]">
+              <p className="whitespace-pre-wrap pb-6 text-[14px] leading-7 text-foreground/85">
+                {helper.instructions}
+              </p>
+            </div>
           </div>
         </div>
-        <DialogFooter className="border-t border-black/[0.07] bg-white/60 p-5 sm:justify-between dark:border-white/10 dark:bg-white/[0.03]">
+        <div className="grid shrink-0 grid-cols-2 gap-2 bg-muted/30 p-4 sm:flex sm:items-center sm:justify-between sm:p-5">
           {isOwned ? (
-            <div className="flex items-center gap-1">
-              <Button variant="ghost" onClick={() => onEdit(helper)} className="rounded-full px-3">
+            <div className="contents sm:flex sm:min-w-0 sm:items-center sm:gap-1">
+              <Button variant="ghost" onClick={() => onEdit(helper)} className="rounded-full border border-border/60 px-3 sm:border-0">
                 <Pencil className="size-4" /> Edit
               </Button>
-              <Button variant="ghost" onClick={() => onDelete(helper)} className="rounded-full px-3 text-destructive hover:text-destructive">
+              <Button variant="ghost" onClick={() => onDelete(helper)} className="rounded-full border border-border/60 px-3 text-destructive hover:text-destructive sm:border-0">
                 <Trash2 className="size-4" /> Delete
               </Button>
-              {helper.status === "draft" ? (
-                <Button variant="ghost" onClick={() => onSubmitForReview(helper)} className="rounded-full px-3">
-                  Submit for review
+              {helper.status === "draft" || helper.status === "rejected" ? (
+                <Button variant="ghost" disabled={submitting} onClick={() => onSubmitForReview(helper)} className="rounded-full border border-border/60 px-3 sm:border-0">
+                  {submitting ? <Loader2 className="size-4 animate-spin" /> : null}
+                  {submitting
+                    ? "Submitting…"
+                    : helper.status === "rejected"
+                      ? "Submit again"
+                      : "Submit for review"}
                 </Button>
               ) : helper.status === "pending_review" ? (
-                <span className="px-3 text-xs font-medium text-amber-700 dark:text-amber-300">
+                <span className="flex items-center justify-center px-3 text-xs font-medium text-amber-700 dark:text-amber-300">
                   In review
                 </span>
               ) : null}
             </div>
           ) : isAdded ? (
-            <Button variant="ghost" disabled={busy} onClick={() => onAdd(helper)} className="rounded-full">Remove</Button>
+            <Button variant="ghost" disabled={busy} onClick={() => onAdd(helper)} className="rounded-full border border-border/60 sm:border-0">Remove</Button>
           ) : <span />}
           {available ? (
-            <Button onClick={() => onUse(helper)} className="rounded-full px-5">Use Helper <ArrowRight className="size-4" /></Button>
+            <Button onClick={() => onUse(helper)} className="rounded-full px-5 sm:shrink-0">Use Helper</Button>
           ) : (
-            <Button disabled={busy} onClick={() => onUse(helper)} className="rounded-full px-5">
+            <Button disabled={busy} onClick={() => onUse(helper)} className="rounded-full px-5 sm:shrink-0">
               {busy ? <Loader2 className="size-4 animate-spin" /> : null}
-              Use Helper <ArrowRight className="size-4" />
+              Use Helper
             </Button>
           )}
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+        </div>
+    </Modal>
   );
 }
 
@@ -587,19 +647,15 @@ function HelperEditor({
       return;
     }
     const id = setInterval(() => {
-      setGeneratingStep((current) => (current + 1) % generatingMessages.length);
-    }, 1500);
+      setGeneratingStep((current) =>
+        Math.min(current + 1, generatingMessages.length - 1),
+      );
+    }, 2500);
     return () => clearInterval(id);
   }, [generating]);
 
-  const steps = ["identity", "when", "instructions"] as const;
-  const [step, setStep] = useState(0);
-  const [maxStep, setMaxStep] = useState(helper ? steps.length - 1 : 0);
-
   useEffect(() => {
     if (open) {
-      setStep(0);
-      setMaxStep(helper ? 2 : 0);
       setPictureOpen(false);
       setCreationMode(helper ? "manual" : "ask");
       setGeneratedDraft(false);
@@ -615,9 +671,6 @@ function HelperEditor({
     }
   }, [helper, open]);
 
-  const identityValid = title.trim().length > 0 && (appearance !== "logo" || Boolean(logoUrl));
-  const whenValid = whenToUse.trim().length > 0;
-  const isLastStep = step === steps.length - 1;
   const pending = createHelper.isPending || updateHelper.isPending || uploadImages.isPending || generating;
 
   const restart = () => {
@@ -628,8 +681,6 @@ function HelperEditor({
     setWhenToUse("");
     setInstructions("");
     setIdea("");
-    setStep(0);
-    setMaxStep(0);
     setCreationMode("ask");
     setGeneratedDraft(false);
   };
@@ -664,8 +715,6 @@ function HelperEditor({
       setLogoUrl("");
       setWhenToUse(payload.draft.whenToUse);
       setInstructions(payload.draft.instructions);
-      setStep(0);
-      setMaxStep(steps.length - 1);
       setGeneratedDraft(true);
       setCreationMode("manual");
     } catch (error) {
@@ -706,7 +755,7 @@ function HelperEditor({
           submitForReview,
         });
       }
-      setTitle(""); setEmoji("📖"); setAppearance("emoji"); setLogoUrl(""); setWhenToUse(""); setInstructions(""); setIdea(""); setCreationMode("ask"); setGeneratedDraft(false); setStep(0); setMaxStep(0); setPictureOpen(false);
+      setTitle(""); setEmoji("📖"); setAppearance("emoji"); setLogoUrl(""); setWhenToUse(""); setInstructions(""); setIdea(""); setCreationMode("ask"); setGeneratedDraft(false); setPictureOpen(false);
       onOpenChange(false);
       toast.success(
         helper
@@ -720,23 +769,6 @@ function HelperEditor({
     } catch {
       // The mutation hook owns the error toast.
     }
-  };
-
-  const goNext = () => {
-    if (step === 0 && !identityValid) {
-      toast.error(!title.trim() ? "Give your Helper a name" : "Upload a logo or switch to emoji");
-      return;
-    }
-    if (step === 1 && !whenValid) {
-      toast.error("Tell Sakhi when it should step in");
-      return;
-    }
-    setMaxStep((m) => Math.max(m, step + 1));
-    setStep((s) => Math.min(s + 1, steps.length - 1));
-  };
-
-  const goTo = (index: number) => {
-    if (index <= maxStep) setStep(index);
   };
 
   const handleLogoFile = async (file: File | undefined) => {
@@ -756,8 +788,6 @@ function HelperEditor({
     }
   };
 
-  const goPrev = () => setStep((s) => Math.max(0, s - 1));
-
   return (
     <Modal
       isOpen={open}
@@ -767,33 +797,11 @@ function HelperEditor({
       className="relative flex max-h-[92vh] flex-col gap-0 overflow-hidden rounded-[32px] border border-border/60 bg-card p-0 text-card-foreground shadow-2xl"
     >
         <div className="flex h-12 shrink-0 items-center justify-center">
-          {creationMode === "manual" ? (
-            <div className="flex items-center gap-1.5">
-              {steps.map((key, index) => (
-                <button
-                  key={key}
-                  type="button"
-                  onClick={() => goTo(index)}
-                  aria-label={`Go to step ${index + 1}`}
-                  aria-current={step === index}
-                  disabled={index > maxStep}
-                  className={cn(
-                    "h-1.5 rounded-full transition-all duration-200",
-                    step === index
-                      ? "w-6 bg-primary"
-                      : index <= maxStep
-                        ? "w-1.5 bg-primary/40 hover:bg-primary/60"
-                        : "w-1.5 bg-foreground/15",
-                  )}
-                />
-              ))}
-            </div>
-          ) : null}
           <Button
             type="button"
             variant="ghost"
             size="icon"
-            className="absolute right-4 top-2 size-8 rounded-full text-muted-foreground"
+            className="absolute right-4 top-4 size-8 cursor-pointer rounded-full text-muted-foreground"
             onClick={() => onOpenChange(false)}
             disabled={pending}
             aria-label="Close modal"
@@ -814,8 +822,8 @@ function HelperEditor({
                   transition={{ duration: 0.35, ease: "easeOut" }}
                   className="flex min-h-[460px] flex-col items-center justify-center px-7 pb-10 text-center sm:px-10"
                 >
-                  <AiOrb size={64} spin />
-                  <div className="mt-8 h-6 overflow-hidden">
+                  <Loader2 className="size-7 animate-spin text-muted-foreground/60" strokeWidth={1.75} />
+                  <div className="mt-6 h-6 overflow-hidden">
                     <AnimatePresence mode="wait">
                       <motion.p
                         key={generatingStep}
@@ -823,14 +831,14 @@ function HelperEditor({
                         animate={{ opacity: 1, y: 0 }}
                         exit={{ opacity: 0, y: -10 }}
                         transition={{ duration: 0.3, ease: "easeOut" }}
-                        className="text-[15px] font-medium text-foreground"
+                        className="text-[17px] font-semibold text-foreground"
                       >
                         {generatingMessages[generatingStep]}
                       </motion.p>
                     </AnimatePresence>
                   </div>
-                  <p className="mt-2 max-w-xs text-sm text-muted-foreground">
-                    Sakhi is turning your idea into a Helper.
+                  <p className="mt-1.5 text-sm text-muted-foreground">
+                    This might take few seconds
                   </p>
                 </motion.div>
               ) : (
@@ -840,18 +848,17 @@ function HelperEditor({
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, y: -8 }}
                   transition={{ duration: 0.25, ease: "easeOut" }}
-                  className="flex min-h-[460px] flex-col px-7 pb-7 pt-9 sm:px-10"
+                  className="flex min-h-[460px] flex-col px-7 pb-7 pt-4 sm:px-10"
                 >
                   <div className="flex flex-col items-center text-center">
-                    <AiOrb size={56} />
-                    <h2 className="mt-6 max-w-sm text-[26px] font-semibold leading-[1.15] tracking-[-0.03em] text-foreground">
+                    <div className="flex size-16 items-center justify-center rounded-[20px] bg-primary/10 text-primary">
+                      <BookOpen className="size-7" />
+                    </div>
+                    <h2 className="mt-5 max-w-sm text-[24px] font-semibold leading-[1.2] text-foreground">
                       What should your Helper do?
                     </h2>
-                    <p className="mt-2 max-w-sm text-[15px] leading-6 text-muted-foreground">
-                      Describe it naturally — Sakhi will write the name, trigger, and instructions for you.
-                    </p>
                   </div>
-                  <div className="mt-7 rounded-[24px] border border-border bg-muted/30 transition focus-within:border-primary/45 focus-within:bg-background focus-within:ring-4 focus-within:ring-primary/5">
+                  <div className="mt-8 rounded-2xl border border-border/60 bg-background shadow-xs transition focus-within:border-primary/40">
                     <textarea
                       value={idea}
                       maxLength={2000}
@@ -860,37 +867,20 @@ function HelperEditor({
                       onKeyDown={(event) => {
                         if ((event.metaKey || event.ctrlKey) && event.key === "Enter") void generateDraft();
                       }}
-                      placeholder="I want a Helper that reviews my emails before I send them. It should keep my voice, make them clearer, and flag anything that might sound harsh…"
+                      placeholder={
+                        'Type the goal you want this Helper to achieve.\n\nLike "Remind me about birthdays in my family"\nor "Track all my monthly subscriptions"'
+                      }
                       className="min-h-[140px] w-full resize-none bg-transparent px-5 py-4 text-[15px] leading-6 text-foreground outline-none placeholder:text-muted-foreground/50"
                     />
                   </div>
-                  <div className="mt-2 flex items-center justify-between gap-3 text-xs text-muted-foreground">
-                    <span>Be specific about the result you want</span>
-                    <span>{idea.length}/2000</span>
-                  </div>
-                  {!idea ? (
-                    <div className="mt-5 flex flex-wrap justify-center gap-2">
-                      {ideaPrompts.map((prompt) => (
-                        <button
-                          key={prompt}
-                          type="button"
-                          onClick={() => setIdea(prompt)}
-                          className="cursor-pointer rounded-full border border-border/70 bg-background px-3.5 py-1.5 text-xs font-medium text-muted-foreground transition hover:border-primary/40 hover:text-foreground"
-                        >
-                          {prompt}
-                        </button>
-                      ))}
-                    </div>
-                  ) : null}
-                  <div className="mt-auto flex flex-col items-center gap-3 pt-7">
+                  <div className="mt-auto flex flex-col items-center gap-4 pt-8">
                     <Button
                       size="lg"
-                      className="h-12 w-full rounded-full text-[15px] shadow-[0_12px_28px_-10px] shadow-primary/50"
+                      className="h-12 w-full rounded-full text-[15px]"
                       disabled={idea.trim().length < 8}
                       onClick={() => void generateDraft()}
                     >
-                      <Sparkles className="size-4" />
-                      Create draft
+                      Continue
                     </Button>
                     <button
                       type="button"
@@ -898,19 +888,19 @@ function HelperEditor({
                         setGeneratedDraft(false);
                         setCreationMode("manual");
                       }}
-                      className="cursor-pointer text-sm font-medium text-muted-foreground transition hover:text-foreground"
+                      className="cursor-pointer text-[13px] font-medium text-muted-foreground transition hover:text-foreground"
                     >
-                      Build it manually instead
+                      Set up manually
                     </button>
                   </div>
                 </motion.div>
               )}
             </AnimatePresence>
-          ) : step === 0 ? (
-            <div className="px-8 pb-5 pt-8">
-              <h2 className="sr-only">Give it a name and picture</h2>
-              <p className="sr-only">Name your Helper and choose an emoji or logo.</p>
-              <div className="flex flex-col items-center gap-7 text-center">
+          ) : (
+            <div className="px-8 pb-5 pt-2">
+              <h2 className="sr-only">{helper ? "Edit your Helper" : "Create your Helper"}</h2>
+              <p className="sr-only">Name your Helper, choose a picture, and write its instructions.</p>
+              <div className="flex flex-col items-center gap-6 text-center">
                 <div className="flex flex-col items-center gap-4">
                   <button
                     type="button"
@@ -942,14 +932,14 @@ function HelperEditor({
                     {pictureOpen ? "Hide picture options" : "Tap to change picture"}
                   </button>
                 </div>
-                <div className="w-full max-w-[280px]">
+                <div className="w-full">
                   <input
                     value={title}
                     maxLength={40}
                     onChange={(e) => setTitle(e.target.value)}
                     placeholder="Name your Helper"
                     autoFocus
-                    className="w-full border-b border-border/70 bg-transparent pb-2 text-center text-2xl font-semibold tracking-[-0.02em] text-foreground outline-none placeholder:text-muted-foreground/45 focus:border-primary"
+                    className="mx-auto block min-w-[220px] max-w-full border-b border-border/70 bg-transparent pb-2 text-center text-2xl font-semibold text-foreground outline-none [field-sizing:content] placeholder:text-muted-foreground/45 focus:border-primary"
                   />
                   <p className="mt-1.5 text-center text-xs text-muted-foreground">{title.length}/40</p>
                 </div>
@@ -1084,89 +1074,97 @@ function HelperEditor({
                   )}
                 </div>
               ) : null}
-            </div>
-          ) : step === 1 ? (
-            <div className="flex flex-col items-center gap-3 px-8 pb-5 pt-2 text-center">
-              <StepHeading title="When should Sakhi use it?" subtitle="Describe the moment this Helper should step in." align="center" />
-              <textarea
-                value={whenToUse}
-                maxLength={180}
-                rows={1}
-                autoFocus
-                onChange={(e) => setWhenToUse(e.target.value)}
-                placeholder="When I want to find, compare, or apply for jobs."
-                className="mt-2 h-11 w-full resize-none overflow-hidden rounded-2xl border border-border/60 bg-muted/30 px-4 py-2.5 text-center text-[15px] leading-6 text-foreground outline-none placeholder:text-muted-foreground/50 focus:border-primary/50 focus:bg-background"
-              />
-              <p className="w-full text-right text-xs text-muted-foreground">{whenToUse.length}/180</p>
-            </div>
-          ) : (
-            <div className="flex flex-col items-center gap-3 px-8 pb-5 pt-2 text-center">
-              <StepHeading title="What should Sakhi do?" subtitle="Write clear, step-by-step instructions." align="center" />
-              <textarea
-                value={instructions}
-                maxLength={12000}
-                autoFocus
-                onChange={(e) => setInstructions(e.target.value)}
-                placeholder="First, understand the kind of role I want. Then…"
-                className="mt-2 min-h-[220px] w-full resize-y rounded-2xl border border-border/60 bg-muted/30 px-4 pb-4 pt-2.5 text-left text-[15px] leading-6 text-foreground outline-none placeholder:text-muted-foreground/50 focus:border-primary/50 focus:bg-background"
-              />
+
+              <div className="mt-8 space-y-6">
+                <div>
+                  <label htmlFor="helper-when" className="block text-sm font-semibold text-foreground">
+                    When should Sakhi use it?
+                  </label>
+                  <textarea
+                    id="helper-when"
+                    value={whenToUse}
+                    maxLength={180}
+                    rows={2}
+                    onChange={(e) => setWhenToUse(e.target.value)}
+                    placeholder="When I want to find, compare, or apply for jobs."
+                    className="mt-2 w-full resize-none rounded-2xl border border-border/60 bg-background px-4 py-3 text-[15px] leading-6 text-foreground shadow-xs outline-none transition placeholder:text-muted-foreground/50 focus:border-primary/40"
+                  />
+                </div>
+                <div>
+                  <label htmlFor="helper-instructions" className="block text-sm font-semibold text-foreground">
+                    What should Sakhi do?
+                  </label>
+                  <textarea
+                    id="helper-instructions"
+                    value={instructions}
+                    maxLength={12000}
+                    onChange={(e) => setInstructions(e.target.value)}
+                    placeholder="First, understand the kind of role I want. Then…"
+                    className="mt-2 min-h-[180px] w-full resize-y rounded-2xl border border-border/60 bg-background px-4 py-3 text-[15px] leading-6 text-foreground shadow-xs outline-none transition placeholder:text-muted-foreground/50 focus:border-primary/40"
+                  />
+                </div>
+              </div>
             </div>
           )}
         </div>
 
         {creationMode === "ask" ? null : (
-        <div className="flex flex-row items-center justify-between gap-2 px-6 pb-5 pt-2 [&_button]:w-auto [&_button]:shrink-0">
-          {step > 0 ? (
-            <Button variant="ghost" className="gap-1.5 rounded-full" disabled={pending} onClick={goPrev}>
-              <ChevronLeft className="size-4" />
-              Previous
-            </Button>
-          ) : generatedDraft ? (
-            <Button variant="ghost" className="gap-1.5 rounded-full text-muted-foreground" disabled={pending} onClick={restart}>
+        <div className="flex flex-col-reverse gap-2 px-4 pb-4 pt-2 sm:flex-row sm:items-center sm:justify-between sm:px-6 sm:pb-5">
+          {generatedDraft ? (
+            <Button variant="ghost" className="w-full gap-1.5 rounded-full text-muted-foreground sm:w-auto" disabled={pending} onClick={restart}>
               <RotateCcw className="size-4" />
               Start over
             </Button>
           ) : (
-            <span />
+            <span className="hidden sm:block" />
           )}
-          {isLastStep ? (
-            <Button className="rounded-full" disabled={pending} onClick={() => submit(false)}>
-              {pending ? <Loader2 className="size-4 animate-spin" /> : null}
-              {helper ? "Save changes" : "Create Helper"}
-            </Button>
-          ) : (
-            <Button className="gap-1.5 rounded-full pl-4 pr-3 has-[>svg]:pl-4 has-[>svg]:pr-3" onClick={goNext}>
-              Next
-              <ChevronRight className="size-4" />
-            </Button>
-          )}
+          <Button className="w-full rounded-full sm:w-auto" disabled={pending} onClick={() => submit(false)}>
+            {pending ? <Loader2 className="size-4 animate-spin" /> : null}
+            {helper ? "Save changes" : "Create Helper"}
+          </Button>
         </div>
         )}
     </Modal>
   );
 }
 
-function StepHeading({
-  title,
-  subtitle,
-  align = "left",
+function LoadMoreSentinel({
+  loading,
+  onLoadMore,
 }: {
-  title: string;
-  subtitle: string;
-  align?: "left" | "center";
+  loading: boolean;
+  onLoadMore: () => void;
 }) {
+  const ref = useRef<HTMLDivElement>(null);
+  const loadMore = useRef(onLoadMore);
+  loadMore.current = onLoadMore;
+
+  useEffect(() => {
+    const node = ref.current;
+    if (!node) return;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((entry) => entry.isIntersecting)) loadMore.current();
+      },
+      { rootMargin: "400px" },
+    );
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, []);
+
   return (
-    <div className={cn("flex flex-col gap-1 p-0", align === "center" ? "items-center text-center" : "items-start text-left")}>
-      <h2 className="text-xl font-semibold tracking-tight text-foreground">{title}</h2>
-      <p className="text-sm text-muted-foreground">{subtitle}</p>
+    <div ref={ref} className="flex justify-center py-8" aria-hidden="true">
+      {loading ? (
+        <Loader2 className="size-5 animate-spin text-muted-foreground/60" />
+      ) : null}
     </div>
   );
 }
 
 function LoadingGrid() {
-  return <div className="mt-10 grid gap-4 md:grid-cols-2 lg:grid-cols-3">{[0, 1, 2, 3, 4, 5].map((item) => <div key={item} className="h-[284px] animate-pulse rounded-[26px] bg-black/[0.045] dark:bg-white/[0.06]" />)}</div>;
+  return <div className="mt-10 grid gap-4 md:grid-cols-2 lg:grid-cols-3">{[0, 1, 2, 3, 4, 5].map((item) => <div key={item} className="h-[284px] animate-pulse rounded-[26px] bg-muted/60" />)}</div>;
 }
 
 function EmptyState({ tab, onCreate }: { tab: "discover" | "mine"; onCreate: () => void }) {
-  return <div className="mx-auto flex max-w-md flex-col items-center py-28 text-center"><div className="flex size-16 items-center justify-center rounded-[20px] bg-[#eaf2ff] text-[#3978f6]"><BookOpen className="size-7" /></div><h2 className="mt-6 text-2xl font-semibold tracking-[-0.035em]">{tab === "mine" ? "Your Helpers will live here" : "No Helpers found"}</h2><p className="mt-2 text-sm leading-6 text-muted-foreground">{tab === "mine" ? "Create one or add one from the community." : "Try a different search."}</p>{tab === "mine" ? <Button onClick={onCreate} className="mt-6 rounded-full"><Plus className="size-4" /> Create Helper</Button> : null}</div>;
+  return <div className="mx-auto flex max-w-md flex-col items-center py-28 text-center"><div className="flex size-16 items-center justify-center rounded-[20px] bg-primary/10 text-primary"><BookOpen className="size-7" /></div><h2 className="mt-6 text-2xl font-semibold">{tab === "mine" ? "Your Helpers will live here" : "No Helpers found"}</h2><p className="mt-2 text-sm leading-6 text-muted-foreground">{tab === "mine" ? "Create one or add one from the community." : "Try a different search."}</p>{tab === "mine" ? <Button onClick={onCreate} className="mt-6 rounded-full"><Plus className="size-4" /> Create Helper</Button> : null}</div>;
 }

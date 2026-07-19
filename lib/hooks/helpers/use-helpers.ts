@@ -1,18 +1,61 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMemo } from "react";
+import {
+  useInfiniteQuery,
+  useMutation,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query";
 import { useAuth } from "@/lib/hooks/auth/use-auth";
-import helperService from "@/lib/services/helper-service";
+import helperService, {
+  type HelperPageCursor,
+} from "@/lib/services/helper-service";
+import type { Helper, HelperOverview } from "@/lib/types/helper";
 import { handleError } from "@/lib/utils";
 
 export const helperKeys = { all: ["helpers"] as const };
 
-export function useHelpers() {
+export function useHelper(helperId: string | null) {
   const { uid } = useAuth();
   return useQuery({
+    queryKey: [...helperKeys.all, uid, "detail", helperId],
+    queryFn: () => helperService.getById(helperId!),
+    enabled: Boolean(uid && helperId),
+    staleTime: 30_000,
+  });
+}
+
+export function useHelpers() {
+  const { uid } = useAuth();
+  const {
+    data: pages,
+    isLoading,
+    fetchNextPage,
+    hasNextPage,
+    isFetchingNextPage,
+  } = useInfiniteQuery({
     queryKey: [...helperKeys.all, uid],
-    queryFn: () => helperService.getOverview(),
+    queryFn: ({ pageParam }) => helperService.getOverview(pageParam),
+    initialPageParam: undefined as HelperPageCursor | undefined,
+    getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined,
     enabled: Boolean(uid),
     staleTime: 30_000,
   });
+
+  const data = useMemo<HelperOverview | undefined>(() => {
+    if (!pages) return undefined;
+    const helpers = new Map<string, Helper>();
+    for (const page of pages.pages) {
+      for (const helper of page.helpers) helpers.set(helper.id, helper);
+    }
+    const [first] = pages.pages;
+    return {
+      helpers: [...helpers.values()],
+      addedHelperIds: first?.addedHelperIds ?? [],
+      ownedHelperIds: first?.ownedHelperIds ?? [],
+    };
+  }, [pages]);
+
+  return { data, isLoading, fetchNextPage, hasNextPage, isFetchingNextPage };
 }
 
 export function useHelperActions() {

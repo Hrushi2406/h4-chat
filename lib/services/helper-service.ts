@@ -4,10 +4,13 @@ import {
   doc,
   getDoc,
   getDocs,
+  limit,
   query,
   setDoc,
+  startAfter,
   updateDoc,
   where,
+  type QueryDocumentSnapshot,
 } from "firebase/firestore";
 import { v4 } from "uuid";
 import { auth, db } from "@/lib/clients/firebase";
@@ -17,6 +20,14 @@ import {
   MAX_HELPER_TITLE_LENGTH,
   MAX_HELPER_WHEN_TO_USE_LENGTH,
 } from "@/lib/types/helper";
+
+export const HELPERS_PAGE_SIZE = 15;
+
+export type HelperPageCursor = QueryDocumentSnapshot;
+
+export interface HelperOverviewPage extends HelperOverview {
+  nextCursor: HelperPageCursor | null;
+}
 
 const getUser = () => {
   const user = auth.currentUser;
@@ -56,22 +67,62 @@ const normalize = (id: string, value: Partial<Helper>): Helper => ({
   status:
     value.status === "pending_review" ||
     value.status === "published" ||
+    value.status === "rejected" ||
     value.status === "removed"
       ? value.status
       : "draft",
+  rejectionReason:
+    typeof value.rejectionReason === "string" ? value.rejectionReason : "",
   verificationStatus:
     value.verificationStatus === "verified" ? "verified" : "unverified",
+  usageCount: Number(value.usageCount) || 0,
   createdAt: value.createdAt ?? new Date(0).toISOString(),
   updatedAt: value.updatedAt ?? new Date(0).toISOString(),
 });
 
 class HelperService {
-  async getOverview(): Promise<HelperOverview> {
+  async getById(helperId: string): Promise<Helper | null> {
+    getUser();
+    const snapshot = await getDoc(doc(db, "helpers", helperId));
+    if (!snapshot.exists()) return null;
+
+    const helper = normalize(snapshot.id, snapshot.data() as Partial<Helper>);
+    return helper.status === "removed" ? null : helper;
+  }
+
+  async getOverview(
+    cursor?: HelperPageCursor,
+  ): Promise<HelperOverviewPage> {
     const user = getUser();
     const helperCollection = collection(db, "helpers");
+    const publishedQuery = query(
+      helperCollection,
+      where("status", "==", "published"),
+      ...(cursor ? [startAfter(cursor)] : []),
+      limit(HELPERS_PAGE_SIZE),
+    );
+
+    if (cursor) {
+      const published = await getDocs(publishedQuery);
+      const helpers = new Map<string, Helper>();
+      for (const snapshot of published.docs) {
+        const helper = normalize(snapshot.id, snapshot.data() as Partial<Helper>);
+        if (helper.status !== "removed") helpers.set(helper.id, helper);
+      }
+      return {
+        helpers: [...helpers.values()],
+        addedHelperIds: [],
+        ownedHelperIds: [],
+        nextCursor:
+          published.docs.length === HELPERS_PAGE_SIZE
+            ? published.docs[published.docs.length - 1]
+            : null,
+      };
+    }
+
     const userLibrary = collection(db, "users", user.uid, "helpers");
     const [published, owned, library] = await Promise.all([
-      getDocs(query(helperCollection, where("status", "==", "published"))),
+      getDocs(publishedQuery),
       getDocs(query(helperCollection, where("authorId", "==", user.uid))),
       getDocs(userLibrary),
     ]);
@@ -102,6 +153,10 @@ class HelperService {
       ownedHelperIds: owned.docs
         .filter((item) => item.data().status !== "removed")
         .map((item) => item.id),
+      nextCursor:
+        published.docs.length === HELPERS_PAGE_SIZE
+          ? published.docs[published.docs.length - 1]
+          : null,
     };
   }
 
@@ -139,6 +194,7 @@ class HelperService {
       authorName: user.displayName?.trim() || "Sakhi member",
       status: input.submitForReview ? "pending_review" : "draft",
       verificationStatus: "unverified",
+      usageCount: 0,
       createdAt: now,
       updatedAt: now,
     };
@@ -197,6 +253,10 @@ class HelperService {
       patch.status = "pending_review";
       patch.verificationStatus = "unverified";
     }
+    if (current.status === "rejected" && contentChanged) {
+      patch.status = "pending_review";
+    }
+    if (patch.status === "pending_review") patch.rejectionReason = "";
 
     await updateDoc(ref, patch);
     return normalize(input.helperId, { ...current, ...patch });

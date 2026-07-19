@@ -1,3 +1,4 @@
+import { FieldValue } from "firebase-admin/firestore";
 import { v4 } from "uuid";
 import { getAdminFirestore } from "@/lib/clients/firebase-admin";
 import type { Helper, HelperOverview, UserHelper } from "@/lib/types/helper";
@@ -39,11 +40,15 @@ const normalizeHelper = (id: string, data: Record<string, unknown>): Helper => (
   status:
     data.status === "pending_review" ||
     data.status === "published" ||
+    data.status === "rejected" ||
     data.status === "removed"
       ? data.status
       : "draft",
+  rejectionReason:
+    typeof data.rejectionReason === "string" ? data.rejectionReason : "",
   verificationStatus:
     data.verificationStatus === "verified" ? "verified" : "unverified",
+  usageCount: Number(data.usageCount) || 0,
   createdAt: asIso(data.createdAt),
   updatedAt: asIso(data.updatedAt),
 });
@@ -108,12 +113,20 @@ class HelperServerService {
     const overview = await this.getOverview(userId);
     const added = new Set(overview.addedHelperIds);
     const owned = new Set(overview.ownedHelperIds);
-    return overview.helpers.filter(
-      (helper) =>
-        owned.has(helper.id) ||
-        added.has(helper.id) ||
-        helper.status === "published",
-    );
+    const available = new Map<string, Helper>();
+
+    for (const helper of overview.helpers) {
+      const isInMyHelpers = owned.has(helper.id) || added.has(helper.id);
+      const isGloballyAvailable =
+        helper.status === "published" &&
+        helper.verificationStatus === "verified";
+
+      if (isInMyHelpers || isGloballyAvailable) {
+        available.set(helper.id, helper);
+      }
+    }
+
+    return [...available.values()];
   }
 
   async create(input: {
@@ -160,6 +173,7 @@ class HelperServerService {
       authorName: input.authorName?.trim() || "Sakhi member",
       status: input.submitForReview ? "pending_review" : "draft",
       verificationStatus: "unverified",
+      usageCount: 0,
       createdAt: now,
       updatedAt: now,
     };
@@ -228,6 +242,10 @@ class HelperServerService {
       patch.status = "pending_review";
       patch.verificationStatus = "unverified";
     }
+    if (helper.status === "rejected" && contentChanged) {
+      patch.status = "pending_review";
+    }
+    if (patch.status === "pending_review") patch.rejectionReason = "";
     await ref.update(patch);
     return normalizeHelper(input.id, { ...snapshot.data(), ...patch });
   }
@@ -267,6 +285,13 @@ class HelperServerService {
       .collection(USER_HELPERS)
       .doc(helperId)
       .delete();
+  }
+
+  async recordUsage(helperId: string) {
+    await getDb()
+      .collection(HELPERS)
+      .doc(helperId)
+      .update({ usageCount: FieldValue.increment(1) });
   }
 
   async getAccessibleBySlug(userId: string, slug: string) {

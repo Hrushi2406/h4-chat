@@ -85,7 +85,7 @@ export default function Modal({
                 leaveTo="opacity-0 scale-95"
               >
                 <DialogPanel
-                  className={`w-full ${getSizeClass(
+                  className={`mx-6 w-full sm:mx-0 ${getSizeClass(
                     size,
                   )} transform overflow-hidden bg-card text-left text-card-foreground align-middle shadow-xl transition-all ${className} `}
                 >
