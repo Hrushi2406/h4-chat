@@ -114,7 +114,12 @@ class ScheduledTaskServerService {
         }),
       )
       .filter((task) => task.status !== "deleted")
-      .sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime());
+      .sort((a, b) => {
+        const createdAtDifference =
+          b.createdAt.getTime() - a.createdAt.getTime();
+
+        return createdAtDifference || b.id.localeCompare(a.id);
+      });
   }
 
   async listRunsForTask({
