@@ -265,7 +265,8 @@ export default function ConnectionsPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [pendingSlug, setPendingSlug] = React.useState<string>();
-  const connectionSearch = searchParams.get("q") ?? "";
+  const searchParam = searchParams.get("q") ?? "";
+  const [connectionSearch, setConnectionSearch] = React.useState(searchParam);
   const {
     data: toolkits = [],
     error,
@@ -274,16 +275,29 @@ export default function ConnectionsPage() {
   } = useConnections(uid);
   const normalizedSearch = connectionSearch.trim().toLowerCase();
 
+  useEffect(() => {
+    setConnectionSearch(searchParam);
+  }, [searchParam]);
+
   const updateConnectionSearch = (search: string) => {
+    setConnectionSearch(search);
+
     const params = new URLSearchParams(searchParams.toString());
     if (search) {
       params.set("q", search);
     } else {
       params.delete("q");
     }
-    router.replace(`/apps${params.size ? `?${params}` : ""}`, {
-      scroll: false,
-    });
+
+    // Updating the URL through the router starts a navigation on every
+    // keystroke, which can remount this route and make the input lose focus.
+    // Native history updates are integrated with Next's router and preserve
+    // back/forward behavior without replacing the focused input.
+    window.history.replaceState(
+      window.history.state,
+      "",
+      `/apps${params.size ? `?${params}` : ""}`,
+    );
   };
 
   useEffect(() => {
