@@ -104,6 +104,7 @@ class ScheduledTaskServerService {
     const snapshot = await db
       .collection(colTasks)
       .where("userId", "==", userId)
+      .where("status", "in", ["active", "paused"])
       .get();
 
     return snapshot.docs
@@ -113,7 +114,6 @@ class ScheduledTaskServerService {
           id: taskDoc.id,
         }),
       )
-      .filter((task) => task.status !== "deleted")
       .sort((a, b) => {
         const createdAtDifference =
           b.createdAt.getTime() - a.createdAt.getTime();
