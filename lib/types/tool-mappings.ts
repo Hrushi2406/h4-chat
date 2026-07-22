@@ -170,6 +170,13 @@ const composioToolDisplay: Array<{
     Icon: PlugZap,
   },
   {
+    match: (context) => includesAny(context, ["RAZORPAY"]),
+    appSlug: "razorpay",
+    fallbackLoading: "Working with Razorpay",
+    fallbackDone: "Used Razorpay",
+    Icon: PlugZap,
+  },
+  {
     match: (context) => includesAny(context, ["SPLITWISE"]),
     appSlug: "splitwise",
     fallbackLoading: "Working with Splitwise",
@@ -1228,6 +1235,7 @@ const appLabels: Record<string, string> = {
   reddit: "Reddit",
   sandbox: "Sandbox",
   salesforce: "Salesforce",
+  razorpay: "Razorpay",
   shopify: "Shopify",
   splitwise: "Splitwise",
   stripe: "Stripe",

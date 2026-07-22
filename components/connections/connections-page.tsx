@@ -178,6 +178,10 @@ const connectionMetadata: Record<string, ConnectionMetadata> = {
     category: "Sales & CRM",
     useCase: "Check payments, customers, and invoices",
   },
+  razorpay: {
+    category: "Sales & CRM",
+    useCase: "Manage payments, orders, and invoices",
+  },
   shopify: {
     category: "Sales & CRM",
     useCase: "Manage store orders and products",
