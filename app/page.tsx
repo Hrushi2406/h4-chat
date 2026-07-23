@@ -91,6 +91,13 @@ export default function WaitlistPage() {
                 Join WhatsApp
               </a>
             </div>
+
+            <p className="mt-5 inline-flex items-center gap-0 text-xs font-medium tracking-wide text-neutral-400">
+              AI for The New India
+              <span aria-hidden="true" className="ml-1 text-sm leading-none">
+                🇮🇳
+              </span>
+            </p>
           </motion.div>
         </main>
 
