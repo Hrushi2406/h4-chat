@@ -1,7 +1,7 @@
 import { FieldValue } from "firebase-admin/firestore";
 import { v4 } from "uuid";
 import { getAdminFirestore } from "@/lib/clients/firebase-admin";
-import type { Helper, HelperOverview, UserHelper } from "@/lib/types/helper";
+import type { Helper, UserHelper } from "@/lib/types/helper";
 import {
   MAX_HELPER_INSTRUCTIONS_LENGTH,
   MAX_HELPER_TITLE_LENGTH,
@@ -11,6 +11,13 @@ import {
 const HELPERS = "helpers";
 const USERS = "users";
 const USER_HELPERS = "helpers";
+
+// Caps for the chat hot path: never scan the whole published collection.
+// Globally-available helpers are the curated verified set; a user's own
+// authored helpers are naturally few. Both are bounded so read cost stays
+// flat as the catalog grows.
+const MAX_GLOBAL_HELPERS = 100;
+const MAX_OWNED_HELPERS = 100;
 
 const getDb = () => {
   const db = getAdminFirestore();
@@ -74,11 +81,26 @@ const makeSlug = (title: string, id: string) => {
 };
 
 class HelperServerService {
-  async getOverview(userId: string): Promise<HelperOverview> {
+  async getAvailableHelpers(userId: string): Promise<Helper[]> {
     const db = getDb();
-    const [published, owned, library] = await Promise.all([
-      db.collection(HELPERS).where("status", "==", "published").get(),
-      db.collection(HELPERS).where("authorId", "==", userId).get(),
+
+    // Only fetch what can actually be available to this user, each bounded:
+    // - the curated verified+published set (global, same for everyone)
+    // - the user's own authored helpers (any status)
+    // - the user's added library
+    // This avoids scanning the entire published collection on every message.
+    const [verified, owned, library] = await Promise.all([
+      db
+        .collection(HELPERS)
+        .where("status", "==", "published")
+        .where("verificationStatus", "==", "verified")
+        .limit(MAX_GLOBAL_HELPERS)
+        .get(),
+      db
+        .collection(HELPERS)
+        .where("authorId", "==", userId)
+        .limit(MAX_OWNED_HELPERS)
+        .get(),
       db.collection(USERS).doc(userId).collection(USER_HELPERS).get(),
     ]);
 
@@ -91,39 +113,12 @@ class HelperServerService {
         )
       : [];
 
-    const byId = new Map<string, Helper>();
-    for (const snapshot of [...published.docs, ...owned.docs, ...addedDocs]) {
+    const available = new Map<string, Helper>();
+    for (const snapshot of [...verified.docs, ...owned.docs, ...addedDocs]) {
       if (!snapshot.exists) continue;
       const helper = normalizeHelper(snapshot.id, snapshot.data()!);
-      if (helper.status !== "removed") byId.set(helper.id, helper);
-    }
-
-    return {
-      helpers: [...byId.values()].sort((a, b) =>
-        b.updatedAt.localeCompare(a.updatedAt),
-      ),
-      addedHelperIds,
-      ownedHelperIds: owned.docs
-        .filter((item) => item.data().status !== "removed")
-        .map((item) => item.id),
-    };
-  }
-
-  async getAvailableHelpers(userId: string): Promise<Helper[]> {
-    const overview = await this.getOverview(userId);
-    const added = new Set(overview.addedHelperIds);
-    const owned = new Set(overview.ownedHelperIds);
-    const available = new Map<string, Helper>();
-
-    for (const helper of overview.helpers) {
-      const isInMyHelpers = owned.has(helper.id) || added.has(helper.id);
-      const isGloballyAvailable =
-        helper.status === "published" &&
-        helper.verificationStatus === "verified";
-
-      if (isInMyHelpers || isGloballyAvailable) {
-        available.set(helper.id, helper);
-      }
+      if (helper.status === "removed") continue;
+      available.set(helper.id, helper);
     }
 
     return [...available.values()];
