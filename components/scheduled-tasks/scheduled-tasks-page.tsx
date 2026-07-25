@@ -282,7 +282,11 @@ function TaskCard({
               {task.title}
             </p>
             <p className="mt-1 truncate text-xs text-muted-foreground">
-              {task.status === "paused" ? "Paused · " : ""}
+              {task.status === "paused"
+                ? "Paused · "
+                : task.status === "failed"
+                  ? "Failed · "
+                  : ""}
               Runs {scheduleSummary}
             </p>
           </div>

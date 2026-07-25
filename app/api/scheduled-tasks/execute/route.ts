@@ -1,5 +1,7 @@
 import { getQstashReceiver } from "@/lib/clients/qstash";
-import scheduledTaskServerService from "@/lib/services/scheduled-task-server-service";
+import scheduledTaskServerService, {
+  InactiveScheduledTaskError,
+} from "@/lib/services/scheduled-task-server-service";
 
 export const dynamic = "force-dynamic";
 
@@ -37,6 +39,18 @@ export async function POST(req: Request) {
 
     return Response.json({ run });
   } catch (error) {
+    if (error instanceof InactiveScheduledTaskError) {
+      console.info("Skipped inactive automation delivery:", {
+        taskId: error.taskId,
+        status: error.taskStatus,
+      });
+
+      return Response.json({
+        skipped: true,
+        reason: error.message,
+      });
+    }
+
     console.error("Automation execution failed:", error);
 
     return Response.json(

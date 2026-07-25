@@ -67,6 +67,16 @@ export interface RunScheduledTaskInput {
   baseUrl: string;
 }
 
+export class InactiveScheduledTaskError extends Error {
+  constructor(
+    readonly taskId: string,
+    readonly taskStatus: ScheduledTask["status"],
+  ) {
+    super("Automation is not active");
+    this.name = "InactiveScheduledTaskError";
+  }
+}
+
 const getDbOrThrow = () => {
   const db = getAdminFirestore();
 
@@ -104,7 +114,7 @@ class ScheduledTaskServerService {
     const snapshot = await db
       .collection(colTasks)
       .where("userId", "==", userId)
-      .where("status", "in", ["active", "paused"])
+      .where("status", "in", ["active", "paused", "failed"])
       .get();
 
     return snapshot.docs
@@ -303,7 +313,11 @@ class ScheduledTaskServerService {
       : await this.getTask(input.taskId);
 
     if (task.status !== "active" && input.trigger === "schedule") {
-      throw new Error("Automation is not active");
+      if (task.status === "failed") {
+        await this.pauseQstashSchedule(task);
+      }
+
+      throw new InactiveScheduledTaskError(task.id, task.status);
     }
 
     const runId = v4();
@@ -373,6 +387,7 @@ class ScheduledTaskServerService {
         lastError: message,
         updatedAt: finishedAt,
       });
+      await this.pauseQstashSchedule(task);
 
       throw error;
     }
@@ -440,6 +455,26 @@ class ScheduledTaskServerService {
       await getQstashClient()?.schedules.delete(scheduleId);
     } catch (error) {
       console.error("Failed to delete QStash schedule:", error);
+    }
+  }
+
+  private async pauseQstashSchedule(task: ScheduledTask) {
+    const client = getQstashClient();
+
+    if (!client) {
+      return;
+    }
+
+    const scheduleId = task.qstashScheduleId ?? getQstashScheduleId(task.id);
+
+    try {
+      await client.schedules.pause({ schedule: scheduleId });
+    } catch (error) {
+      console.error("Failed to pause automation after execution failure:", {
+        taskId: task.id,
+        scheduleId,
+        error,
+      });
     }
   }
 
