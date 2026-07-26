@@ -147,9 +147,9 @@
 .m4-red {
   --background: oklch(0.985 0.018 55);
   --foreground: oklch(0.24 0.035 25);
-  --card: oklch(0.998 0.012 55);
+  --card: oklch(0.96 0.03 45);
   --card-foreground: oklch(0.24 0.035 25);
-  --popover: oklch(0.998 0.012 55);
+  --popover: oklch(0.96 0.03 45);
   --popover-foreground: oklch(0.24 0.035 25);
   --primary: oklch(0.53 0.16 18);
   --primary-foreground: oklch(0.995 0.012 55);

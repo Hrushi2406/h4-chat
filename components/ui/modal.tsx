@@ -70,7 +70,7 @@ export default function Modal({
             leaveFrom="opacity-100"
             leaveTo="opacity-0"
           >
-            <DialogBackdrop className="fixed inset-0 bg-foreground/20 backdrop-blur-sm" />
+            <DialogBackdrop className="fixed inset-0 bg-black/80" />
           </TransitionChild>
 
           <div className="fixed inset-0 overflow-y-auto">
@@ -85,9 +85,9 @@ export default function Modal({
                 leaveTo="opacity-0 scale-95"
               >
                 <DialogPanel
-                  className={`w-full ${getSizeClass(
+                  className={`mx-6 w-full sm:mx-0 ${getSizeClass(
                     size,
-                  )} transform overflow-hidden text-left align-middle shadow-xl transition-all ${className} `}
+                  )} transform overflow-hidden bg-card text-left text-card-foreground align-middle shadow-xl transition-all ${className} `}
                 >
                   {children}
                 </DialogPanel>
