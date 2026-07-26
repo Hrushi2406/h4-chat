@@ -14,6 +14,9 @@ export interface ThreadMessageMetadata {
   requestedModel?: string;
   effectiveModel?: string;
   imageFallbackUsed?: boolean;
+  imageAnalysisUsed?: boolean;
+  imageAnalysisModel?: string;
+  imageAnalysisCalls?: number;
   tokenCount?: number;
   processingTime?: number;
   inputTokens?: number;

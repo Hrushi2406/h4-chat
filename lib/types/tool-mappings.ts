@@ -42,6 +42,11 @@ export const toolDisplayNames: Record<
   string,
   { loading: string; done: string; Icon: any }
 > = {
+  analyze_image: {
+    loading: "Analyzing image...",
+    done: "Analyzed image",
+    Icon: Image,
+  },
   getWeather: {
     loading: "Getting weather...",
     done: "Got weather",
@@ -476,6 +481,21 @@ export const getToolDisplayName = (
           ? "Failed to create Automation"
           : "Created Automation",
       Icon: SakhiLogoIcon,
+      tooltip: `Tool: ${toolName}`,
+      source: "native",
+    };
+  }
+
+  if (toolName === "analyze_image") {
+    const display = toolDisplayNames.analyze_image;
+
+    return {
+      displayName: isCalling
+        ? display.loading
+        : isError
+          ? "Failed to analyze image"
+          : display.done,
+      Icon: display.Icon,
       tooltip: `Tool: ${toolName}`,
       source: "native",
     };
