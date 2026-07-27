@@ -4,10 +4,11 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import {
   ArrowUp,
-  CloudUpload,
+  Check,
   CornerDownLeft,
   FileAudio,
   FileText,
+  LoaderCircle,
   Paperclip,
   Pencil,
   Square,
@@ -19,6 +20,7 @@ import {
   FormEvent,
   KeyboardEvent,
   useCallback,
+  useEffect,
   useLayoutEffect,
   useRef,
   useState,
@@ -35,6 +37,7 @@ import {
 } from "@/lib/services/storage-service";
 import { useAuth } from "@/lib/hooks/auth/use-auth";
 import { usePathname } from "next/navigation";
+import Image from "next/image";
 import { ModelSelector } from "./model-selector";
 import { Attachment, type ThreadMessageMetadata } from "@/lib/types/thread";
 import {
@@ -570,57 +573,131 @@ const FilePreviews = ({
   isUploading,
 }: FilePreviewsProps) => {
   return (
-    <div className="flex flex-wrap gap-2 mb-2 p-2">
+    <div
+      className="mb-2 flex gap-2 overflow-x-auto px-1 pt-1 pb-2"
+      role="list"
+      aria-label="Attached files"
+      aria-busy={isUploading}
+    >
       {selectedFiles.map((file, index) => (
-        <div key={index} className="relative group">
-          <div className="w-16 h-16 rounded-lg overflow-hidden border border-border">
-            <div className="relative w-full h-full">
-              {file.type.startsWith("image/") ? (
-                <img
-                  src={URL.createObjectURL(file)}
-                  alt={`Preview ${index}`}
-                  className="w-full h-full object-cover"
-                  onLoad={() => {
-                    return () => URL.revokeObjectURL(URL.createObjectURL(file));
-                  }}
-                />
-              ) : file.type.startsWith("audio/") ? (
-                <div className="w-full h-full flex items-center justify-center bg-muted/20">
-                  <FileAudio className="h-8 w-8 text-primary" />
-                </div>
-              ) : file.type === "application/pdf" ? (
-                <div className="w-full h-full flex items-center justify-center bg-muted/20">
-                  <FileText className="h-8 w-8 text-primary" />
-                </div>
-              ) : (
-                <div className="w-full h-full flex items-center justify-center bg-muted/20">
-                  <Paperclip className="h-8 w-8 text-primary" />
-                </div>
-              )}
-
-              {isUploading && (
-                <div className="absolute inset-0 bg-background/20 backdrop-blur-sm flex items-center justify-center animate-pulse">
-                  <CloudUpload className="h-6 w-6 text-primary" />
-                </div>
-              )}
-            </div>
-          </div>
-          <Button
-            type="button"
-            size="icon"
-            variant="outline"
-            className="absolute -top-2 -right-2 p-2 h-5 w-5 rounded-full shadow-sm bg-background/40 backdrop-blur-sm"
-            onClick={(e) => {
-              e.stopPropagation();
-              handleRemoveFile(index);
-            }}
-            aria-label="Remove file"
-            disabled={isUploading}
-          >
-            <X className="h-3 w-3 text-muted-foreground" />
-          </Button>
-        </div>
+        <FilePreview
+          key={`${file.name}-${file.lastModified}-${index}`}
+          file={file}
+          isUploading={isUploading}
+          onRemove={() => handleRemoveFile(index)}
+        />
       ))}
     </div>
   );
+};
+
+interface FilePreviewProps {
+  file: File;
+  isUploading: boolean;
+  onRemove: () => void;
+}
+
+const FilePreview = ({
+  file,
+  isUploading,
+  onRemove,
+}: FilePreviewProps) => {
+  const isImage = file.type.startsWith("image/");
+  const [previewUrl, setPreviewUrl] = useState<string>();
+
+  useEffect(() => {
+    if (!isImage) {
+      setPreviewUrl(undefined);
+      return;
+    }
+
+    const objectUrl = URL.createObjectURL(file);
+    setPreviewUrl(objectUrl);
+
+    return () => URL.revokeObjectURL(objectUrl);
+  }, [file, isImage]);
+
+  return (
+    <div
+      className="relative flex h-[4.5rem] min-w-[13rem] max-w-[16rem] flex-1 overflow-hidden rounded-xl border bg-muted/35"
+      role="listitem"
+    >
+      <div className="relative flex w-[4.5rem] shrink-0 items-center justify-center overflow-hidden border-r bg-muted/60">
+        {isImage && previewUrl ? (
+          <Image
+            src={previewUrl}
+            alt=""
+            fill
+            sizes="72px"
+            unoptimized
+            className="object-cover"
+          />
+        ) : file.type.startsWith("audio/") ? (
+          <FileAudio className="size-6 text-muted-foreground" aria-hidden="true" />
+        ) : file.type === "application/pdf" ? (
+          <FileText className="size-6 text-muted-foreground" aria-hidden="true" />
+        ) : (
+          <Paperclip className="size-6 text-muted-foreground" aria-hidden="true" />
+        )}
+      </div>
+
+      <div className="min-w-0 flex-1 self-center px-3 pr-8">
+        <p className="truncate text-sm font-medium" title={file.name}>
+          {file.name}
+        </p>
+        <div className="mt-1 flex items-center gap-1.5 text-xs text-muted-foreground">
+          {isUploading ? (
+            <>
+              <LoaderCircle className="size-3.5 animate-spin" aria-hidden="true" />
+              <span>Uploading…</span>
+            </>
+          ) : (
+            <>
+              <Check className="size-3.5" aria-hidden="true" />
+              <span>Ready</span>
+            </>
+          )}
+          <span aria-hidden="true">·</span>
+          <span>{formatFileSize(file.size)}</span>
+        </div>
+      </div>
+
+      <Button
+        type="button"
+        size="icon"
+        variant="ghost"
+        className="absolute top-1.5 right-1.5 size-7 rounded-full text-muted-foreground hover:bg-background hover:text-foreground"
+        onClick={(event) => {
+          event.stopPropagation();
+          onRemove();
+        }}
+        aria-label={`Remove ${file.name}`}
+        disabled={isUploading}
+      >
+        <X className="size-3.5" />
+      </Button>
+
+      {isUploading && (
+        <div
+          className="absolute inset-x-0 bottom-0 h-0.5 overflow-hidden bg-primary/15"
+          aria-hidden="true"
+        >
+          <div className="attachment-upload-progress h-full w-1/2 bg-primary" />
+        </div>
+      )}
+    </div>
+  );
+};
+
+const formatFileSize = (bytes: number) => {
+  if (bytes < 1024) {
+    return `${bytes} B`;
+  }
+
+  const kilobytes = bytes / 1024;
+  if (kilobytes < 1024) {
+    return `${Math.round(kilobytes)} KB`;
+  }
+
+  return `${(kilobytes / 1024).toFixed(1)} MB`;
 };
