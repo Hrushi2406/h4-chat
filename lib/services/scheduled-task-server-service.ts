@@ -31,6 +31,8 @@ import { normalizeTaskCron } from "@/lib/scheduled-tasks/schedule-utils";
 const colTasks = "scheduledTasks";
 const colRuns = "scheduledTaskRuns";
 const colThreads = "threads";
+const automationExecutionTimeoutMs = 240_000;
+const automationStepLimit = 25;
 
 const getQstashScheduleId = (taskId: string) => `scheduled-task-${taskId}`;
 
@@ -275,8 +277,8 @@ class ScheduledTaskServerService {
           qstashScheduleId = nextQstashScheduleId;
           update.qstashScheduleId = qstashScheduleId;
         }
-      } else if (nextStatus === "paused" && qstashScheduleId) {
-        await getQstashClient()?.schedules.pause({ schedule: qstashScheduleId });
+      } else if (nextStatus === "paused") {
+        await this.pauseQstashSchedule(task);
       }
 
       await taskRef.update(update);
@@ -296,9 +298,9 @@ class ScheduledTaskServerService {
     const db = getDbOrThrow();
     const task = await this.getTaskForUser(taskId, userId);
 
-    if (task.qstashScheduleId) {
-      await getQstashClient()?.schedules.delete(task.qstashScheduleId);
-    }
+    await this.deleteQstashSchedule(
+      task.qstashScheduleId ?? getQstashScheduleId(task.id),
+    );
 
     await db.collection(colTasks).doc(taskId).update({
       status: "deleted",
@@ -313,7 +315,11 @@ class ScheduledTaskServerService {
       : await this.getTask(input.taskId);
 
     if (task.status !== "active" && input.trigger === "schedule") {
-      if (task.status === "failed") {
+      if (task.status === "deleted") {
+        await this.deleteQstashSchedule(
+          task.qstashScheduleId ?? getQstashScheduleId(task.id),
+        );
+      } else {
         await this.pauseQstashSchedule(task);
       }
 
@@ -521,6 +527,11 @@ class ScheduledTaskServerService {
       ...composioTools,
       ...mcpContext?.tools,
     } satisfies ToolSet;
+    const timeoutController = new AbortController();
+    const timeoutId = setTimeout(
+      () => timeoutController.abort(),
+      automationExecutionTimeoutMs,
+    );
 
     try {
       const result = await generateText({
@@ -533,11 +544,21 @@ class ScheduledTaskServerService {
           },
         ],
         tools,
-        stopWhen: stepCountIs(100),
+        stopWhen: stepCountIs(automationStepLimit),
+        abortSignal: timeoutController.signal,
       });
 
       return result.text || "The automation finished without a text response.";
+    } catch (error) {
+      if (timeoutController.signal.aborted) {
+        throw new Error("Automation timed out after 240 seconds", {
+          cause: error,
+        });
+      }
+
+      throw error;
     } finally {
+      clearTimeout(timeoutId);
       await closeMcpClients(mcpContext?.clients ?? []);
     }
   }
