@@ -1,18 +1,22 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Download } from "lucide-react";
-import { toast } from "sonner";
+import { Download, Share } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { navToolbarSecondaryBtnClass } from "@/lib/utils";
 
 interface BeforeInstallPromptEvent extends Event {
   prompt: () => Promise<void>;
   userChoice: Promise<{ outcome: "accepted" | "dismissed"; platform: string }>;
 }
-
-type InstallFallback = "local" | "ios" | "mobile" | null;
 
 const isStandalone = () => {
   if (typeof window === "undefined") return false;
@@ -44,29 +48,30 @@ const isIos = () => {
   return /iphone|ipad|ipod/.test(userAgent) || isTouchMac;
 };
 
-const isMobile = () => {
+const isAndroid = () => {
   if (typeof window === "undefined") return false;
 
-  return window.matchMedia("(max-width: 767px)").matches;
+  return /android/.test(window.navigator.userAgent.toLowerCase());
 };
 
 export function PwaInstallButton() {
   const [installPrompt, setInstallPrompt] =
     useState<BeforeInstallPromptEvent | null>(null);
   const [isInstalled, setIsInstalled] = useState(false);
-  const [installFallback, setInstallFallback] =
-    useState<InstallFallback>(null);
+  const [platform, setPlatform] = useState<"ios" | "android" | null>(null);
+  const [showIosInstructions, setShowIosInstructions] = useState(false);
+  const [isPrompting, setIsPrompting] = useState(false);
 
   useEffect(() => {
     setIsInstalled(isStandalone());
-    setInstallFallback(
-      isLocalhost() ? "local" : isIos() ? "ios" : isMobile() ? "mobile" : null,
+    setPlatform(
+      isLocalhost() ? null : isIos() ? "ios" : isAndroid() ? "android" : null,
     );
 
     const handleBeforeInstallPrompt = (event: Event) => {
       event.preventDefault();
 
-      if (!isStandalone()) {
+      if (!isLocalhost() && !isStandalone()) {
         setInstallPrompt(event as BeforeInstallPromptEvent);
       }
     };
@@ -97,43 +102,78 @@ export function PwaInstallButton() {
 
   const handleInstall = async () => {
     if (!installPrompt) {
-      if (installFallback === "local") {
-        toast.info("Install is available from the deployed app.");
-      }
-
-      if (installFallback === "ios") {
-        toast.info("Add Sakhi AI to your Home Screen", {
-          description:
-            "Use the browser share menu, then choose Add to Home Screen.",
-        });
-      }
-
-      if (installFallback === "mobile") {
-        toast.info("Install Sakhi AI from your browser menu", {
-          description:
-            "Open the browser menu and choose Install app or Add to Home screen.",
-        });
+      if (platform === "ios") {
+        setShowIosInstructions(true);
       }
 
       return;
     }
 
-    await installPrompt.prompt();
-    await installPrompt.userChoice;
-    setInstallPrompt(null);
+    setIsPrompting(true);
+
+    try {
+      await installPrompt.prompt();
+      const choice = await installPrompt.userChoice;
+      setInstallPrompt(null);
+
+      if (choice.outcome === "accepted") {
+        setIsInstalled(true);
+      }
+    } finally {
+      setIsPrompting(false);
+    }
   };
 
-  if (isInstalled || (!installPrompt && !installFallback)) return null;
+  const canInstall = platform === "ios" || !!installPrompt;
+
+  if (isInstalled || !canInstall) return null;
 
   return (
-    <Button
-      variant="secondary"
-      size="sm"
-      className={`${navToolbarSecondaryBtnClass} md:hidden`}
-      onClick={handleInstall}
-    >
-      <Download className="h-4 w-4 shrink-0" />
-      <span className="sr-only">Install</span>
-    </Button>
+    <Dialog open={showIosInstructions} onOpenChange={setShowIosInstructions}>
+      <Button
+        variant="secondary"
+        size="sm"
+        className={`${navToolbarSecondaryBtnClass} md:hidden`}
+        aria-label={
+          platform === "ios" ? "How to install Sakhi AI" : "Install Sakhi AI"
+        }
+        aria-busy={isPrompting}
+        disabled={isPrompting}
+        onClick={handleInstall}
+      >
+        <Download className="h-4 w-4 shrink-0" />
+        <span className="sr-only">Install Sakhi AI</span>
+      </Button>
+
+      <DialogContent className="max-w-sm">
+        <DialogHeader>
+          <DialogTitle>Install Sakhi AI</DialogTitle>
+          <DialogDescription>
+            Apple requires this final step from Safari.
+          </DialogDescription>
+        </DialogHeader>
+
+        <ol className="space-y-3 text-sm">
+          <li className="flex items-center gap-3">
+            <span className="flex size-7 shrink-0 items-center justify-center rounded-full bg-secondary font-medium">
+              1
+            </span>
+            <span className="flex items-center gap-1.5">
+              Tap <Share className="size-4 text-primary" aria-hidden="true" />{" "}
+              Share in Safari.
+            </span>
+          </li>
+          <li className="flex items-center gap-3">
+            <span className="flex size-7 shrink-0 items-center justify-center rounded-full bg-secondary font-medium">
+              2
+            </span>
+            <span>
+              Choose <strong>Add to Home Screen</strong>, then tap{" "}
+              <strong>Add</strong>.
+            </span>
+          </li>
+        </ol>
+      </DialogContent>
+    </Dialog>
   );
 }
