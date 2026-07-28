@@ -730,6 +730,29 @@ function createScheduledTaskTools({
   }
 
   return {
+    get_scheduled_tasks: tool({
+      description:
+        "Get the user's active, paused, and failed automations. Use this to show automations or to find the task ID before deleting one.",
+      inputSchema: z.object({}),
+      execute: async () => {
+        const tasks = await scheduledTaskServerService.listTasksForUser(userId);
+
+        return {
+          ok: true,
+          tasks: tasks.map((task) => ({
+            taskId: task.id,
+            title: task.title,
+            instruction: task.instruction,
+            schedule: task.schedule.humanText,
+            cron: task.schedule.cron,
+            timezone: task.schedule.timezone,
+            status: task.status,
+            lastRunAt: task.lastRunAt?.toISOString(),
+            nextRunAt: task.nextRunAt?.toISOString(),
+          })),
+        };
+      },
+    }),
     create_scheduled_task: tool({
       description:
         "Create a recurring automation for the user when they ask the assistant to do something on a repeated schedule.",
@@ -784,6 +807,30 @@ function createScheduledTaskTools({
           status: task.status,
           message:
             "Automation created. The user can inspect and test it from Automations.",
+        };
+      },
+    }),
+    delete_scheduled_task: tool({
+      description:
+        "Delete one of the user's automations after the user explicitly asks to delete it. Call get_scheduled_tasks first when the task ID is not already known.",
+      inputSchema: z.object({
+        taskId: z
+          .string()
+          .min(1)
+          .describe("Exact automation task ID returned by get_scheduled_tasks."),
+      }),
+      execute: async ({ taskId }) => {
+        const task = await scheduledTaskServerService.getTaskForUser(
+          taskId,
+          userId,
+        );
+        await scheduledTaskServerService.deleteTask(taskId, userId);
+
+        return {
+          ok: true,
+          taskId,
+          title: task.title,
+          message: "Automation deleted.",
         };
       },
     }),
@@ -910,7 +957,9 @@ function getProviderOptions(modelId: string) {
 
 function getScheduledTaskSystemPrompt() {
   return `Automations:
+- If the user asks to see, list, or manage their automations, call get_scheduled_tasks.
 - If the user asks you to do something on a recurring schedule, call create_scheduled_task.
+- If the user explicitly asks to delete an automation, call delete_scheduled_task. If you do not have its exact task ID, call get_scheduled_tasks first and match it by title; ask a brief clarifying question if more than one automation matches.
 - Examples include "every day at 8 PM", "each Monday morning", "every 6 hours", or similar repeated schedules.
 - Use a 5-field cron expression. Do not include seconds.
 - Use the user's explicitly stated timezone when provided. If they only provide a local time, use Asia/Kolkata.

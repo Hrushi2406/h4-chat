@@ -486,6 +486,32 @@ export const getToolDisplayName = (
     };
   }
 
+  if (toolName === "get_scheduled_tasks") {
+    return {
+      displayName: isCalling
+        ? "Checking Automations"
+        : isError
+          ? "Couldn’t load Automations"
+          : "Found Automations",
+      Icon: SakhiLogoIcon,
+      tooltip: `Tool: ${toolName}`,
+      source: "native",
+    };
+  }
+
+  if (toolName === "delete_scheduled_task") {
+    return {
+      displayName: isCalling
+        ? "Deleting Automation"
+        : isError
+          ? "Failed to delete Automation"
+          : "Deleted Automation",
+      Icon: SakhiLogoIcon,
+      tooltip: `Tool: ${toolName}`,
+      source: "native",
+    };
+  }
+
   if (toolName === "analyze_image") {
     const display = toolDisplayNames.analyze_image;
 
