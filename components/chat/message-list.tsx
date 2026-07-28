@@ -52,7 +52,7 @@ type ToolAppIcon = {
 
 const markdownRemarkPlugins = [remarkGfm, remarkToc];
 const scrollBottomThreshold = 120;
-const streamingRenderThrottleMs = 0;
+const streamingRenderThrottleMs = 80;
 
 const markdownComponents = {
   code: ({ children, className }) => {

@@ -9,6 +9,7 @@ import { navToolbarSecondaryBtnClass } from "@/lib/utils";
 import { PwaInstallButton } from "@/components/pwa-install-button";
 import { WhatsAppLogo } from "@/lib/brand-logos";
 import { WHATSAPP_COMMUNITY_URL } from "@/lib/constants";
+import { CreditMeter } from "@/components/billing/credit-meter";
 
 const THREAD_ID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -41,6 +42,7 @@ export default function Navbar() {
       <div className="flex items-center justify-between flex-1">
         <h1 className="text-lg font-semibold">Sakhi</h1>
         <div className="flex items-center gap-2">
+          <CreditMeter />
           <PwaInstallButton />
           <ThemeToggle />
           <Button

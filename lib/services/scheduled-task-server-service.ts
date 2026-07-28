@@ -27,6 +27,16 @@ import {
   type ScheduledTaskSource,
 } from "@/lib/types/scheduled-task";
 import { normalizeTaskCron } from "@/lib/scheduled-tasks/schedule-utils";
+import {
+  calculateCredits,
+  calculateMeteredToolCostNanoUsd,
+  usageFromAiSdk,
+} from "@/lib/billing/credits";
+import {
+  checkTaskAccess,
+  getAutomationLimitForUser,
+  recordAndDeductUsage,
+} from "@/lib/billing/server";
 
 const colTasks = "scheduledTasks";
 const colRuns = "scheduledTaskRuns";
@@ -67,6 +77,7 @@ export interface RunScheduledTaskInput {
   userId?: string;
   trigger: "manual" | "schedule";
   baseUrl: string;
+  deliveryId?: string;
 }
 
 export class InactiveScheduledTaskError extends Error {
@@ -163,6 +174,7 @@ class ScheduledTaskServerService {
 
   async createTask(input: CreateScheduledTaskInput): Promise<ScheduledTask> {
     const db = getDbOrThrow();
+    await this.assertAutomationLimit(input.userId);
     const taskId = v4();
     const now = new Date().toISOString();
     const taskRef = db.collection(colTasks).doc(taskId);
@@ -242,6 +254,9 @@ class ScheduledTaskServerService {
           })
         : task.schedule;
     const nextStatus = input.status ?? task.status;
+    if (nextStatus === "active" && task.status !== "active") {
+      await this.assertAutomationLimit(input.userId, input.taskId);
+    }
     let qstashScheduleId = task.qstashScheduleId;
 
     const update = removeUndefinedValues({
@@ -326,9 +341,20 @@ class ScheduledTaskServerService {
       throw new InactiveScheduledTaskError(task.id, task.status);
     }
 
-    const runId = v4();
+    const runId =
+      input.trigger === "schedule" && input.deliveryId
+        ? `qstash-${input.deliveryId.replace(/[^A-Za-z0-9_-]/g, "").slice(0, 120)}`
+        : v4();
     const startedAt = new Date().toISOString();
     const runRef = db.collection(colRuns).doc(runId);
+
+    const existingRun = await runRef.get();
+    if (existingRun.exists) {
+      return normalizeScheduledTaskRun({
+        ...(existingRun.data() as ScheduledTaskRun),
+        id: existingRun.id,
+      });
+    }
 
     await runRef.set({
       id: runId,
@@ -340,7 +366,28 @@ class ScheduledTaskServerService {
     });
 
     try {
-      const output = await this.executeTaskInstruction(task, input.baseUrl);
+      const model = getModelById(task.modelId ?? "") ?? getDefaultModel();
+      const access = await checkTaskAccess({
+        userId: task.userId,
+        modelId: model.id,
+      });
+      const execution = await this.executeTaskInstruction(
+        task,
+        input.baseUrl,
+        model.id,
+        access.availableCredits,
+      );
+      const output = execution.output;
+      const calculation = calculateCredits({
+        models: [usageFromAiSdk(model.id, execution.usage)],
+        toolCostNanoUsd: execution.toolCostNanoUsd,
+      });
+      await recordAndDeductUsage({
+        userId: task.userId,
+        usageId: `automation_${task.id}_${runId}`,
+        type: "automation",
+        calculation,
+      });
       const threadId = await this.createOutputThread({
         task,
         runId,
@@ -421,6 +468,26 @@ class ScheduledTaskServerService {
       ...(snapshot.data() as ScheduledTask),
       id: snapshot.id,
     });
+  }
+
+  private async assertAutomationLimit(userId: string, excludingTaskId?: string) {
+    const db = getDbOrThrow();
+    const limit = await getAutomationLimitForUser(userId);
+    const query = db
+      .collection(colTasks)
+      .where("userId", "==", userId)
+      .where("status", "==", "active")
+      .limit(limit + 1);
+    const snapshot = await query.get();
+    const activeCount = excludingTaskId
+      ? snapshot.docs.filter((doc) => doc.id !== excludingTaskId).length
+      : snapshot.size;
+
+    if (activeCount >= limit) {
+      throw new Error(
+        `Your plan allows ${limit} active automation${limit === 1 ? "" : "s"}. Pause one or upgrade your plan.`,
+      );
+    }
   }
 
   private async upsertQstashSchedule({
@@ -514,8 +581,12 @@ class ScheduledTaskServerService {
     }
   }
 
-  private async executeTaskInstruction(task: ScheduledTask, baseUrl: string) {
-    const model = getModelById(task.modelId ?? "") ?? getDefaultModel();
+  private async executeTaskInstruction(
+    task: ScheduledTask,
+    baseUrl: string,
+    modelId: string,
+    availableCredits: number,
+  ) {
     const mcpServers = await getUserMcpServersFromFirestore({
       userId: task.userId,
     });
@@ -535,7 +606,13 @@ class ScheduledTaskServerService {
 
     try {
       const result = await generateText({
-        model: model.id,
+        model: modelId,
+        providerOptions: {
+          gateway: {
+            user: task.userId,
+            tags: ["feature:automation"],
+          },
+        },
         system: getScheduledTaskSystemPrompt(Boolean(composioTools), mcpContext?.servers),
         messages: [
           {
@@ -544,11 +621,33 @@ class ScheduledTaskServerService {
           },
         ],
         tools,
-        stopWhen: stepCountIs(automationStepLimit),
+        stopWhen: [
+          stepCountIs(automationStepLimit),
+          ({ steps }) =>
+            calculateCredits({
+              models: steps.map((step) =>
+                usageFromAiSdk(modelId, step.usage),
+              ),
+              toolCostNanoUsd: calculateMeteredToolCostNanoUsd(
+                steps.flatMap((step) =>
+                  step.toolCalls.map((toolCall) => toolCall.toolName),
+                ),
+              ),
+            }).credits >= availableCredits,
+        ],
         abortSignal: timeoutController.signal,
       });
 
-      return result.text || "The automation finished without a text response.";
+      return {
+        output:
+          result.text || "The automation finished without a text response.",
+        usage: result.totalUsage,
+        toolCostNanoUsd: calculateMeteredToolCostNanoUsd(
+          result.steps.flatMap((step) =>
+            step.toolCalls.map((toolCall) => toolCall.toolName),
+          ),
+        ),
+      };
     } catch (error) {
       if (timeoutController.signal.aborted) {
         throw new Error("Automation timed out after 240 seconds", {

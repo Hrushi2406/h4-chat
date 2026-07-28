@@ -8,6 +8,10 @@ import { normalizeMcpHeaders } from "@/lib/types/mcp-server";
 const CACHE_TTL_MS = 30_000;
 const cache = new Map<string, { expiresAt: number; servers: McpServerInput[] }>();
 
+export const invalidateUserMcpServersCache = (userId: string) => {
+  cache.delete(userId);
+};
+
 export const getUserMcpServersFromFirestore = async ({
   userId,
 }: {

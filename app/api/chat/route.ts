@@ -33,6 +33,17 @@ import { createPromptLink } from "@/lib/prompt-links-admin";
 import helperServerService from "@/lib/services/helper-server-service";
 import type { Helper } from "@/lib/types/helper";
 import { prepareMessagesForModel } from "@/lib/types/thread";
+import {
+  calculateCredits,
+  calculateMeteredToolCostNanoUsd,
+  usageFromAiSdk,
+  type BillableModelUsage,
+} from "@/lib/billing/credits";
+import {
+  BillingAccessError,
+  checkTaskAccess,
+  recordAndDeductUsage,
+} from "@/lib/billing/server";
 
 export async function POST(req: Request) {
   const latency = createLatencyLogger();
@@ -43,6 +54,7 @@ export async function POST(req: Request) {
     authToken,
     threadId,
     hasMcpServers,
+    usageId,
   } = await req.json();
   latency.step("parse body", { threadId, modelId, hasMcpServers });
 
@@ -63,6 +75,24 @@ export async function POST(req: Request) {
     return new Response("Unauthorized", { status: 401 });
   }
 
+  let availableCredits: number;
+  try {
+    const access = await checkTaskAccess({
+      userId: verifiedUserId,
+      modelId: model.id,
+    });
+    availableCredits = access.availableCredits;
+  } catch (error) {
+    if (error instanceof BillingAccessError) {
+      return Response.json(
+        { error: error.message, code: error.code },
+        { status: error.status },
+      );
+    }
+    throw error;
+  }
+
+  const resolvedUsageId = resolveChatUsageId(usageId, messages, threadId);
   const parallelStart = performance.now();
   const userInfoPromise = (async () => {
     const start = performance.now();
@@ -165,6 +195,42 @@ export async function POST(req: Request) {
     mcpContext?.clients ?? [],
   );
   const imageAnalysisUsage = createImageAnalysisUsage();
+  const completedStepUsages: BillableModelUsage[] = [];
+  let meteredToolCostNanoUsd = 0;
+  let billingFinalized = false;
+  const recordUsage = async (models: BillableModelUsage[]) => {
+    if (billingFinalized || models.length === 0) return;
+    billingFinalized = true;
+
+    try {
+      const calculation = calculateCredits({
+        models,
+        toolCostNanoUsd: meteredToolCostNanoUsd,
+      });
+      await recordAndDeductUsage({
+        userId: verifiedUserId,
+        usageId: resolvedUsageId,
+        type: "chat",
+        calculation,
+      });
+    } catch (error) {
+      console.error("Failed to record chat credit usage:", {
+        usageId: resolvedUsageId,
+        error,
+      });
+    }
+  };
+  const appendImageAnalysisUsage = (models: BillableModelUsage[]) => {
+    if (imageAnalysisUsage.calls === 0) return models;
+    return [
+      ...models,
+      {
+        modelId: DEFAULT_IMAGE_ANALYSIS_MODEL_ID,
+        inputTokens: imageAnalysisUsage.inputTokens,
+        outputTokens: imageAnalysisUsage.outputTokens,
+      },
+    ];
+  };
   const tools = {
     ...(imageAnalysisEnabled
       ? createImageAnalysisTools({
@@ -201,16 +267,43 @@ export async function POST(req: Request) {
     model: model.id,
     system: systemPrompt,
     messages: modelMessages,
-    stopWhen: stepCountIs(100),
-    ...getProviderOptions(model.id),
+    stopWhen: [
+      stepCountIs(100),
+      ({ steps }) =>
+        calculateCredits({
+          models: appendImageAnalysisUsage(
+            steps.map((step) => usageFromAiSdk(model.id, step.usage)),
+          ),
+          toolCostNanoUsd: calculateMeteredToolCostNanoUsd(
+            steps.flatMap((step) =>
+              step.toolCalls.map((toolCall) => toolCall.toolName),
+            ),
+          ),
+        }).credits >= availableCredits,
+    ],
+    ...getProviderOptions(model.id, verifiedUserId),
+    onStepFinish: ({ usage, toolCalls }) => {
+      completedStepUsages.push(usageFromAiSdk(model.id, usage));
+      meteredToolCostNanoUsd += calculateMeteredToolCostNanoUsd(
+        toolCalls.map((toolCall) => toolCall.toolName),
+      );
+    },
     onError: async (error) => {
       console.log("error: ", error);
       await closeMcpClientsOnce();
     },
     onAbort: async () => {
+      if (hasBillableUsage(completedStepUsages, imageAnalysisUsage)) {
+        await recordUsage(appendImageAnalysisUsage(completedStepUsages));
+      }
       await closeMcpClientsOnce();
     },
-    onFinish: async () => {
+    onFinish: async ({ totalUsage }) => {
+      await recordUsage(
+        appendImageAnalysisUsage([
+          usageFromAiSdk(model.id, totalUsage),
+        ]),
+      );
       await closeMcpClientsOnce();
     },
 
@@ -271,6 +364,51 @@ export async function POST(req: Request) {
     status: response.status,
     headers: response.headers,
   });
+}
+
+function resolveChatUsageId(
+  provided: unknown,
+  messages: unknown,
+  threadId: unknown,
+) {
+  if (
+    typeof provided === "string" &&
+    /^[A-Za-z0-9:_-]{1,180}$/.test(provided)
+  ) {
+    return provided.startsWith("chat_") ? provided : `chat_${provided}`;
+  }
+
+  if (Array.isArray(messages)) {
+    const latest = messages.at(-1);
+    if (latest && typeof latest === "object") {
+      const messageId = (latest as { id?: unknown }).id;
+      if (
+        typeof messageId === "string" &&
+        /^[A-Za-z0-9:_-]{1,180}$/.test(messageId)
+      ) {
+        return `chat_${messageId}`;
+      }
+    }
+  }
+
+  const safeThread =
+    typeof threadId === "string"
+      ? threadId.replace(/[^A-Za-z0-9_-]/g, "").slice(0, 80)
+      : "unknown";
+  return `chat_${safeThread}_${crypto.randomUUID()}`;
+}
+
+function hasBillableUsage(
+  models: BillableModelUsage[],
+  imageUsage: ImageAnalysisUsage,
+) {
+  return (
+    imageUsage.calls > 0 ||
+    models.some(
+      (usage) =>
+        (usage.inputTokens ?? 0) > 0 || (usage.outputTokens ?? 0) > 0,
+    )
+  );
 }
 
 const getRequestPromptFromHints = (geo: Geo) => `\
@@ -894,18 +1032,27 @@ function createMemoryTools({ userId }: { userId?: string }): ToolSet {
   } satisfies ToolSet;
 }
 
-function getProviderOptions(modelId: string) {
+function getProviderOptions(modelId: string, userId: string) {
   if (modelId === "deepseek/deepseek-v4-flash") {
     return {
       providerOptions: {
         gateway: {
           order: ["deepinfra", "deepseek", "fireworks"],
+          user: userId,
+          tags: ["feature:chat"],
         },
       },
     };
   }
 
-  return {};
+  return {
+    providerOptions: {
+      gateway: {
+        user: userId,
+        tags: ["feature:chat"],
+      },
+    },
+  };
 }
 
 function getScheduledTaskSystemPrompt() {

@@ -8,6 +8,7 @@ import { auth } from "@/lib/clients/firebase";
 import { handleError } from "@/lib/utils";
 import { toast } from "sonner";
 import userService from "@/lib/services/user-service";
+import { markWelcomeCreditsPending } from "@/lib/billing/welcome-credits-flag";
 
 export const useAuthActions = () => {
   const queryClient = useQueryClient();
@@ -27,7 +28,11 @@ export const useAuthActions = () => {
       const cred = await signInWithPopup(auth, provider);
 
       if (cred.user) {
-        await userService.createUserGoogle(cred.user.uid, cred.user);
+        const isNewUser = await userService.createUserGoogle(
+          cred.user.uid,
+          cred.user,
+        );
+        if (isNewUser) markWelcomeCreditsPending(cred.user.uid);
       }
     },
     onSuccess: () => {

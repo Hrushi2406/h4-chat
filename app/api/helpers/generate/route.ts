@@ -8,10 +8,20 @@ import {
 } from "@/lib/composio";
 import { verifyFirebaseIdToken } from "@/lib/firebase-auth-server";
 import { getUserMcpServersFromFirestore } from "@/lib/mcp-firestore";
+import {
+  calculateCredits,
+  usageFromAiSdk,
+} from "@/lib/billing/credits";
+import {
+  BillingAccessError,
+  checkTaskAccess,
+  recordAndDeductUsage,
+} from "@/lib/billing/server";
 
 const requestSchema = z.object({
   description: z.string().trim().min(8).max(2000),
   authToken: z.string().min(1),
+  generationId: z.string().trim().min(1).max(180),
 });
 
 const helperDraftSchema = z.object({
@@ -36,6 +46,13 @@ export async function POST(request: Request) {
       return Response.json({ error: "Unauthorized" }, { status: 401 });
     }
 
+    const billingModelId = "anthropic/claude-haiku-4.5";
+    await checkTaskAccess({
+      userId,
+      modelId: billingModelId,
+      enforceModelAccess: false,
+    });
+
     const [connectedApps, mcpServers] = await Promise.all([
       getConnectedAppNames(userId),
       getUserMcpServersFromFirestore({ userId }).catch(() => []),
@@ -56,7 +73,13 @@ export async function POST(request: Request) {
     ].join("\n");
 
     const result = await generateText({
-      model: "anthropic/claude-haiku-4.5",
+      model: billingModelId,
+      providerOptions: {
+        gateway: {
+          user: userId,
+          tags: ["feature:helper-generation"],
+        },
+      },
       output: Output.object({ schema: helperDraftSchema }),
       system: `You design high-quality Sakhi Helpers. A Helper is a reusable set of instructions that tells an AI assistant how to handle a particular kind of request.
 
@@ -87,9 +110,27 @@ These examples demonstrate capability-aware depth. Do not copy them unless they 
       prompt: `Create a Helper draft from this idea:\n${JSON.stringify(parsed.data.description)}`,
     });
 
+    const calculation = calculateCredits({
+      models: [usageFromAiSdk(billingModelId, result.usage)],
+    });
+    await recordAndDeductUsage({
+      userId,
+      usageId: `helper_${parsed.data.generationId}`,
+      type: "helper_generation",
+      calculation,
+    }).catch((error) => {
+      console.error("Failed to record Helper-generation usage:", error);
+    });
+
     return Response.json({ draft: result.output });
   } catch (error) {
     console.error("Failed to generate Helper:", error);
+    if (error instanceof BillingAccessError) {
+      return Response.json(
+        { error: error.message, code: error.code },
+        { status: error.status },
+      );
+    }
     return Response.json(
       { error: "Sakhi could not draft that Helper. Please try again." },
       { status: 500 },

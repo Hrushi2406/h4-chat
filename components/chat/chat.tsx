@@ -29,6 +29,7 @@ import {
 import { useQueryClient, type InfiniteData } from "@tanstack/react-query";
 import { useMcpServers } from "@/lib/hooks/mcp/use-mcp-servers";
 import type { ThreadCursor, ThreadsPage } from "@/lib/services/thread-service";
+import { billingKeys } from "@/lib/hooks/billing/use-billing";
 
 interface ChatProps {
   threadId: string;
@@ -153,6 +154,11 @@ export function Chat({ threadId, isNew = false }: ChatProps) {
       },
       onFinish: ({ message, messages: finishedMessages }) => {
         console.log("threadId: ", threadId);
+        if (uid) {
+          void queryClient.invalidateQueries({
+            queryKey: billingKeys.summary(uid),
+          });
+        }
 
         // Save assistant message to thread when response is complete
         if (threadId) {
@@ -271,7 +277,10 @@ export function Chat({ threadId, isNew = false }: ChatProps) {
     ).catch((error) => {
       console.error("Failed to save user message:", error);
     });
-    sendMessage({ text: suggestion }, await getChatRequestOptions()).catch(
+    sendMessage(
+      { text: suggestion },
+      await getChatRequestOptions(msg.id),
+    ).catch(
       (error) => {
         console.error("Failed to send message:", error);
       },
@@ -408,7 +417,10 @@ export function Chat({ threadId, isNew = false }: ChatProps) {
           console.error("Failed to save Composio resume message:", error);
         });
 
-        await sendMessage({ text }, await getChatRequestOptions());
+        await sendMessage(
+          { text },
+          await getChatRequestOptions(message.id),
+        );
 
         void queryClient.invalidateQueries({
           queryKey: connectionKeys.list(uid),
@@ -460,7 +472,7 @@ export function Chat({ threadId, isNew = false }: ChatProps) {
         text,
         files: attachmentsToFileParts(submittedAttachments),
       },
-      await getChatRequestOptions(),
+      await getChatRequestOptions(msg.id),
     );
   };
   const submitMessageRef = useRef(submitMessage);
@@ -649,12 +661,15 @@ export function Chat({ threadId, isNew = false }: ChatProps) {
     );
   };
 
-  async function getChatRequestOptions(): Promise<ChatRequestOptions> {
+  async function getChatRequestOptions(
+    usageId?: string,
+  ): Promise<ChatRequestOptions> {
     return {
       body: {
         modelId: selectedModel.id,
         authToken: await auth.currentUser?.getIdToken(),
         threadId,
+        ...(usageId ? { usageId } : {}),
         ...(hasMcpServersRef.current !== undefined
           ? { hasMcpServers: hasMcpServersRef.current }
           : {}),

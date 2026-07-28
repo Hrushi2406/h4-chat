@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
+import { MarketingNavbar } from "@/components/marketing/marketing-navbar";
 import { WaitlistFooter } from "@/components/waitlist/waitlist-footer";
 import { UseCasesSection } from "@/components/waitlist/use-cases-section";
 import { WaitlistHeroBackground } from "@/components/waitlist/waitlist-hero-background";
@@ -29,23 +30,7 @@ export default function WaitlistPage() {
   return (
     <div className="h-dvh overflow-y-auto overflow-x-hidden bg-[#0a0a0a] text-white">
       <section className="relative min-h-dvh">
-        <motion.nav
-          className="relative z-20 flex w-full items-center justify-between px-6 py-5 md:px-12"
-          initial={shouldReduceMotion ? false : { opacity: 0, y: -16 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.6, ease }}
-        >
-          <span className="text-lg font-semibold tracking-tight">Sakhi AI</span>
-          <motion.div whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}>
-            <Button
-              variant="outline"
-              className="rounded-full border-white/15 bg-white/5 text-white shadow-[0_0_24px_-12px_rgba(59,130,246,0.55)] backdrop-blur-md transition-all duration-300 hover:border-blue-400/40 hover:bg-white/10 hover:text-white hover:shadow-[0_0_28px_-8px_rgba(59,130,246,0.65)]"
-              onClick={() => router.push("/chat")}
-            >
-              Try Sakhi
-            </Button>
-          </motion.div>
-        </motion.nav>
+        <MarketingNavbar />
 
         <main className="absolute inset-0 z-10 flex items-center justify-center px-4 pb-24 pt-14 md:pb-0 md:pt-0">
           <motion.div
@@ -91,13 +76,6 @@ export default function WaitlistPage() {
                 Join WhatsApp
               </a>
             </div>
-
-            <p className="mt-5 inline-flex items-center gap-0 text-xs font-medium tracking-wide text-neutral-400">
-              AI for The New India
-              <span aria-hidden="true" className="ml-1 text-sm leading-none">
-                🇮🇳
-              </span>
-            </p>
           </motion.div>
         </main>
 

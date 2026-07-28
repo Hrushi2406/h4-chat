@@ -54,13 +54,14 @@ import {
   MAX_USER_MEMORIES,
   type IMemory,
 } from "@/lib/types/user";
+import { BillingSettings } from "@/components/billing/billing-settings";
 
 const settingsCardClass = "rounded-3xl border bg-card text-card-foreground shadow-xs";
 const settingsPanelClass = "rounded-3xl border bg-card p-4 text-card-foreground shadow-xs";
 const settingsControlClass = "rounded-full shadow-xs";
 const settingsBtnClass = "rounded-full";
 
-const SETTINGS_TABS = ["account", "mcp", "memories"] as const;
+const SETTINGS_TABS = ["account", "billing", "mcp", "memories"] as const;
 type SettingsTab = (typeof SETTINGS_TABS)[number];
 
 const isSettingsTab = (value: string): value is SettingsTab =>
@@ -126,6 +127,12 @@ function SettingsPageInner() {
               Account
             </TabsTrigger>
             <TabsTrigger
+              value="billing"
+              className={cn(settingsBtnClass, "h-8 shrink-0 px-4")}
+            >
+              Billing
+            </TabsTrigger>
+            <TabsTrigger
               value="mcp"
               className={cn(settingsBtnClass, "h-8 shrink-0 px-4")}
             >
@@ -154,6 +161,13 @@ function SettingsPageInner() {
           <Card className={settingsCardClass}>
             <CardContent className="">
               <McpSettings />
+            </CardContent>
+          </Card>
+        </TabsContent>
+        <TabsContent value="billing">
+          <Card className={settingsCardClass}>
+            <CardContent>
+              <BillingSettings />
             </CardContent>
           </Card>
         </TabsContent>
@@ -221,15 +235,24 @@ const AccountSettings = () => {
     });
   };
 
-  const iosListClass =
-    "overflow-hidden rounded-[20px] bg-muted/50 divide-y divide-border/70";
+  const iosSurfaceClass =
+    "bg-[color-mix(in_oklch,var(--foreground)_4.5%,var(--card))]";
+  const iosListClass = cn(
+    "overflow-hidden rounded-[20px] divide-y divide-border/70",
+    iosSurfaceClass,
+  );
   const iosRowClass =
     "flex min-h-11 items-center gap-3 px-4 py-2.5 transition-colors hover:bg-foreground/[0.03] focus-within:bg-foreground/[0.03]";
 
   return (
     <div className="grid gap-4 lg:grid-cols-[260px_minmax(0,1fr)] lg:items-stretch lg:gap-6">
       <div className="flex flex-col gap-4 lg:gap-3">
-        <section className="flex flex-col items-center gap-3 rounded-[20px] bg-muted/50 p-5 text-center">
+        <section
+          className={cn(
+            "flex flex-col items-center gap-3 rounded-[20px] p-5 text-center",
+            iosSurfaceClass,
+          )}
+        >
           <div className="h-16 w-16 shrink-0 overflow-hidden rounded-full bg-muted">
             {user?.avatar ? (
               <img

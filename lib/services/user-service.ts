@@ -24,7 +24,8 @@ class UserService {
     return snap.data() as IUser;
   }
 
-  async createUserGoogle(uid: string, fbUser: User) {
+  /** Returns true when this call created a brand-new user doc (first-ever sign-in). */
+  async createUserGoogle(uid: string, fbUser: User): Promise<boolean> {
     const userRef = doc(db, `users/${uid}`);
     const snap = await getDoc(userRef);
 
@@ -36,7 +37,7 @@ class UserService {
         avatar: fbUser.photoURL ?? snap.data()?.avatar ?? "",
         updatedAt: new Date().toISOString(),
       });
-      return;
+      return false;
     }
 
     await setDoc(userRef, {
@@ -45,6 +46,7 @@ class UserService {
       name: fbUser.displayName ?? "",
       avatar: fbUser.photoURL ?? "",
     });
+    return true;
   }
 
   //   async migrateUserFromAnon(uid: string, email: string) {
@@ -53,13 +55,22 @@ class UserService {
 
   async updateUser({ uid, update }: { uid: string; update: Partial<IUser> }) {
     const userRef = doc(db, `users/${uid}`);
-    const userDoc = await getDoc(userRef);
-    const userData = userDoc.data() as IUser;
-    const updated = {
-      ...userData,
-      ...update,
+    // Billing and provider identifiers are server-owned. Keep this client
+    // mutation intentionally limited to editable profile fields.
+    const editableUpdate = {
+      ...(typeof update.name === "string" ? { name: update.name } : {}),
+      ...(typeof update.occupation === "string"
+        ? { occupation: update.occupation }
+        : {}),
+      ...(typeof update.userPreferences === "string"
+        ? { userPreferences: update.userPreferences }
+        : {}),
+      ...(typeof update.memoryEnabled === "boolean"
+        ? { memoryEnabled: update.memoryEnabled }
+        : {}),
+      updatedAt: new Date().toISOString(),
     };
-    await updateDoc(userRef, updated);
+    await updateDoc(userRef, editableUpdate);
   }
 
   async addMemory({

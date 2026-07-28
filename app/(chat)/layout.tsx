@@ -1,6 +1,7 @@
 "use client";
 
 import ChatLayout from "@/components/chat/chat-layout";
+import { WelcomeCreditsModal } from "@/components/billing/welcome-credits-modal";
 import { useAuthActions } from "@/lib/hooks/auth/use-auth-actions";
 import { auth } from "@/lib/clients/firebase";
 import { onAuthStateChanged, signOut } from "firebase/auth";
@@ -72,5 +73,10 @@ export default function RootLayout({
     );
   }
 
-  return <ChatLayout>{children}</ChatLayout>;
+  return (
+    <>
+      <WelcomeCreditsModal />
+      <ChatLayout>{children}</ChatLayout>
+    </>
+  );
 }

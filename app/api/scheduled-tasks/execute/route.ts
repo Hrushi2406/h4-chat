@@ -35,6 +35,7 @@ export async function POST(req: Request) {
       taskId: body.taskId,
       trigger: "schedule",
       baseUrl: getBaseUrl(req),
+      deliveryId: req.headers.get("upstash-message-id") ?? undefined,
     });
 
     return Response.json({ run });
