@@ -52,7 +52,9 @@ type ToolAppIcon = {
 
 const markdownRemarkPlugins = [remarkGfm, remarkToc];
 const scrollBottomThreshold = 120;
-const streamingRenderThrottleMs = 0;
+const streamingRenderThrottleMs = 80;
+const longChatMessageThreshold = 15;
+const recentMessagesAlwaysRendered = 10;
 
 const markdownComponents = {
   code: ({ children, className }) => {
@@ -406,6 +408,9 @@ export const MessageList = memo(function MessageList({
             const isStreaming =
               isLastAssistantMessage &&
               (status === "streaming" || status === "submitted");
+            const shouldDeferRendering =
+              messages.length >= longChatMessageThreshold &&
+              index < messages.length - recentMessagesAlwaysRendered;
 
             return isStreaming ? (
               <ActiveMessageItem
@@ -423,6 +428,7 @@ export const MessageList = memo(function MessageList({
                 toolApps={toolApps}
                 mcpServerNames={mcpServerNames}
                 isLastAssistantMessage={isLastAssistantMessage}
+                shouldDeferRendering={shouldDeferRendering}
               />
             );
           })}
@@ -465,11 +471,13 @@ const CompletedMessageItem = memo(
     toolApps,
     mcpServerNames,
     isLastAssistantMessage,
+    shouldDeferRendering,
   }: {
     message: ThreadMessage;
     toolApps: ToolAppIcon[];
     mcpServerNames: Record<string, string>;
     isLastAssistantMessage: boolean;
+    shouldDeferRendering: boolean;
   }) => (
     <MessageItemContent
       message={message}
@@ -477,13 +485,15 @@ const CompletedMessageItem = memo(
       mcpServerNames={mcpServerNames}
       isLastAssistantMessage={isLastAssistantMessage}
       isStreaming={false}
+      shouldDeferRendering={shouldDeferRendering}
     />
   ),
   (prevProps, nextProps) =>
     prevProps.message === nextProps.message &&
     prevProps.toolApps === nextProps.toolApps &&
     prevProps.mcpServerNames === nextProps.mcpServerNames &&
-    prevProps.isLastAssistantMessage === nextProps.isLastAssistantMessage,
+    prevProps.isLastAssistantMessage === nextProps.isLastAssistantMessage &&
+    prevProps.shouldDeferRendering === nextProps.shouldDeferRendering,
 );
 
 CompletedMessageItem.displayName = "CompletedMessageItem";
@@ -514,6 +524,7 @@ const ActiveMessageItem = ({
       mcpServerNames={mcpServerNames}
       isLastAssistantMessage={isLastAssistantMessage}
       isStreaming={isStreaming}
+      shouldDeferRendering={false}
     />
   );
 };
@@ -547,12 +558,14 @@ const MessageItemContent = memo(
     mcpServerNames,
     isLastAssistantMessage,
     isStreaming,
+    shouldDeferRendering,
   }: {
     message: ThreadMessage;
     toolApps: ToolAppIcon[];
     mcpServerNames: Record<string, string>;
     isLastAssistantMessage: boolean;
     isStreaming: boolean;
+    shouldDeferRendering: boolean;
   }) => {
     const content = useMemo(() => getMessageContent(message), [message]);
     const attachments = useMemo(
@@ -563,7 +576,13 @@ const MessageItemContent = memo(
       message.role === "user" && shouldDockCopyButton(content, attachments.length);
 
     return (
-      <div className="group/message min-w-0">
+      <div
+        className={clsx(
+          "group/message min-w-0",
+          shouldDeferRendering &&
+            "[content-visibility:auto] [contain-intrinsic-size:auto_160px]",
+        )}
+      >
         <div
           className={clsx(
             "flex min-w-0 w-full",
@@ -622,7 +641,8 @@ const MessageItemContent = memo(
     prevProps.toolApps === nextProps.toolApps &&
     prevProps.mcpServerNames === nextProps.mcpServerNames &&
     prevProps.isLastAssistantMessage === nextProps.isLastAssistantMessage &&
-    prevProps.isStreaming === nextProps.isStreaming,
+    prevProps.isStreaming === nextProps.isStreaming &&
+    prevProps.shouldDeferRendering === nextProps.shouldDeferRendering,
 );
 
 MessageItemContent.displayName = "MessageItemContent";
