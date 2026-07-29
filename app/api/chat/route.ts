@@ -34,6 +34,8 @@ import helperServerService from "@/lib/services/helper-server-service";
 import type { Helper } from "@/lib/types/helper";
 import { prepareMessagesForModel } from "@/lib/types/thread";
 
+export const maxDuration = 600;
+
 export async function POST(req: Request) {
   const latency = createLatencyLogger();
 
