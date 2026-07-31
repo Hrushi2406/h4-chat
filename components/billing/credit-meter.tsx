@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { useRef, useState } from "react";
 import { CircleAlert } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -12,6 +11,7 @@ import {
 import { BILLING_PLANS } from "@/lib/billing/config";
 import { useBilling } from "@/lib/hooks/billing/use-billing";
 import { cn } from "@/lib/utils";
+import { PricingLink } from "@/components/billing/pricing-link";
 
 type CreditLevel = "healthy" | "low" | "critical";
 
@@ -97,7 +97,7 @@ export function CreditMeter() {
         <button
           type="button"
           className={cn(
-            "group flex size-8 items-center justify-center rounded-full outline-none transition-colors hover:bg-secondary focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background",
+            "group flex h-8 items-center justify-center rounded-full border bg-secondary px-2 shadow-none outline-none transition-colors hover:bg-secondary/80 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background",
             styles.text,
           )}
           aria-label={`${numberFormatter.format(available)} credits remaining. ${styles.message}.`}
@@ -110,7 +110,7 @@ export function CreditMeter() {
         >
           <svg
             viewBox="0 0 20 20"
-            className="-rotate-90 size-6 shrink-0"
+            className="-rotate-90 size-5 shrink-0"
             aria-hidden="true"
           >
             <circle
@@ -199,14 +199,14 @@ export function CreditMeter() {
         </div>
 
         <Button asChild size="sm" className="mt-4 h-8 w-full rounded-full">
-          <Link href="/pricing">
+          <PricingLink>
             {summary.planId === "free" ? "View plans" : "Buy more"}
-          </Link>
+          </PricingLink>
         </Button>
 
         {refreshDate && (
           <p className="mt-2 text-center text-[11px] text-muted-foreground">
-            Renews on {refreshDate}
+            Credits reset on {refreshDate}
           </p>
         )}
       </PopoverContent>

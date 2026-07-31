@@ -4,17 +4,15 @@ import { auth } from "@/lib/clients/firebase";
 import type { BillingPlanId } from "@/lib/billing/config";
 import type { BillingSummary } from "@/lib/billing/types";
 
-type BillingResponse = {
-  billing: BillingSummary;
-};
-
-type CheckoutOutcome = BillingResponse & {
+type CheckoutOutcome = {
   activationPending: boolean;
 };
 
-type RechargeCheckoutOutcome = BillingResponse & {
+type RechargeCheckoutOutcome = {
   creditingPending: boolean;
 };
+
+type PaymentCompletedCallback = () => void;
 
 type SubscriptionCheckout = {
   keyId: string;
@@ -83,27 +81,33 @@ const loadCheckoutScript = () => {
     const script = document.createElement("script");
     script.src = "https://checkout.razorpay.com/v1/checkout.js";
     script.async = true;
-    script.onload = () => resolve();
-    script.onerror = () => reject(new Error("Could not load Razorpay Checkout"));
+    script.onload = () => {
+      script.onload = null;
+      script.onerror = null;
+      if (window.Razorpay) {
+        resolve();
+        return;
+      }
+      checkoutScriptPromise = undefined;
+      script.remove();
+      reject(new Error("Razorpay Checkout is unavailable"));
+    };
+    script.onerror = () => {
+      script.onload = null;
+      script.onerror = null;
+      checkoutScriptPromise = undefined;
+      script.remove();
+      reject(new Error("Could not load Razorpay Checkout"));
+    };
     document.head.appendChild(script);
   });
   return checkoutScriptPromise;
 };
 
 class BillingService {
-  async getBilling(): Promise<BillingResponse> {
-    const response = await fetch("/api/billing", {
-      cache: "no-store",
-      headers: {
-        Authorization: `Bearer ${await getAuthToken()}`,
-      },
-    });
-    if (!response.ok) throw new Error(await readError(response));
-    return response.json() as Promise<BillingResponse>;
-  }
-
   async startCheckout(
     planId: Exclude<BillingPlanId, "free">,
+    onPaymentCompleted?: PaymentCompletedCallback,
   ): Promise<CheckoutOutcome | undefined> {
     const authToken = await getAuthToken();
     const response = await fetch("/api/billing/subscription", {
@@ -116,11 +120,15 @@ class BillingService {
     const result = (await response.json()) as {
       checkout: SubscriptionCheckout;
     };
-    return this.openSubscriptionCheckout(result.checkout);
+    return this.openSubscriptionCheckout(
+      result.checkout,
+      onPaymentCompleted,
+    );
   }
 
   private async openSubscriptionCheckout(
     checkoutDetails: SubscriptionCheckout,
+    onPaymentCompleted?: PaymentCompletedCallback,
   ): Promise<CheckoutOutcome | undefined> {
     await loadCheckoutScript();
     if (!window.Razorpay) throw new Error("Razorpay Checkout is unavailable");
@@ -140,6 +148,7 @@ class BillingService {
         theme: { color: "#3b82f6" },
         handler: async (payment) => {
           completed = true;
+          onPaymentCompleted?.();
           try {
             if (!payment.razorpay_subscription_id) {
               throw new Error("Razorpay did not return a subscription ID");
@@ -161,10 +170,7 @@ class BillingService {
               throw new Error(await readError(verification));
             }
             const activationPending = verification.status === 202;
-            resolve({
-              ...(await this.getBilling()),
-              activationPending,
-            });
+            resolve({ activationPending });
           } catch (error) {
             reject(error);
           }
@@ -191,6 +197,7 @@ class BillingService {
 
   async startRechargeCheckout(
     credits: number,
+    onPaymentCompleted?: PaymentCompletedCallback,
   ): Promise<RechargeCheckoutOutcome | undefined> {
     const authToken = await getAuthToken();
     const response = await fetch("/api/billing/recharge", {
@@ -231,6 +238,7 @@ class BillingService {
           theme: { color: "#3b82f6" },
           handler: async (payment) => {
             completed = true;
+            onPaymentCompleted?.();
             try {
               if (!payment.razorpay_order_id) {
                 throw new Error("Razorpay did not return an order ID");
@@ -249,10 +257,7 @@ class BillingService {
               if (!verification.ok && verification.status !== 202) {
                 throw new Error(await readError(verification));
               }
-              resolve({
-                ...(await this.getBilling()),
-                creditingPending: verification.status === 202,
-              });
+              resolve({ creditingPending: verification.status === 202 });
             } catch (error) {
               reject(error);
             }
@@ -276,7 +281,10 @@ class BillingService {
     );
   }
 
-  async changeSubscription(planId: Exclude<BillingPlanId, "free">) {
+  async changeSubscription(
+    planId: Exclude<BillingPlanId, "free">,
+    onPaymentCompleted?: PaymentCompletedCallback,
+  ) {
     const response = await fetch("/api/billing/subscription", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -293,18 +301,27 @@ class BillingService {
       message?: string;
       checkout?: SubscriptionCheckout;
     };
-    if (!result.checkout) return result;
+    if (!result.checkout) {
+      return {
+        ...result,
+        confirmationPending: response.status === 202,
+      };
+    }
 
-    const outcome = await this.openSubscriptionCheckout(result.checkout);
+    const outcome = await this.openSubscriptionCheckout(
+      result.checkout,
+      onPaymentCompleted,
+    );
     if (!outcome) {
       return {
         updated: false,
+        confirmationPending: false,
         message: "Plan change was not completed.",
       };
     }
     return {
       updated: !outcome.activationPending,
-      billing: outcome.billing,
+      confirmationPending: outcome.activationPending,
       message: outcome.activationPending
         ? "Payment received. Razorpay is confirming your new plan."
         : undefined,

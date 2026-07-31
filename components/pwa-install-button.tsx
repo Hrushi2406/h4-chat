@@ -133,7 +133,7 @@ export function PwaInstallButton() {
       <Button
         variant="secondary"
         size="sm"
-        className={`${navToolbarSecondaryBtnClass} md:hidden`}
+        className={navToolbarSecondaryBtnClass}
         aria-label={
           platform === "ios" ? "How to install Sakhi AI" : "Install Sakhi AI"
         }

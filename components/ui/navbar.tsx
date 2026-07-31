@@ -1,4 +1,10 @@
-import { Loader2, Plus, Share, Settings2 } from "lucide-react";
+import {
+  Loader2,
+  MoreHorizontal,
+  Plus,
+  Share,
+  Settings2,
+} from "lucide-react";
 import { Button } from "./button";
 import { SidebarTrigger } from "./sidebar";
 import { useThreadActions } from "@/lib/hooks/thread/use-thread-actions";
@@ -10,6 +16,14 @@ import { PwaInstallButton } from "@/components/pwa-install-button";
 import { WhatsAppLogo } from "@/lib/brand-logos";
 import { WHATSAPP_COMMUNITY_URL } from "@/lib/constants";
 import { CreditMeter } from "@/components/billing/credit-meter";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "./dropdown-menu";
 
 const THREAD_ID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -46,24 +60,6 @@ export default function Navbar() {
           <PwaInstallButton />
           <ThemeToggle />
           <Button
-            asChild
-            variant="secondary"
-            size="sm"
-            className={navToolbarSecondaryBtnClass}
-          >
-            <a
-              href={WHATSAPP_COMMUNITY_URL}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="gap-0 md:gap-1.5"
-            >
-              <WhatsAppLogo className="h-4 w-4 shrink-0" />
-              <span className="sr-only md:not-sr-only md:inline">
-                Join Community
-              </span>
-            </a>
-          </Button>
-          <Button
             variant="secondary"
             size="sm"
             className={navToolbarSecondaryBtnClass}
@@ -72,32 +68,62 @@ export default function Navbar() {
             <Plus className="h-4 w-4 shrink-0" />
             <span className="sr-only md:not-sr-only md:inline">New Chat</span>
           </Button>
-          <Button
-            variant="secondary"
-            size="sm"
-            className={navToolbarSecondaryBtnClass}
-            disabled={!currentThreadId || shareThread.isPending}
-            aria-busy={shareThread.isPending}
-            onClick={handleShare}
-          >
-            {shareThread.isPending ? (
-              <Loader2 className="h-4 w-4 shrink-0 animate-spin" />
-            ) : (
-              <Share className="h-4 w-4 shrink-0" />
-            )}
-            <span className="sr-only md:not-sr-only md:inline">Share</span>
-          </Button>
-          <Button
-            asChild
-            variant="secondary"
-            size="sm"
-            className={navToolbarSecondaryBtnClass}
-          >
-            <Link href="/settings" className="gap-0 md:gap-1.5">
-              <Settings2 className="h-4 w-4 shrink-0" />
-              <span className="sr-only md:not-sr-only md:inline">Settings</span>
-            </Link>
-          </Button>
+          {currentThreadId ? (
+            <Button
+              variant="secondary"
+              size="sm"
+              className={navToolbarSecondaryBtnClass}
+              disabled={shareThread.isPending}
+              aria-busy={shareThread.isPending}
+              onClick={handleShare}
+            >
+              {shareThread.isPending ? (
+                <Loader2 className="h-4 w-4 shrink-0 animate-spin" />
+              ) : (
+                <Share className="h-4 w-4 shrink-0" />
+              )}
+              <span className="sr-only md:not-sr-only md:inline">Share</span>
+            </Button>
+          ) : null}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                type="button"
+                variant="secondary"
+                size="sm"
+                aria-label="Open menu"
+                className={navToolbarSecondaryBtnClass}
+              >
+                <MoreHorizontal className="size-4" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent
+              align="end"
+              sideOffset={6}
+              className="w-60 rounded-xl p-2"
+            >
+              <DropdownMenuLabel className="px-2 py-1.5 text-xs font-medium text-muted-foreground">
+                Menu
+              </DropdownMenuLabel>
+              <DropdownMenuItem asChild className="gap-2 rounded-lg">
+                <a
+                  href={WHATSAPP_COMMUNITY_URL}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  <WhatsAppLogo className="size-4 text-muted-foreground" />
+                  Join Community
+                </a>
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem asChild className="gap-2 rounded-lg">
+                <Link href="/settings">
+                  <Settings2 className="size-4 text-muted-foreground" />
+                  Settings
+                </Link>
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       </div>
     </header>

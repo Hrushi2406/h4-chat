@@ -1,24 +1,51 @@
 "use client";
 
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useCallback, useMemo } from "react";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import billingService from "@/lib/services/billing-service";
 import type { BillingPlanId } from "@/lib/billing/config";
 import { useAuth } from "@/lib/hooks/auth/use-auth";
-
-export const billingKeys = {
-  all: ["billing"] as const,
-  summary: (uid: string) => [...billingKeys.all, uid] as const,
-  detail: (uid: string) => [...billingKeys.summary(uid), "detail"] as const,
-};
+import {
+  createDefaultClientBilling,
+  toBillingSummary,
+} from "@/lib/billing/summary";
+import { userKeys, useUser } from "@/lib/hooks/user/use-user";
 
 export const useBilling = () => {
-  const { uid } = useAuth();
-  return useQuery({
-    queryKey: billingKeys.detail(uid ?? ""),
-    queryFn: () => billingService.getBilling(),
-    enabled: Boolean(uid),
-    staleTime: 30_000,
-  });
+  const userQuery = useUser();
+  const data = useMemo(
+    () =>
+      userQuery.data
+        ? {
+            billing: toBillingSummary(
+              userQuery.data.billing ?? createDefaultClientBilling(),
+            ),
+          }
+        : undefined,
+    [userQuery.data],
+  );
+  const refetch = useCallback(
+    async (...args: Parameters<typeof userQuery.refetch>) => {
+      const result = await userQuery.refetch(...args);
+      return {
+        ...result,
+        data: result.data
+          ? {
+              billing: toBillingSummary(
+                result.data.billing ?? createDefaultClientBilling(),
+              ),
+            }
+          : undefined,
+      };
+    },
+    [userQuery.refetch],
+  );
+
+  return {
+    ...userQuery,
+    data,
+    refetch,
+  };
 };
 
 export const useBillingActions = () => {
@@ -26,12 +53,17 @@ export const useBillingActions = () => {
   const queryClient = useQueryClient();
   const invalidate = () =>
     queryClient.invalidateQueries({
-      queryKey: billingKeys.summary(uid ?? ""),
+      queryKey: userKeys.detail(uid ?? ""),
     });
 
   const checkout = useMutation({
-    mutationFn: (planId: Exclude<BillingPlanId, "free">) =>
-      billingService.startCheckout(planId),
+    mutationFn: ({
+      planId,
+      onPaymentCompleted,
+    }: {
+      planId: Exclude<BillingPlanId, "free">;
+      onPaymentCompleted?: () => void;
+    }) => billingService.startCheckout(planId, onPaymentCompleted),
     onSuccess: async () => {
       await invalidate();
     },
@@ -45,16 +77,27 @@ export const useBillingActions = () => {
   });
 
   const recharge = useMutation({
-    mutationFn: (credits: number) =>
-      billingService.startRechargeCheckout(credits),
+    mutationFn: ({
+      credits,
+      onPaymentCompleted,
+    }: {
+      credits: number;
+      onPaymentCompleted?: () => void;
+    }) =>
+      billingService.startRechargeCheckout(credits, onPaymentCompleted),
     onSuccess: async () => {
       await invalidate();
     },
   });
 
   const changePlan = useMutation({
-    mutationFn: (planId: Exclude<BillingPlanId, "free">) =>
-      billingService.changeSubscription(planId),
+    mutationFn: ({
+      planId,
+      onPaymentCompleted,
+    }: {
+      planId: Exclude<BillingPlanId, "free">;
+      onPaymentCompleted?: () => void;
+    }) => billingService.changeSubscription(planId, onPaymentCompleted),
     onSuccess: async () => {
       await invalidate();
     },

@@ -1,5 +1,6 @@
 import { timingSafeEqual } from "node:crypto";
 import { refreshDueCredits } from "@/lib/billing/server";
+import { billingOperationalErrorResponse } from "@/lib/billing/error-response";
 
 export const dynamic = "force-dynamic";
 
@@ -22,7 +23,7 @@ async function refresh(request: Request) {
 
   if (!expected) {
     return Response.json(
-      { error: "Billing refresh secret is not configured" },
+      { error: "Billing refresh is temporarily unavailable" },
       { status: 503 },
     );
   }
@@ -35,14 +36,9 @@ async function refresh(request: Request) {
     return Response.json(result);
   } catch (error) {
     console.error("Monthly credit refresh failed:", error);
-    return Response.json(
-      {
-        error:
-          error instanceof Error
-            ? error.message
-            : "Monthly credit refresh failed",
-      },
-      { status: 500 },
+    return billingOperationalErrorResponse(
+      error,
+      "Monthly credit refresh failed",
     );
   }
 }

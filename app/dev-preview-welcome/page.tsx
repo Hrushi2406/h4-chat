@@ -1,106 +1,185 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import confetti from "canvas-confetti";
-import { MessageCircle, Zap } from "lucide-react";
-import {
-  Dialog,
-  DialogContent,
-  DialogTitle,
-  DialogDescription,
-} from "@/components/ui/dialog";
+import { useState } from "react";
+import { Dialog } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { WELCOME_CREDITS } from "@/lib/billing/config";
+import {
+  CreditsCelebration,
+  WELCOME_CREDITS_CELEBRATION,
+  getPlanCreditsCelebration,
+  getRechargeCreditsCelebration,
+  type CreditsCelebrationContent,
+} from "@/components/billing/welcome-credits-celebration";
+import { BILLING_PLANS } from "@/lib/billing/config";
+import {
+  PaymentConfirmationModal,
+  type PaymentConfirmationKind,
+} from "@/components/billing/payment-confirmation-modal";
 
-const numberFormatter = new Intl.NumberFormat("en-IN");
-
-const colors = ["#34d399", "#60a5fa", "#f472b6", "#fbbf24", "#a78bfa"];
-
-const burstFromCorner = (originX: number, angle: number) => {
-  confetti({
-    particleCount: 90,
-    angle,
-    spread: 100,
-    startVelocity: 65,
-    decay: 0.9,
-    gravity: 0.9,
-    ticks: 250,
-    origin: { x: originX, y: 1.05 },
-    colors,
-    scalar: 1.1,
-  });
+type Preview = CreditsCelebrationContent & {
+  id: string;
+  label: string;
+  detail: string;
 };
 
-const fireConfetti = () => {
-  burstFromCorner(0, 60);
-  burstFromCorner(1, 120);
+const planPrice = (
+  planId:
+    | "plus_monthly"
+    | "plus_annual"
+    | "pro_monthly"
+    | "pro_annual",
+) => {
+  const plan = BILLING_PLANS[planId];
+  const price = (plan.pricePaise / 100).toLocaleString("en-IN");
+  return `₹${price} / ${plan.interval === "annual" ? "year" : "month"}`;
 };
+
+const previews: Preview[] = [
+  {
+    id: "welcome",
+    label: "Welcome",
+    detail: "New signup",
+    ...WELCOME_CREDITS_CELEBRATION,
+  },
+  {
+    id: "plus-monthly",
+    label: "Plus monthly",
+    detail: planPrice("plus_monthly"),
+    ...getPlanCreditsCelebration("plus_monthly"),
+  },
+  {
+    id: "plus-annual",
+    label: "Plus annual",
+    detail: planPrice("plus_annual"),
+    ...getPlanCreditsCelebration("plus_annual"),
+  },
+  {
+    id: "pro-monthly",
+    label: "Pro monthly",
+    detail: planPrice("pro_monthly"),
+    ...getPlanCreditsCelebration("pro_monthly"),
+  },
+  {
+    id: "pro-annual",
+    label: "Pro annual",
+    detail: planPrice("pro_annual"),
+    ...getPlanCreditsCelebration("pro_annual"),
+  },
+  {
+    id: "recharge",
+    label: "Credit recharge",
+    detail: "5,000 one-time credits",
+    ...getRechargeCreditsCelebration(5_000),
+  },
+];
 
 export default function DevPreviewWelcome() {
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(true);
+  const [selectedId, setSelectedId] = useState(previews[0].id);
+  const [confirmationKind, setConfirmationKind] =
+    useState<PaymentConfirmationKind>();
+  const selected = previews.find((preview) => preview.id === selectedId)!;
 
-  useEffect(() => {
-    setOpen(true);
-    const timer = setTimeout(fireConfetti, 200);
-    return () => clearTimeout(timer);
-  }, []);
+  const showPreview = (id: string) => {
+    setOpen(false);
+    setConfirmationKind(undefined);
+    setSelectedId(id);
+    window.setTimeout(() => setOpen(true), 50);
+  };
+
+  const showConfirmation = (kind: PaymentConfirmationKind) => {
+    setOpen(false);
+    setConfirmationKind(kind);
+    window.setTimeout(() => setOpen(true), 50);
+  };
 
   return (
-    <div className="h-screen w-full bg-secondary flex items-center justify-center">
-      <Button
-        onClick={() => {
-          setOpen(true);
-          setTimeout(fireConfetti, 200);
-        }}
-      >
-        Replay
-      </Button>
-      <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent
-          showCloseButton={false}
-          className="max-w-[340px] gap-0 overflow-hidden rounded-[28px] border-none p-0 text-center shadow-2xl sm:max-w-[360px]"
-        >
-          <div className="flex flex-col items-center gap-5 px-8 pb-8 pt-10">
-            <div className="relative flex size-16 items-center justify-center rounded-full bg-gradient-to-b from-primary/15 to-primary/5">
-              <span className="text-[28px] leading-none">🥳</span>
-            </div>
+    <main className="flex min-h-dvh w-full items-center justify-center bg-secondary px-5 py-10">
+      <section className="w-full max-w-2xl">
+        <div className="mb-8 max-w-lg">
+          <p className="text-xs font-medium uppercase tracking-[0.16em] text-muted-foreground">
+            Dev preview
+          </p>
+          <h1 className="mt-2 text-2xl font-semibold tracking-tight">
+            Credit celebrations
+          </h1>
+          <p className="mt-2 text-sm leading-6 text-muted-foreground">
+            Choose a purchase state to review its final copy, credit amount,
+            count-up, and confetti.
+          </p>
+        </div>
 
-            <div className="flex flex-col items-center gap-1.5">
-              <DialogTitle className="text-[15px] font-medium text-muted-foreground">
-                Welcome to Sakhi
-              </DialogTitle>
-              <p className="text-[56px] font-semibold leading-none tracking-tight tabular-nums">
-                {numberFormatter.format(WELCOME_CREDITS)}
-              </p>
-              <DialogDescription className="text-[15px] font-medium text-foreground/80">
-                free credits, on us
-              </DialogDescription>
-            </div>
-
-            <div className="flex w-full flex-col divide-y divide-border/60 rounded-2xl bg-muted/50">
-              <div className="flex items-center gap-3 px-4 py-3">
-                <MessageCircle className="size-4 shrink-0 text-muted-foreground" />
-                <p className="text-left text-[13px] font-medium text-foreground">
-                  Hundreds of everyday chats
-                </p>
-              </div>
-              <div className="flex items-center gap-3 px-4 py-3">
-                <Zap className="size-4 shrink-0 text-muted-foreground" />
-                <p className="text-left text-[13px] font-medium text-foreground">
-                  Dozens of deeper tasks — images, research, automations
-                </p>
-              </div>
-            </div>
-
-            <Button
-              className="h-11 w-full rounded-full text-[15px] font-medium"
-              onClick={() => setOpen(false)}
+        <div className="grid gap-2 sm:grid-cols-2">
+          {previews.map((preview) => (
+            <button
+              key={preview.id}
+              type="button"
+              className="flex items-center justify-between rounded-xl border bg-background px-4 py-3 text-left transition-colors hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+              onClick={() => showPreview(preview.id)}
             >
-              Let&apos;s go
-            </Button>
-          </div>
-        </DialogContent>
+              <span className="text-sm font-medium">{preview.label}</span>
+              <span className="text-xs text-muted-foreground">
+                {preview.detail}
+              </span>
+            </button>
+          ))}
+          <button
+            type="button"
+            className="flex items-center justify-between rounded-xl border bg-background px-4 py-3 text-left transition-colors hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+            onClick={() => showConfirmation("plan")}
+          >
+            <span className="text-sm font-medium">Plan confirmation</span>
+            <span className="text-xs text-muted-foreground">
+              Razorpay pending
+            </span>
+          </button>
+          <button
+            type="button"
+            className="flex items-center justify-between rounded-xl border bg-background px-4 py-3 text-left transition-colors hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+            onClick={() => showConfirmation("recharge")}
+          >
+            <span className="text-sm font-medium">Recharge confirmation</span>
+            <span className="text-xs text-muted-foreground">
+              Razorpay pending
+            </span>
+          </button>
+        </div>
+
+        <Button
+          className="mt-5 rounded-full"
+          onClick={() =>
+            confirmationKind
+              ? showConfirmation(confirmationKind)
+              : showPreview(selectedId)
+          }
+        >
+          Replay{" "}
+          {confirmationKind
+            ? `${confirmationKind} confirmation`
+            : selected.label}
+        </Button>
+      </section>
+
+      <Dialog open={open} onOpenChange={setOpen}>
+        {confirmationKind ? (
+          <PaymentConfirmationModal
+            kind={confirmationKind}
+            onDismiss={() => setOpen(false)}
+          />
+        ) : (
+          <CreditsCelebration
+            key={selected.id}
+            active={open}
+            credits={selected.credits}
+            title={selected.title}
+            planName={selected.planName}
+            creditLabel={selected.creditLabel}
+            description={selected.description}
+            buttonLabel={selected.buttonLabel}
+            onDismiss={() => setOpen(false)}
+          />
+        )}
       </Dialog>
-    </div>
+    </main>
   );
 }

@@ -5,7 +5,7 @@ import {
 } from "@/lib/billing/credits";
 
 describe("credit calculation", () => {
-  it("charges exactly 7 credits for the agreed Sakhi 1 example", () => {
+  it("charges exactly 10 credits for the agreed Sakhi 1 example", () => {
     const result = calculateCredits({
       models: [
         {
@@ -17,7 +17,7 @@ describe("credit calculation", () => {
     });
 
     expect(result.modelCostNanoUsd).toBe(6_538_140);
-    expect(result.credits).toBe(7);
+    expect(result.credits).toBe(10);
   });
 
   it("rounds once after summing every model step", () => {

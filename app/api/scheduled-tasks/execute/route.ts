@@ -4,6 +4,7 @@ import scheduledTaskServerService, {
 } from "@/lib/services/scheduled-task-server-service";
 
 export const dynamic = "force-dynamic";
+export const maxDuration = 900;
 
 export async function POST(req: Request) {
   const bodyText = await req.text();

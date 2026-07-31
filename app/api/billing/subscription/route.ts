@@ -29,6 +29,7 @@ import {
   type BillingPlanId,
 } from "@/lib/billing/config";
 import { verifyFirebaseIdToken } from "@/lib/firebase-auth-server";
+import { billingOperationalErrorResponse } from "@/lib/billing/error-response";
 
 export const dynamic = "force-dynamic";
 
@@ -90,16 +91,7 @@ export async function POST(request: Request) {
     }
   } catch (error) {
     console.error("Billing subscription request failed:", error);
-    const message =
-      error instanceof Error ? error.message : "Billing request failed";
-    const status =
-      message.includes("not configured") ||
-      message.includes("credentials")
-        ? 503
-        : message.includes("already exists")
-          ? 409
-          : 500;
-    return Response.json({ error: message }, { status });
+    return billingOperationalErrorResponse(error, "Billing request failed");
   }
 }
 

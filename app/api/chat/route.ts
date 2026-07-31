@@ -10,6 +10,7 @@ import { Geo, geolocation } from "@vercel/functions";
 import { z } from "zod";
 import {
   DEFAULT_IMAGE_ANALYSIS_MODEL_ID,
+  getDefaultModel,
   getModelById,
 } from "@/lib/available-models";
 import { getComposioSessionTools, isComposioConfigured } from "@/lib/composio";
@@ -26,7 +27,6 @@ import scheduledTaskServerService from "@/lib/services/scheduled-task-server-ser
 import {
   addUserMemory,
   deleteUserMemory,
-  getUserInfoFromFirestore,
   updateUserMemory,
 } from "@/lib/user-memories-admin";
 import { createPromptLink } from "@/lib/prompt-links-admin";
@@ -38,11 +38,12 @@ import {
   calculateMeteredToolCostNanoUsd,
   usageFromAiSdk,
   type BillableModelUsage,
+  type CreditCalculation,
 } from "@/lib/billing/credits";
 import {
   BillingAccessError,
   checkTaskAccess,
-  recordAndDeductUsage,
+  deductCredits,
 } from "@/lib/billing/server";
 
 export async function POST(req: Request) {
@@ -54,7 +55,6 @@ export async function POST(req: Request) {
     authToken,
     threadId,
     hasMcpServers,
-    usageId,
   } = await req.json();
   latency.step("parse body", { threadId, modelId, hasMcpServers });
 
@@ -63,7 +63,16 @@ export async function POST(req: Request) {
   latency.step("model lookup");
 
   if (!model) {
-    return new Response("Invalid model ID", { status: 400 });
+    const fallbackModel = getDefaultModel();
+    return Response.json(
+      {
+        error: "The selected model is no longer available.",
+        code: "INVALID_MODEL",
+        fallbackModelId: fallbackModel.id,
+        fallbackModelName: fallbackModel.name,
+      },
+      { status: 400 },
+    );
   }
 
   console.log("using model: ", model.id);
@@ -75,13 +84,64 @@ export async function POST(req: Request) {
     return new Response("Unauthorized", { status: 401 });
   }
 
+  const parallelStart = performance.now();
+  console.log("chat parallel fetches started", {
+    threadId,
+    fetches: ["billing/user", "helpers", "mcp firestore"],
+  });
+  const availableHelpersPromise = (async () => {
+    const start = performance.now();
+    try {
+      const helpers =
+        await helperServerService.getAvailableHelpers(verifiedUserId);
+      console.log(
+        `helpers firestore: +${Math.round(performance.now() - start)}ms (${Math.round(performance.now() - parallelStart)}ms since parallel start)`,
+      );
+      return helpers;
+    } catch (error) {
+      console.error("helpers fetch failed:", error);
+      return [] as Helper[];
+    }
+  })();
+  const mcpServersResultPromise = (async () => {
+    // Frontend already knows the MCP list; skip Firestore when empty.
+    if (hasMcpServers === false) {
+      console.log("mcp skipped: frontend reported no MCP servers");
+      return { mcpServers: undefined } as const;
+    }
+    if (hasMcpServers !== true) {
+      console.log(
+        `mcp fetch: hasMcpServers=${String(hasMcpServers)} (frontend did not confirm; fetching)`,
+      );
+    }
+
+    try {
+      const start = performance.now();
+      const mcpServers = await getUserMcpServersFromFirestore({
+        userId: verifiedUserId,
+      });
+      console.log(
+        `mcp firestore: +${Math.round(performance.now() - start)}ms (${Math.round(performance.now() - parallelStart)}ms since parallel start)`,
+      );
+      return { mcpServers } as const;
+    } catch (error) {
+      return { error } as const;
+    }
+  })();
+
   let availableCredits: number;
+  let resolvedUserInfo: Partial<IUser>;
+  const billingStart = performance.now();
   try {
     const access = await checkTaskAccess({
       userId: verifiedUserId,
       modelId: model.id,
     });
     availableCredits = access.availableCredits;
+    resolvedUserInfo = (access.userData as Partial<IUser> | undefined) ?? {};
+    console.log(
+      `billing/user firestore: +${Math.round(performance.now() - billingStart)}ms (${Math.round(performance.now() - parallelStart)}ms since parallel start)`,
+    );
   } catch (error) {
     if (error instanceof BillingAccessError) {
       return Response.json(
@@ -91,26 +151,16 @@ export async function POST(req: Request) {
     }
     throw error;
   }
+  latency.step("billing access");
 
-  const resolvedUsageId = resolveChatUsageId(usageId, messages, threadId);
-  const parallelStart = performance.now();
-  const userInfoPromise = (async () => {
-    const start = performance.now();
-    const info = await getUserInfoFromFirestore(verifiedUserId);
-    console.log(
-      `user firestore: +${Math.round(performance.now() - start)}ms (${Math.round(performance.now() - parallelStart)}ms since parallel start)`,
-    );
-    return info;
-  })();
-  const [composioTools, mcpContext, userInfo, availableHelpers] = await Promise.all([
+  const [composioTools, mcpContext, availableHelpers] = await Promise.all([
     (async () => {
       const start = performance.now();
-      const info = await userInfoPromise;
       const tools = await getComposioTools(
         verifiedUserId,
         getBaseUrl(req),
         threadId,
-        info?.composioSessionId,
+        resolvedUserInfo.composioSessionId,
       );
       console.log(
         `composio tools: +${Math.round(performance.now() - start)}ms (${Math.round(performance.now() - parallelStart)}ms since parallel start)`,
@@ -118,43 +168,35 @@ export async function POST(req: Request) {
       return tools;
     })(),
     (async () => {
-      // Frontend already knows the MCP list; skip Firestore + client setup when empty.
-      if (hasMcpServers === false) {
-        console.log("mcp skipped: frontend reported no MCP servers");
+      const mcpServersResult = await mcpServersResultPromise;
+      if ("error" in mcpServersResult) {
+        throw mcpServersResult.error;
+      }
+      if (!mcpServersResult.mcpServers) {
         return undefined;
       }
-      if (hasMcpServers !== true) {
-        console.log(
-          `mcp fetch: hasMcpServers=${String(hasMcpServers)} (frontend did not confirm; fetching)`,
-        );
-      }
-      const start = performance.now();
-      const mcpServers = await getUserMcpServersFromFirestore({
-        userId: verifiedUserId,
-      });
-      console.log(
-        `mcp firestore: +${Math.round(performance.now() - start)}ms (${Math.round(performance.now() - parallelStart)}ms since parallel start)`,
-      );
+
       const ctxStart = performance.now();
-      const ctx = await createMcpToolContext(verifiedUserId, mcpServers);
+      const ctx = await createMcpToolContext(
+        verifiedUserId,
+        mcpServersResult.mcpServers,
+      );
       console.log(
         `mcp clients: +${Math.round(performance.now() - ctxStart)}ms (${Math.round(performance.now() - parallelStart)}ms since parallel start)`,
       );
       return ctx;
     })(),
-    userInfoPromise,
-    helperServerService.getAvailableHelpers(verifiedUserId).catch((error) => {
-      console.error("helpers fetch failed:", error);
-      return [] as Helper[];
-    }),
+    availableHelpersPromise,
   ]);
-  latency.step("parallel tools (composio + mcp + user)", {
+  latency.step("parallel tools (billing + helpers + composio + mcp)", {
     composioToolCount: composioTools ? Object.keys(composioTools).length : 0,
     mcpToolCount: mcpContext?.tools ? Object.keys(mcpContext.tools).length : 0,
     mcpServerCount: mcpContext?.servers?.length ?? 0,
   });
+  console.log(
+    `parallel complete: ${Math.round(performance.now() - parallelStart)}ms`,
+  );
 
-  const resolvedUserInfo: Partial<IUser> = userInfo ?? {};
   console.log("chat userInfo:", {
     threadId,
     hasName: Boolean(resolvedUserInfo.name),
@@ -198,24 +240,27 @@ export async function POST(req: Request) {
   const completedStepUsages: BillableModelUsage[] = [];
   let meteredToolCostNanoUsd = 0;
   let billingFinalized = false;
-  const recordUsage = async (models: BillableModelUsage[]) => {
+  let finalCreditCalculation: CreditCalculation | undefined;
+  let creditLimitReached = false;
+  const calculateChatCredits = (models: BillableModelUsage[]) =>
+    calculateCredits({
+      models,
+      toolCostNanoUsd: meteredToolCostNanoUsd,
+    });
+  const deductUsage = async (models: BillableModelUsage[]) => {
     if (billingFinalized || models.length === 0) return;
     billingFinalized = true;
 
     try {
-      const calculation = calculateCredits({
-        models,
-        toolCostNanoUsd: meteredToolCostNanoUsd,
-      });
-      await recordAndDeductUsage({
+      const calculation = calculateChatCredits(models);
+      finalCreditCalculation = calculation;
+      await deductCredits({
         userId: verifiedUserId,
-        usageId: resolvedUsageId,
-        type: "chat",
         calculation,
       });
     } catch (error) {
-      console.error("Failed to record chat credit usage:", {
-        usageId: resolvedUsageId,
+      console.error("Failed to deduct chat credits:", {
+        threadId,
         error,
       });
     }
@@ -269,8 +314,9 @@ export async function POST(req: Request) {
     messages: modelMessages,
     stopWhen: [
       stepCountIs(100),
-      ({ steps }) =>
-        calculateCredits({
+      ({ steps }) => {
+        const reached =
+          calculateCredits({
           models: appendImageAnalysisUsage(
             steps.map((step) => usageFromAiSdk(model.id, step.usage)),
           ),
@@ -279,7 +325,12 @@ export async function POST(req: Request) {
               step.toolCalls.map((toolCall) => toolCall.toolName),
             ),
           ),
-        }).credits >= availableCredits,
+        }).credits >= availableCredits;
+        if (reached) {
+          creditLimitReached = true;
+        }
+        return reached;
+      },
     ],
     ...getProviderOptions(model.id, verifiedUserId),
     onStepFinish: ({ usage, toolCalls }) => {
@@ -288,18 +339,25 @@ export async function POST(req: Request) {
         toolCalls.map((toolCall) => toolCall.toolName),
       );
     },
-    onError: async (error) => {
-      console.log("error: ", error);
+    onError: async ({ error }) => {
+      console.error("streamText error", {
+        threadId,
+        modelId: model.id,
+        elapsedMs: Math.round(performance.now() - latency.start),
+        completedSteps: completedStepUsages.length,
+        imageAnalysisCalls: imageAnalysisUsage.calls,
+        error: serializeStreamError(error),
+      });
       await closeMcpClientsOnce();
     },
     onAbort: async () => {
       if (hasBillableUsage(completedStepUsages, imageAnalysisUsage)) {
-        await recordUsage(appendImageAnalysisUsage(completedStepUsages));
+        await deductUsage(appendImageAnalysisUsage(completedStepUsages));
       }
       await closeMcpClientsOnce();
     },
     onFinish: async ({ totalUsage }) => {
-      await recordUsage(
+      await deductUsage(
         appendImageAnalysisUsage([
           usageFromAiSdk(model.id, totalUsage),
         ]),
@@ -322,11 +380,23 @@ export async function POST(req: Request) {
       const outputTokens = part.totalUsage.outputTokens ?? 0;
       const totalInputTokens = inputTokens + imageAnalysisUsage.inputTokens;
       const totalOutputTokens = outputTokens + imageAnalysisUsage.outputTokens;
+      const calculation =
+        finalCreditCalculation ??
+        calculateChatCredits(
+          appendImageAnalysisUsage([
+            usageFromAiSdk(model.id, part.totalUsage),
+          ]),
+        );
 
       return {
         inputTokens: totalInputTokens,
         outputTokens: totalOutputTokens,
         totalTokens: totalInputTokens + totalOutputTokens,
+        creditsUsed: calculation.credits,
+        creditLimitReached,
+        creditLimitNotice: creditLimitReached
+          ? "response_stopped"
+          : undefined,
         requestedModel: model.id,
         effectiveModel: model.id,
         imageFallbackUsed: false,
@@ -364,38 +434,6 @@ export async function POST(req: Request) {
     status: response.status,
     headers: response.headers,
   });
-}
-
-function resolveChatUsageId(
-  provided: unknown,
-  messages: unknown,
-  threadId: unknown,
-) {
-  if (
-    typeof provided === "string" &&
-    /^[A-Za-z0-9:_-]{1,180}$/.test(provided)
-  ) {
-    return provided.startsWith("chat_") ? provided : `chat_${provided}`;
-  }
-
-  if (Array.isArray(messages)) {
-    const latest = messages.at(-1);
-    if (latest && typeof latest === "object") {
-      const messageId = (latest as { id?: unknown }).id;
-      if (
-        typeof messageId === "string" &&
-        /^[A-Za-z0-9:_-]{1,180}$/.test(messageId)
-      ) {
-        return `chat_${messageId}`;
-      }
-    }
-  }
-
-  const safeThread =
-    typeof threadId === "string"
-      ? threadId.replace(/[^A-Za-z0-9_-]/g, "").slice(0, 80)
-      : "unknown";
-  return `chat_${safeThread}_${crypto.randomUUID()}`;
 }
 
 function hasBillableUsage(
@@ -1094,3 +1132,61 @@ const createLatencyLogger = () => {
     start,
   };
 };
+
+const serializeStreamError = (
+  error: unknown,
+  depth = 0,
+): Record<string, unknown> => {
+  if (depth >= 3) {
+    return { value: "[nested error omitted]" };
+  }
+  if (error === null || error === undefined) {
+    return { value: String(error) };
+  }
+  if (typeof error !== "object") {
+    return { value: String(error) };
+  }
+
+  const value = error as Record<string, unknown>;
+  const serialized: Record<string, unknown> = {};
+  const name = error instanceof Error ? error.name : value.name;
+  const message = error instanceof Error ? error.message : value.message;
+  const stack = error instanceof Error ? error.stack : value.stack;
+
+  if (typeof name === "string") serialized.name = name;
+  if (typeof message === "string") serialized.message = message;
+  if (typeof stack === "string") serialized.stack = stack;
+  if (typeof value.statusCode === "number") {
+    serialized.statusCode = value.statusCode;
+  }
+  if (typeof value.isRetryable === "boolean") {
+    serialized.isRetryable = value.isRetryable;
+  }
+  if (typeof value.url === "string") {
+    serialized.url = stripUrlQuery(value.url);
+  }
+  if (typeof value.responseBody === "string") {
+    serialized.responseBody = truncateLogValue(value.responseBody);
+  }
+  if ("cause" in value && value.cause !== undefined) {
+    serialized.cause = serializeStreamError(value.cause, depth + 1);
+  }
+
+  return Object.keys(serialized).length > 0
+    ? serialized
+    : { value: Object.prototype.toString.call(error) };
+};
+
+const stripUrlQuery = (value: string) => {
+  try {
+    const url = new URL(value);
+    return `${url.origin}${url.pathname}`;
+  } catch {
+    return value.split(/[?#]/, 1)[0];
+  }
+};
+
+const truncateLogValue = (value: string, maxLength = 4_000) =>
+  value.length <= maxLength
+    ? value
+    : `${value.slice(0, maxLength)}… [truncated ${value.length - maxLength} chars]`;

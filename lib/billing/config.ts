@@ -3,7 +3,7 @@ import type { AIModel } from "@/lib/available-models";
 export const BILLING_TIMEZONE = "Asia/Kolkata";
 export const CREDIT_FORMULA_VERSION = 1;
 export const MODEL_RATE_VERSION = 1;
-export const CREDIT_MULTIPLIER = 1;
+export const CREDIT_MULTIPLIER = 1.5;
 export const WELCOME_CREDITS = 1_000;
 
 export const CREDIT_RECHARGE = {

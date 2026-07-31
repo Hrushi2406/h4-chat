@@ -1,4 +1,5 @@
 import { getCurrentBilling, toBillingSummary } from "@/lib/billing/server";
+import { billingOperationalErrorResponse } from "@/lib/billing/error-response";
 import { verifyFirebaseIdToken } from "@/lib/firebase-auth-server";
 
 export const dynamic = "force-dynamic";
@@ -26,14 +27,9 @@ export async function GET(request: Request) {
     );
   } catch (error) {
     console.error("Billing summary failed:", error);
-    return Response.json(
-      {
-        error:
-          error instanceof Error
-            ? error.message
-            : "Unable to load billing information",
-      },
-      { status: 500 },
+    return billingOperationalErrorResponse(
+      error,
+      "Unable to load billing information",
     );
   }
 }

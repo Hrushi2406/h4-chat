@@ -22,6 +22,31 @@ const getParts = (date: Date) => {
   };
 };
 
+const atIndiaMidnight = (year: number, month: number, day: number) =>
+  new Date(Date.UTC(year, month - 1, day, -5, -30, 0, 0));
+
+const shiftMonth = (year: number, month: number, offset: number) => {
+  const monthIndex = year * 12 + month - 1 + offset;
+  return {
+    year: Math.floor(monthIndex / 12),
+    month: (monthIndex % 12) + 1,
+  };
+};
+
+const daysInMonth = (year: number, month: number) =>
+  new Date(Date.UTC(year, month, 0)).getUTCDate();
+
+const anniversaryInMonth = (
+  year: number,
+  month: number,
+  anchorDay: number,
+) =>
+  atIndiaMidnight(
+    year,
+    month,
+    Math.min(anchorDay, daysInMonth(year, month)),
+  );
+
 export const getBillingDateKeys = (date = new Date()) => {
   const { year, month, day } = getParts(date);
   const yyyy = String(year).padStart(4, "0");
@@ -56,6 +81,71 @@ export const getNextMonthStartInIndia = (date = new Date()) => {
 export const getCurrentMonthStartInIndia = (date = new Date()) => {
   const { year, month } = getParts(date);
   return new Date(Date.UTC(year, month - 1, 1, -5, -30, 0, 0));
+};
+
+export const getMonthlyCreditCycleInIndia = ({
+  date = new Date(),
+  anchor,
+}: {
+  date?: Date;
+  anchor: Date | number;
+}) => {
+  const current = getParts(date);
+  const anchorDay = typeof anchor === "number" ? anchor : getParts(anchor).day;
+  let cycleMonth = {
+    year: current.year,
+    month: current.month,
+  };
+  let periodStart = anniversaryInMonth(
+    cycleMonth.year,
+    cycleMonth.month,
+    anchorDay,
+  );
+
+  if (periodStart.getTime() > date.getTime()) {
+    cycleMonth = shiftMonth(cycleMonth.year, cycleMonth.month, -1);
+    periodStart = anniversaryInMonth(
+      cycleMonth.year,
+      cycleMonth.month,
+      anchorDay,
+    );
+  }
+
+  const nextMonth = shiftMonth(cycleMonth.year, cycleMonth.month, 1);
+  return {
+    periodStart,
+    nextRefreshAt: anniversaryInMonth(
+      nextMonth.year,
+      nextMonth.month,
+      anchorDay,
+    ),
+  };
+};
+
+export const addOneCalendarMonthInIndia = (date: Date) => {
+  const current = getParts(date);
+  const nextMonth = shiftMonth(current.year, current.month, 1);
+  return anniversaryInMonth(nextMonth.year, nextMonth.month, current.day);
+};
+
+export const getMonthlyAnniversaryOnOrAfterInIndia = ({
+  date,
+  anchor,
+}: {
+  date: Date;
+  anchor: Date | number;
+}) => {
+  const current = getParts(date);
+  const anchorDay = typeof anchor === "number" ? anchor : getParts(anchor).day;
+  const candidate = anniversaryInMonth(
+    current.year,
+    current.month,
+    anchorDay,
+  );
+  if (candidate.getTime() >= date.getTime()) return candidate;
+
+  const nextMonth = shiftMonth(current.year, current.month, 1);
+  return anniversaryInMonth(nextMonth.year, nextMonth.month, anchorDay);
 };
 
 export const asDate = (value: unknown): Date | null => {

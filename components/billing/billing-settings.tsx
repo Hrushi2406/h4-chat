@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { useState } from "react";
 import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
@@ -8,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import ConfirmationDialog from "@/components/ui/confirmation-dialog";
 import { useBilling, useBillingActions } from "@/lib/hooks/billing/use-billing";
 import { BILLING_PLANS } from "@/lib/billing/config";
+import { PricingLink } from "@/components/billing/pricing-link";
 import { cn } from "@/lib/utils";
 
 const dateFormatter = new Intl.DateTimeFormat("en-IN", {
@@ -120,12 +120,12 @@ export function BillingSettings() {
             variant="secondary"
             className="h-10 w-full rounded-full border"
           >
-            <Link href="/pricing#recharge">Buy more credits</Link>
+            <PricingLink section="recharge">Buy more credits</PricingLink>
           </Button>
           <Button asChild className="h-10 w-full rounded-full shadow-sm">
-            <Link href="/pricing">
+            <PricingLink>
               {isFree ? "Choose a plan" : "Change plan"}
-            </Link>
+            </PricingLink>
           </Button>
         </div>
 
@@ -181,7 +181,7 @@ export function BillingSettings() {
               value={formatDate(summary.paidThrough)}
             />
             <Row
-              label="Credit renews on"
+              label="Credits reset on"
               value={formatDate(summary.nextRefreshAt)}
             />
           </div>

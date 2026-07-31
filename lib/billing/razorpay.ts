@@ -14,6 +14,12 @@ import {
 } from "@/lib/billing/config";
 
 const RAZORPAY_API_BASE = "https://api.razorpay.com/v1";
+const RAZORPAY_REQUEST_TIMEOUT_MS = 10_000;
+const RAZORPAY_READ_MAX_ATTEMPTS = 3;
+const RAZORPAY_RETRY_BASE_DELAY_MS = 200;
+const RAZORPAY_RETRYABLE_STATUSES = new Set([
+  408, 425, 429, 500, 502, 503, 504,
+]);
 
 export type RazorpaySubscription = {
   id: string;
@@ -123,6 +129,21 @@ export class RazorpayConfigurationError extends Error {
   }
 }
 
+export class RazorpayRequestError extends Error {
+  readonly status?: number;
+  readonly timedOut: boolean;
+
+  constructor(
+    message: string,
+    { status, timedOut = false }: { status?: number; timedOut?: boolean } = {},
+  ) {
+    super(message);
+    this.name = "RazorpayRequestError";
+    this.status = status;
+    this.timedOut = timedOut;
+  }
+}
+
 const getCredentials = () => {
   const keyId = process.env.RAZORPAY_KEY_ID?.trim();
   const keySecret = process.env.RAZORPAY_KEY_SECRET?.trim();
@@ -160,33 +181,89 @@ const razorpayRequest = async <T>(
   init: RequestInit = {},
 ): Promise<T> => {
   const { keyId, keySecret } = getCredentials();
-  const response = await fetch(`${RAZORPAY_API_BASE}${path}`, {
-    ...init,
-    headers: {
-      Authorization: `Basic ${Buffer.from(`${keyId}:${keySecret}`).toString("base64")}`,
-      "Content-Type": "application/json",
-      ...init.headers,
-    },
-    cache: "no-store",
-  });
+  const method = (init.method ?? "GET").toUpperCase();
+  // Retrying reads is safe. Mutations are deliberately attempted once because
+  // a timeout can happen after Razorpay has already applied the operation.
+  const maxAttempts =
+    method === "GET" || method === "HEAD"
+      ? RAZORPAY_READ_MAX_ATTEMPTS
+      : 1;
 
-  const body = (await response.json().catch(() => undefined)) as
-    | { error?: { description?: string; reason?: string } }
-    | T
-    | undefined;
-  if (!response.ok) {
-    const errorBody = body as
-      | { error?: { description?: string; reason?: string } }
-      | undefined;
-    throw new Error(
-      errorBody?.error?.description ||
-        errorBody?.error?.reason ||
-        `Razorpay request failed with ${response.status}`,
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    if (init.signal?.aborted) {
+      throw init.signal.reason ?? new Error("Razorpay request was aborted");
+    }
+    const controller = new AbortController();
+    const timeout = setTimeout(
+      () => controller.abort(),
+      RAZORPAY_REQUEST_TIMEOUT_MS,
     );
+    const abortFromCaller = () => controller.abort();
+    init.signal?.addEventListener("abort", abortFromCaller, { once: true });
+
+    try {
+      const response = await fetch(`${RAZORPAY_API_BASE}${path}`, {
+        ...init,
+        headers: {
+          Authorization: `Basic ${Buffer.from(`${keyId}:${keySecret}`).toString("base64")}`,
+          "Content-Type": "application/json",
+          ...init.headers,
+        },
+        cache: "no-store",
+        signal: controller.signal,
+      });
+
+      const body = (await response.json().catch(() => undefined)) as
+        | { error?: { description?: string; reason?: string } }
+        | T
+        | undefined;
+      if (response.ok) return body as T;
+
+      if (
+        attempt < maxAttempts &&
+        RAZORPAY_RETRYABLE_STATUSES.has(response.status)
+      ) {
+        await retryDelay(attempt);
+        continue;
+      }
+
+      const errorBody = body as
+        | { error?: { description?: string; reason?: string } }
+        | undefined;
+      throw new RazorpayRequestError(
+        errorBody?.error?.description ||
+          errorBody?.error?.reason ||
+          `Razorpay request failed with ${response.status}`,
+        { status: response.status },
+      );
+    } catch (error) {
+      if (error instanceof RazorpayRequestError) throw error;
+      if (init.signal?.aborted) throw error;
+
+      const timedOut = controller.signal.aborted;
+      if (attempt < maxAttempts) {
+        await retryDelay(attempt);
+        continue;
+      }
+      throw new RazorpayRequestError(
+        timedOut
+          ? "Razorpay request timed out"
+          : "Razorpay request could not be completed",
+        { timedOut },
+      );
+    } finally {
+      clearTimeout(timeout);
+      init.signal?.removeEventListener("abort", abortFromCaller);
+    }
   }
 
-  return body as T;
+  throw new RazorpayRequestError("Razorpay request could not be completed");
 };
+
+const retryDelay = (attempt: number) =>
+  new Promise<void>((resolve) => {
+    setTimeout(resolve, RAZORPAY_RETRY_BASE_DELAY_MS * 2 ** (attempt - 1));
+  });
 
 export const createRazorpaySubscription = async ({
   userId,

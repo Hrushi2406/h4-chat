@@ -702,7 +702,6 @@ function HelperEditor({
         body: JSON.stringify({
           description: idea.trim(),
           authToken,
-          generationId: crypto.randomUUID(),
         }),
       });
       const payload = (await response.json()) as {

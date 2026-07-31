@@ -18,21 +18,19 @@ import {
   isModelAllowedForPlan,
   type BillingPlanId,
 } from "@/lib/billing/config";
+export { toBillingSummary } from "@/lib/billing/summary";
 import type { CreditCalculation } from "@/lib/billing/credits";
 import {
+  addOneCalendarMonthInIndia,
   asDate,
   getBillingDateKeys,
-  getCurrentMonthStartInIndia,
-  getFirstDayLedgerKeys,
-  getNextMonthStartInIndia,
+  getMonthlyAnniversaryOnOrAfterInIndia,
+  getMonthlyCreditCycleInIndia,
 } from "@/lib/billing/time";
 import type {
   BillingSubscriptionStatus,
-  BillingSummary,
-  CreditConsumptionEntry,
   CreditGrantEntry,
   CreditLedgerEntry,
-  CreditUsageType,
   DailyCreditUsage,
   UserBilling,
 } from "@/lib/billing/types";
@@ -429,8 +427,21 @@ const isPaidAccessValid = (billing: UserBilling, now: Date) => {
   return Boolean(paidThrough && paidThrough.getTime() > now.getTime());
 };
 
-const getPeriodKey = (planId: BillingPlanId, monthKey: string) =>
-  `${planId}:${monthKey}`;
+const getPeriodKey = (
+  subscriptionId: string,
+  planId: BillingPlanId,
+  anchorDay: number,
+  periodDateKey: string,
+) => `${subscriptionId}:${planId}:${anchorDay}:${periodDateKey}`;
+
+const isLegacyPeriodKey = (periodKey: string | null) =>
+  Boolean(periodKey && /^[^:]+:\d{4}-\d{2}$/.test(periodKey));
+
+const getPeriodAnchorDay = (periodKey: string | null) => {
+  const match = periodKey?.match(/^[^:]+:[^:]+:(\d{1,2}):\d{4}-\d{2}-\d{2}$/);
+  const day = Number(match?.[1]);
+  return Number.isInteger(day) && day >= 1 && day <= 31 ? day : null;
+};
 
 const applyExpiredPaidAccess = async (
   userId: string,
@@ -477,7 +488,7 @@ export const refreshCreditsForUser = async (
 ) => {
   const db = getDb();
   const ref = db.collection(USERS_COLLECTION).doc(userId);
-  const keys = getFirstDayLedgerKeys(now);
+  const keys = getBillingDateKeys(now);
   const ledgerRef = ref
     .collection(CREDIT_USAGE_COLLECTION)
     .doc(keys.documentId);
@@ -503,14 +514,56 @@ export const refreshCreditsForUser = async (
     }
 
     const plan = BILLING_PLANS[billing.planId];
-    const periodKey = getPeriodKey(billing.planId, keys.monthKey);
+    const refreshDueAt = asDate(billing.credits.nextRefreshAt) ?? now;
+    const providerAnchor =
+      asDate(billing.nextPaymentAt) ??
+      asDate(billing.paidThrough) ??
+      refreshDueAt;
+    const anchorDay =
+      getPeriodAnchorDay(billing.credits.periodKey) ??
+      Number(getBillingDateKeys(providerAnchor).dateKey.slice(-2));
+    const legacyPeriod = isLegacyPeriodKey(billing.credits.periodKey);
+    const cycle = getMonthlyCreditCycleInIndia({
+      date: now,
+      anchor: anchorDay,
+    });
+    const effectiveAt = legacyPeriod ? refreshDueAt : cycle.periodStart;
+    const periodKey = getPeriodKey(
+      billing.razorpaySubscriptionId ?? billing.planId,
+      billing.planId,
+      anchorDay,
+      getBillingDateKeys(effectiveAt).dateKey,
+    );
+    const nextRefreshAt = legacyPeriod
+      ? getMonthlyAnniversaryOnOrAfterInIndia({
+          date: addOneCalendarMonthInIndia(refreshDueAt),
+          anchor: anchorDay,
+        })
+      : cycle.nextRefreshAt;
+
     if (billing.credits.periodKey === periodKey) {
-      return { refreshed: false, billing };
+      const currentNextRefreshAt = asDate(billing.credits.nextRefreshAt);
+      if (
+        currentNextRefreshAt &&
+        currentNextRefreshAt.getTime() === nextRefreshAt.getTime()
+      ) {
+        return { refreshed: false, billing };
+      }
+      const updated: UserBilling = {
+        ...billing,
+        credits: {
+          ...billing.credits,
+          nextRefreshAt: Timestamp.fromDate(nextRefreshAt),
+        },
+        updatedAt: Timestamp.fromDate(now),
+      };
+      transaction.update(ref, { billing: updated });
+      return { refreshed: false, billing: updated };
     }
 
     const creditsExpired = billing.credits.paidAvailable;
     const creditsGranted = plan.monthlyCredits;
-    const entryId = `credit_refresh_${keys.monthKey}`;
+    const entryId = `credit_refresh_${periodKey}`;
     const existingUsage = normalizeUsageArray(ledgerSnapshot.data()?.usage);
     const updated: UserBilling = {
       ...billing,
@@ -518,7 +571,7 @@ export const refreshCreditsForUser = async (
         ...billing.credits,
         paidAvailable: creditsGranted,
         periodKey,
-        nextRefreshAt: Timestamp.fromDate(getNextMonthStartInIndia(now)),
+        nextRefreshAt: Timestamp.fromDate(nextRefreshAt),
       },
       updatedAt: Timestamp.fromDate(now),
     };
@@ -532,7 +585,7 @@ export const refreshCreditsForUser = async (
         creditsExpired,
         netCreditChange: creditsGranted - creditsExpired,
         planId: billing.planId,
-        effectiveAt: Timestamp.fromDate(getCurrentMonthStartInIndia(now)),
+        effectiveAt: Timestamp.fromDate(effectiveAt),
         processedAt: Timestamp.fromDate(now),
       };
       transaction.set(
@@ -551,11 +604,12 @@ export const refreshCreditsForUser = async (
   });
 };
 
-export const getCurrentBilling = async (
+const getCurrentBillingContext = async (
   userId: string,
   now = new Date(),
 ) => {
   let snapshot = await userRef(userId).get();
+  const userData = snapshot.data();
   const rawBilling = snapshot.data()?.billing;
   if (
     rawBilling &&
@@ -581,8 +635,13 @@ export const getCurrentBilling = async (
     billing = (await refreshCreditsForUser(userId, now)).billing;
   }
 
-  return billing;
+  return { billing, userData };
 };
+
+export const getCurrentBilling = async (
+  userId: string,
+  now = new Date(),
+) => (await getCurrentBillingContext(userId, now)).billing;
 
 export const checkTaskAccess = async ({
   userId,
@@ -595,7 +654,7 @@ export const checkTaskAccess = async ({
   enforceModelAccess?: boolean;
   now?: Date;
 }) => {
-  const billing = await getCurrentBilling(userId, now);
+  const { billing, userData } = await getCurrentBillingContext(userId, now);
   const model = getModelById(modelId);
 
   if (!model || !MODEL_RATES[modelId]) {
@@ -636,40 +695,24 @@ export const checkTaskAccess = async ({
     billing,
     plan: BILLING_PLANS[billing.planId],
     availableCredits: available,
+    userData,
   };
 };
 
-export const recordAndDeductUsage = async ({
+export const deductCredits = async ({
   userId,
-  usageId,
-  type,
   calculation,
   now = new Date(),
 }: {
   userId: string;
-  usageId: string;
-  type: CreditUsageType;
   calculation: CreditCalculation;
   now?: Date;
 }) => {
   const db = getDb();
-  const keys = getBillingDateKeys(now);
   const ref = db.collection(USERS_COLLECTION).doc(userId);
-  const ledgerRef = ref
-    .collection(CREDIT_USAGE_COLLECTION)
-    .doc(keys.documentId);
 
   return db.runTransaction(async (transaction) => {
-    const [userSnapshot, ledgerSnapshot] = await Promise.all([
-      transaction.get(ref),
-      transaction.get(ledgerRef),
-    ]);
-    const existingUsage = normalizeUsageArray(ledgerSnapshot.data()?.usage);
-    if (hasLedgerEntry(existingUsage, usageId)) {
-      const billing = normalizeBilling(userSnapshot.data()?.billing, now);
-      return { duplicate: true, billing };
-    }
-
+    const userSnapshot = await transaction.get(ref);
     const billing = normalizeBilling(userSnapshot.data()?.billing, now);
     let remaining = calculation.credits;
     const paidDeduction = Math.min(
@@ -699,32 +742,10 @@ export const recordAndDeductUsage = async ({
       },
       updatedAt: Timestamp.fromDate(now),
     };
-    const entry: CreditConsumptionEntry = {
-      id: usageId,
-      type,
-      creditsConsumed: calculation.credits,
-      modelCostNanoUsd: calculation.modelCostNanoUsd,
-      toolCostNanoUsd: calculation.toolCostNanoUsd,
-      creditMultiplier: calculation.creditMultiplier,
-      formulaVersion: calculation.formulaVersion,
-      rateVersion: calculation.rateVersion,
-      createdAt: Timestamp.fromDate(now),
-    };
 
     transaction.update(ref, { billing: updated });
-    transaction.set(
-      ledgerRef,
-      buildDailyUsage({
-        existing: ledgerSnapshot.data(),
-        documentId: keys.documentId,
-        dateKey: keys.dateKey,
-        entry,
-        now,
-      }),
-    );
 
     return {
-      duplicate: false,
       billing: updated,
       deductedCredits:
         paidDeduction + permanentDeduction + rechargeDeduction,
@@ -1002,14 +1023,45 @@ export const activatePaidPlan = async ({
       throw new Error("Subscription does not belong to this billing account");
     }
     const plan = BILLING_PLANS[planId];
-    const periodKey = getPeriodKey(planId, keys.monthKey);
-    const shouldGrant = billing.credits.periodKey !== periodKey;
+    const isContinuingSubscription =
+      billing.planId !== "free" &&
+      billing.razorpaySubscriptionId === subscriptionId;
+    const fallbackAnchor = isContinuingSubscription
+      ? nextPaymentAt ?? paidThrough
+      : now;
+    const anchorDay =
+      (isContinuingSubscription
+        ? getPeriodAnchorDay(billing.credits.periodKey)
+        : null) ??
+      Number(getBillingDateKeys(fallbackAnchor).dateKey.slice(-2));
+    const cycle = getMonthlyCreditCycleInIndia({
+      date: now,
+      anchor: anchorDay,
+    });
+    const periodKey = getPeriodKey(
+      subscriptionId,
+      planId,
+      anchorDay,
+      getBillingDateKeys(cycle.periodStart).dateKey,
+    );
+    const legacyCurrentMonthKey = `${planId}:${keys.monthKey}`;
+    const nextRefreshAt = asDate(billing.credits.nextRefreshAt);
+    const hasTransitionalCreditsForCycle =
+      billing.planId === planId &&
+      billing.razorpaySubscriptionId === subscriptionId &&
+      nextRefreshAt !== null &&
+      nextRefreshAt.getTime() > cycle.periodStart.getTime();
+    const isCurrentPeriod =
+      billing.credits.periodKey === periodKey ||
+      billing.credits.periodKey === legacyCurrentMonthKey ||
+      hasTransitionalCreditsForCycle;
+    const shouldGrant = !isCurrentPeriod;
     const entryId =
       `paid_activation_${subscriptionId}_` +
       `${billing.credits.periodKey ?? "none"}_to_${periodKey}`;
     const isFrozenForThisPeriod =
       billing.subscriptionStatus === "frozen" &&
-      billing.credits.periodKey === periodKey;
+      isCurrentPeriod;
     const creditsExpired = shouldGrant
       ? billing.credits.paidAvailable
       : 0;
@@ -1035,10 +1087,13 @@ export const activatePaidPlan = async ({
           : shouldGrant
             ? plan.monthlyCredits
             : billing.credits.paidAvailable,
-        periodKey: shouldGrant ? periodKey : billing.credits.periodKey,
+        periodKey:
+          shouldGrant || billing.credits.periodKey === legacyCurrentMonthKey
+            ? periodKey
+            : billing.credits.periodKey,
         nextRefreshAt: isFrozenForThisPeriod
           ? null
-          : Timestamp.fromDate(getNextMonthStartInIndia(now)),
+          : Timestamp.fromDate(cycle.nextRefreshAt),
       },
       updatedAt: Timestamp.fromDate(now),
     };
@@ -1113,26 +1168,38 @@ export const updateSubscriptionState = async ({
     const status = isFrozen
       ? "frozen"
       : mapRazorpayStatus(razorpayStatus, billing);
+    const isTerminal =
+      !isFrozen &&
+      ["cancelled", "completed", "expired"].includes(razorpayStatus);
     const updated: UserBilling = {
       ...billing,
+      planId: isTerminal ? "free" : billing.planId,
       razorpayCustomerId: customerId ?? billing.razorpayCustomerId,
       razorpaySubscriptionId: subscriptionId,
       razorpaySubscriptionStatus: razorpayStatus,
       subscriptionStatus: status,
-      paidThrough: isFrozen
+      paidThrough: isFrozen || isTerminal
         ? null
         : paidThrough
           ? Timestamp.fromDate(paidThrough)
           : billing.paidThrough,
-      nextPaymentAt: isFrozen
+      nextPaymentAt: isFrozen || isTerminal
         ? null
         : nextPaymentAt === undefined
           ? billing.nextPaymentAt
           : nextPaymentAt
             ? Timestamp.fromDate(nextPaymentAt)
             : null,
+      cancelAtPeriodEnd: isTerminal ? false : billing.cancelAtPeriodEnd,
+      pendingPlanId: isTerminal ? null : billing.pendingPlanId,
+      pendingPlanEffectiveAt: isTerminal
+        ? null
+        : billing.pendingPlanEffectiveAt,
+      pendingRazorpaySubscriptionId: isTerminal
+        ? null
+        : billing.pendingRazorpaySubscriptionId,
       credits:
-        status === "expired"
+        isTerminal
           ? {
               ...billing.credits,
               paidAvailable: 0,
@@ -1477,33 +1544,6 @@ export const revokePaidCredits = async ({
     }
     return updated;
   });
-};
-
-const dateToIso = (value: unknown) => asDate(value)?.toISOString() ?? null;
-
-export const toBillingSummary = (billing: UserBilling): BillingSummary => {
-  const plan = BILLING_PLANS[billing.planId];
-  return {
-    planId: billing.planId,
-    planName: plan.name,
-    interval: plan.interval,
-    subscriptionStatus: billing.subscriptionStatus,
-    razorpaySubscriptionStatus: billing.razorpaySubscriptionStatus,
-    paidCreditsAvailable: billing.credits.paidAvailable,
-    permanentCreditsAvailable: billing.credits.permanentAvailable,
-    rechargeCreditsAvailable: billing.credits.rechargeAvailable,
-    rechargeCreditDebt: billing.credits.rechargeDebt,
-    totalCreditsAvailable:
-      billing.credits.paidAvailable +
-      billing.credits.permanentAvailable +
-      billing.credits.rechargeAvailable,
-    paidThrough: dateToIso(billing.paidThrough),
-    nextPaymentAt: dateToIso(billing.nextPaymentAt),
-    nextRefreshAt: dateToIso(billing.credits.nextRefreshAt),
-    cancelAtPeriodEnd: billing.cancelAtPeriodEnd,
-    pendingPlanId: billing.pendingPlanId,
-    pendingPlanEffectiveAt: dateToIso(billing.pendingPlanEffectiveAt),
-  };
 };
 
 export const getDailyCreditUsage = async (

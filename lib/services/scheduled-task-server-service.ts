@@ -34,14 +34,15 @@ import {
 } from "@/lib/billing/credits";
 import {
   checkTaskAccess,
+  deductCredits,
   getAutomationLimitForUser,
-  recordAndDeductUsage,
 } from "@/lib/billing/server";
 
 const colTasks = "scheduledTasks";
 const colRuns = "scheduledTaskRuns";
 const colThreads = "threads";
-const automationExecutionTimeoutMs = 240_000;
+const automationExecutionTimeoutSeconds = 900;
+const automationExecutionTimeoutMs = automationExecutionTimeoutSeconds * 1_000;
 const automationStepLimit = 25;
 
 const getQstashScheduleId = (taskId: string) => `scheduled-task-${taskId}`;
@@ -382,10 +383,8 @@ class ScheduledTaskServerService {
         models: [usageFromAiSdk(model.id, execution.usage)],
         toolCostNanoUsd: execution.toolCostNanoUsd,
       });
-      await recordAndDeductUsage({
+      await deductCredits({
         userId: task.userId,
-        usageId: `automation_${task.id}_${runId}`,
-        type: "automation",
         calculation,
       });
       const threadId = await this.createOutputThread({
@@ -393,6 +392,7 @@ class ScheduledTaskServerService {
         runId,
         output,
         trigger: input.trigger,
+        creditsUsed: calculation.credits,
       });
       const finishedAt = new Date().toISOString();
       const outputPreview = output.slice(0, 280);
@@ -650,9 +650,12 @@ class ScheduledTaskServerService {
       };
     } catch (error) {
       if (timeoutController.signal.aborted) {
-        throw new Error("Automation timed out after 240 seconds", {
-          cause: error,
-        });
+        throw new Error(
+          `Automation timed out after ${automationExecutionTimeoutSeconds} seconds`,
+          {
+            cause: error,
+          },
+        );
       }
 
       throw error;
@@ -667,11 +670,13 @@ class ScheduledTaskServerService {
     runId,
     output,
     trigger,
+    creditsUsed,
   }: {
     task: ScheduledTask;
     runId: string;
     output: string;
     trigger: "manual" | "schedule";
+    creditsUsed: number;
   }) {
     const db = getDbOrThrow();
     const threadId = v4();
@@ -686,6 +691,7 @@ class ScheduledTaskServerService {
       parts: [{ type: "text", text: output }],
       createdAt: new Date(),
       updatedAt: now,
+      metadata: { creditsUsed },
     };
 
     await db.collection(colThreads).doc(threadId).set(

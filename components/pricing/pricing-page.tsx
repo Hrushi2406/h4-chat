@@ -2,12 +2,20 @@
 
 import { motion, useReducedMotion, type Variants } from "framer-motion";
 import { Check, Loader2, Minus, Plus } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 
 import { MarketingNavbar } from "@/components/marketing/marketing-navbar";
+import {
+  CreditsCelebration,
+  getPlanCreditsCelebration,
+  getRechargeCreditsCelebration,
+  type CreditsCelebrationContent,
+} from "@/components/billing/welcome-credits-celebration";
+import { PaymentConfirmationModal } from "@/components/billing/payment-confirmation-modal";
 import { Button } from "@/components/ui/button";
+import { Dialog } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 import { auth } from "@/lib/clients/firebase";
 import {
@@ -21,8 +29,24 @@ import {
   getRechargePricePaise,
   type BillingPlanId,
 } from "@/lib/billing/config";
+import { getPostPurchasePath } from "@/lib/billing/pricing-return";
 
 type BillingPeriod = "monthly" | "yearly";
+
+type PendingPurchaseInput =
+  | {
+      kind: "plan";
+      planId: Exclude<BillingPlanId, "free">;
+    }
+  | {
+      kind: "recharge";
+      credits: number;
+      expectedRechargeBalance: number;
+    };
+
+type PendingPurchase = PendingPurchaseInput & {
+  verificationSettled: boolean;
+};
 
 type Plan = {
   monthlyPlanId: BillingPlanId;
@@ -165,10 +189,75 @@ export function PricingPage() {
   const [rechargeUnits, setRechargeUnits] = useState<number>(
     CREDIT_RECHARGE.defaultUnits,
   );
+  const [purchaseCelebration, setPurchaseCelebration] =
+    useState<CreditsCelebrationContent>();
+  const [pendingPurchase, setPendingPurchase] = useState<PendingPurchase>();
   const router = useRouter();
   const billingQuery = useBilling();
   const { checkout, recharge, changePlan } = useBillingActions();
   const shouldReduceMotion = useReducedMotion();
+
+  const finishCelebration = () => {
+    setPurchaseCelebration(undefined);
+    setPendingPurchase(undefined);
+    const returnTo = new URLSearchParams(window.location.search).get("returnTo");
+    router.push(getPostPurchasePath(returnTo));
+  };
+
+  useEffect(() => {
+    if (!pendingPurchase?.verificationSettled) return;
+
+    let stopped = false;
+    let checking = false;
+
+    const checkConfirmation = async () => {
+      if (checking) return;
+      checking = true;
+      try {
+        const result = await billingQuery.refetch();
+        if (stopped || !result.data) return;
+
+        const billing = result.data.billing;
+        const confirmed =
+          pendingPurchase.kind === "plan"
+            ? billing.planId === pendingPurchase.planId &&
+              billing.subscriptionStatus === "active"
+            : billing.rechargeCreditsAvailable >=
+              pendingPurchase.expectedRechargeBalance;
+
+        if (!confirmed) return;
+
+        const celebration =
+          pendingPurchase.kind === "plan"
+            ? getPlanCreditsCelebration(pendingPurchase.planId)
+            : getRechargeCreditsCelebration(pendingPurchase.credits);
+        toast.success(
+          pendingPurchase.kind === "plan"
+            ? "Your plan is ready."
+            : "Your credits are ready.",
+        );
+        setPendingPurchase(undefined);
+        setPurchaseCelebration(celebration);
+      } finally {
+        checking = false;
+      }
+    };
+
+    void checkConfirmation();
+    const timer = window.setInterval(checkConfirmation, 2_500);
+
+    return () => {
+      stopped = true;
+      window.clearInterval(timer);
+    };
+  }, [billingQuery.refetch, pendingPurchase]);
+
+  const showPaymentConfirmation = (
+    pending: PendingPurchaseInput,
+    verificationSettled = false,
+  ) => {
+    setPendingPurchase({ ...pending, verificationSettled });
+  };
 
   const choosePlan = async (planId: BillingPlanId) => {
     if (planId === "free") {
@@ -183,8 +272,7 @@ export function PricingPage() {
 
     setSelectedPlanId(planId);
     try {
-      const currentBilling =
-        billingQuery.data ?? (await billingQuery.refetch()).data;
+      const currentBilling = (await billingQuery.refetch()).data;
       const currentPlanId = currentBilling?.billing.planId;
       const currentStatus = currentBilling?.billing.subscriptionStatus;
       const hasCurrentPaidSubscription =
@@ -198,30 +286,35 @@ export function PricingPage() {
           router.push("/settings?tab=billing");
           return;
         }
-        const change = await changePlan.mutateAsync(planId);
+        const change = await changePlan.mutateAsync({
+          planId,
+          onPaymentCompleted: () =>
+            showPaymentConfirmation({ kind: "plan", planId }),
+        });
         if (!change.updated) {
-          toast.info(
-            change.message ?? "Razorpay is confirming your plan change.",
-          );
+          if (change.confirmationPending) {
+            showPaymentConfirmation({ kind: "plan", planId }, true);
+          } else {
+            setPendingPurchase(undefined);
+            toast.info(change.message ?? "Plan change was not completed.");
+            router.push("/settings?tab=billing");
+          }
         } else {
-          toast.success(`${BILLING_PLANS[planId].name} is now active.`);
+          showPaymentConfirmation({ kind: "plan", planId }, true);
         }
-        router.push("/settings?tab=billing");
         return;
       }
 
-      const result = await checkout.mutateAsync(planId);
+      const result = await checkout.mutateAsync({
+        planId,
+        onPaymentCompleted: () =>
+          showPaymentConfirmation({ kind: "plan", planId }),
+      });
       if (result) {
-        if (result.activationPending) {
-          toast.info(
-            "Payment received. Razorpay is confirming your subscription.",
-          );
-        } else {
-          toast.success("Your plan is active and credits are ready.");
-        }
-        router.push("/settings?tab=billing");
+        showPaymentConfirmation({ kind: "plan", planId }, true);
       }
     } catch (error) {
+      setPendingPurchase(undefined);
       toast.error(
         error instanceof Error ? error.message : "Checkout could not start",
       );
@@ -239,19 +332,29 @@ export function PricingPage() {
 
     const credits = getRechargeCredits(rechargeUnits);
     try {
-      const result = await recharge.mutateAsync(credits);
+      const currentBilling = (await billingQuery.refetch()).data;
+      const expectedRechargeBalance =
+        (currentBilling?.billing.rechargeCreditsAvailable ?? 0) + credits;
+      const result = await recharge.mutateAsync({
+        credits,
+        onPaymentCompleted: () =>
+          showPaymentConfirmation({
+            kind: "recharge",
+            credits,
+            expectedRechargeBalance,
+          }),
+      });
       if (!result) return;
-      if (result.creditingPending) {
-        toast.info(
-          "Payment received. Razorpay is confirming your credits.",
-        );
-      } else {
-        toast.success(
-          `${credits.toLocaleString("en-IN")} credits added. They never expire.`,
-        );
-      }
-      router.push("/settings?tab=billing");
+      showPaymentConfirmation(
+        {
+          kind: "recharge",
+          credits,
+          expectedRechargeBalance,
+        },
+        true,
+      );
     } catch (error) {
+      setPendingPurchase(undefined);
       toast.error(
         error instanceof Error ? error.message : "Recharge could not start",
       );
@@ -260,6 +363,33 @@ export function PricingPage() {
 
   return (
     <div className="dark relative h-dvh overflow-y-auto overflow-x-hidden bg-[#0a0a0a] text-white">
+      <Dialog
+        open={Boolean(purchaseCelebration || pendingPurchase)}
+        onOpenChange={(open) => {
+          if (!open && (purchaseCelebration || pendingPurchase)) {
+            finishCelebration();
+          }
+        }}
+      >
+        {purchaseCelebration ? (
+          <CreditsCelebration
+            active
+            credits={purchaseCelebration.credits}
+            title={purchaseCelebration.title}
+            planName={purchaseCelebration.planName}
+            creditLabel={purchaseCelebration.creditLabel}
+            description={purchaseCelebration.description}
+            buttonLabel={purchaseCelebration.buttonLabel}
+            onDismiss={finishCelebration}
+          />
+        ) : pendingPurchase ? (
+          <PaymentConfirmationModal
+            kind={pendingPurchase.kind}
+            onDismiss={finishCelebration}
+          />
+        ) : null}
+      </Dialog>
+
       <div
         aria-hidden
         className="pointer-events-none absolute inset-0 bg-[linear-gradient(rgba(255,255,255,0.018)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.018)_1px,transparent_1px)] bg-[size:64px_64px] [mask-image:radial-gradient(ellipse_75%_55%_at_50%_18%,black,transparent)]"
@@ -354,7 +484,7 @@ export function PricingPage() {
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.55, duration: 0.32, ease: easeOut }}
         >
-          Plan credits refresh at the start of every calendar month, including
+          Plan credits refresh monthly on your subscription date, including
           annual plans, and do not roll over. One-time recharge credits never
           expire. Paused automations do not count toward limits; every
           automation run uses credits.

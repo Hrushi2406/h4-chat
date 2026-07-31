@@ -22,6 +22,9 @@ export interface ThreadMessageMetadata {
   inputTokens?: number;
   outputTokens?: number;
   totalTokens?: number;
+  creditsUsed?: number;
+  creditLimitReached?: boolean;
+  creditLimitNotice?: "credits_exhausted" | "response_stopped";
 }
 
 // Extend Vercel AI Message type for our thread messages

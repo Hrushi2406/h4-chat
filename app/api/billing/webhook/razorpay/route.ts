@@ -19,6 +19,7 @@ import {
   verifyWebhookSignature,
   type RazorpayWebhook,
 } from "@/lib/billing/razorpay";
+import { billingOperationalErrorResponse } from "@/lib/billing/error-response";
 
 export const dynamic = "force-dynamic";
 
@@ -230,12 +231,9 @@ export async function POST(request: Request) {
     return Response.json({ received: true });
   } catch (error) {
     console.error("Razorpay webhook failed:", error);
-    return Response.json(
-      {
-        error:
-          error instanceof Error ? error.message : "Webhook processing failed",
-      },
-      { status: 500 },
+    return billingOperationalErrorResponse(
+      error,
+      "Webhook processing failed",
     );
   }
 }

@@ -15,13 +15,12 @@ import {
 import {
   BillingAccessError,
   checkTaskAccess,
-  recordAndDeductUsage,
+  deductCredits,
 } from "@/lib/billing/server";
 
 const requestSchema = z.object({
   description: z.string().trim().min(8).max(2000),
   authToken: z.string().min(1),
-  generationId: z.string().trim().min(1).max(180),
 });
 
 const helperDraftSchema = z.object({
@@ -113,13 +112,11 @@ These examples demonstrate capability-aware depth. Do not copy them unless they 
     const calculation = calculateCredits({
       models: [usageFromAiSdk(billingModelId, result.usage)],
     });
-    await recordAndDeductUsage({
+    await deductCredits({
       userId,
-      usageId: `helper_${parsed.data.generationId}`,
-      type: "helper_generation",
       calculation,
     }).catch((error) => {
-      console.error("Failed to record Helper-generation usage:", error);
+      console.error("Failed to deduct Helper-generation credits:", error);
     });
 
     return Response.json({ draft: result.output });

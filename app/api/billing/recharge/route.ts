@@ -18,6 +18,7 @@ import {
   verifyRechargeCheckoutSignature,
 } from "@/lib/billing/razorpay";
 import { verifyFirebaseIdToken } from "@/lib/firebase-auth-server";
+import { billingOperationalErrorResponse } from "@/lib/billing/error-response";
 
 export const dynamic = "force-dynamic";
 
@@ -64,13 +65,7 @@ export async function POST(request: Request) {
       : verifyRecharge(userId, parsed.data);
   } catch (error) {
     console.error("Credit recharge request failed:", error);
-    const message =
-      error instanceof Error ? error.message : "Recharge request failed";
-    const status =
-      message.includes("not configured") || message.includes("credentials")
-        ? 503
-        : 500;
-    return Response.json({ error: message }, { status });
+    return billingOperationalErrorResponse(error, "Recharge request failed");
   }
 }
 
