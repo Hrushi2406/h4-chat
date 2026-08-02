@@ -82,11 +82,11 @@ const AuthContainer = () => {
       <CardFooter className="mx-auto">
         <p className="text-xs text-muted-foreground text-center">
           By signing in, you accept our{" "}
-          <a href="/terms" className="underline hover:text-primary">
+          <a href="/legal/terms" className="underline hover:text-primary">
             Terms of Service
           </a>{" "}
           and{" "}
-          <a href="/privacy" className="underline hover:text-primary">
+          <a href="/legal/privacy" className="underline hover:text-primary">
             Privacy Policy
           </a>
         </p>

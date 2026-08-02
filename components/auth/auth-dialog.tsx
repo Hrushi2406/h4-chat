@@ -60,6 +60,23 @@ export default function AuthDialog() {
               ? "Signing in..."
               : "Sign in with Google"}
           </Button>
+          <p className="mt-4 text-center text-xs leading-5 text-muted-foreground">
+            By signing in, you agree to our{" "}
+            <a
+              href="/legal/terms"
+              className="underline underline-offset-2 hover:text-foreground"
+            >
+              Terms
+            </a>{" "}
+            and acknowledge our{" "}
+            <a
+              href="/legal/privacy"
+              className="underline underline-offset-2 hover:text-foreground"
+            >
+              Privacy Policy
+            </a>
+            .
+          </p>
         </CardContent>
       </Card>
     </Modal>
