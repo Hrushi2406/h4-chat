@@ -87,7 +87,7 @@ function useCountUp(target: number, active: boolean) {
 export type CreditsCelebrationContent = {
   credits: number;
   title: string;
-  planName?: "Plus" | "Pro";
+  planName?: "Free" | "Plus" | "Pro";
   creditLabel: string;
   description: string;
   buttonLabel?: string;
@@ -101,6 +101,7 @@ type CreditsCelebrationProps = CreditsCelebrationContent & {
 export const WELCOME_CREDITS_CELEBRATION: CreditsCelebrationContent = {
   credits: WELCOME_CREDITS,
   title: "Welcome credits",
+  planName: "Free",
   creditLabel: "free credits, on us",
   description:
     "Enough for up to 500 chats or up to 30 deep work sessions with research and automations.",

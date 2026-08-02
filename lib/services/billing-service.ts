@@ -105,6 +105,18 @@ const loadCheckoutScript = () => {
 };
 
 class BillingService {
+  async getCurrentBilling(): Promise<BillingSummary> {
+    const authToken = await getAuthToken();
+    const response = await fetch("/api/billing", {
+      headers: { Authorization: `Bearer ${authToken}` },
+      cache: "no-store",
+    });
+    if (!response.ok) throw new Error(await readError(response));
+
+    const result = (await response.json()) as { billing: BillingSummary };
+    return result.billing;
+  }
+
   async startCheckout(
     planId: Exclude<BillingPlanId, "free">,
     onPaymentCompleted?: PaymentCompletedCallback,
