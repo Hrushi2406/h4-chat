@@ -21,14 +21,14 @@ class UserService {
     const userRef = doc(db, `users/${email}`);
     const snap = await getDoc(userRef);
 
-    return snap.data() as IUser;
+    return snap.exists() ? (snap.data() as IUser) : null;
   }
 
-  async createUserGoogle(uid: string, fbUser: User) {
+  async syncAuthenticatedUser(uid: string, fbUser: User) {
     const userRef = doc(db, `users/${uid}`);
     const snap = await getDoc(userRef);
 
-    // Existing users: only refresh Google profile fields, never wipe prefs/memories.
+    // Existing users: only refresh auth profile fields, never wipe prefs/memories.
     if (snap.exists()) {
       await updateDoc(userRef, {
         email: fbUser.email ?? "",

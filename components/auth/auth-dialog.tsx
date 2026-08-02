@@ -13,6 +13,7 @@ import { GoogleLogo } from "@/lib/brand-logos";
 import { useState } from "react";
 import Modal from "@/components/ui/modal";
 import { XIcon } from "lucide-react";
+import { EmailPasswordLoginForm } from "@/components/auth/email-password-login-form";
 
 export default function AuthDialog() {
   const { signInWithGoogle } = useAuthActions();
@@ -46,7 +47,7 @@ export default function AuthDialog() {
               <XIcon className="h-4 w-4" />
             </Button>
           </div>
-          <CardDescription>Continue with your Google account</CardDescription>
+          <CardDescription>Sign in to continue</CardDescription>
         </CardHeader>
         <CardContent>
           <Button
@@ -60,6 +61,7 @@ export default function AuthDialog() {
               ? "Signing in..."
               : "Sign in with Google"}
           </Button>
+          <EmailPasswordLoginForm />
           <p className="mt-4 text-center text-xs leading-5 text-muted-foreground">
             By signing in, you agree to our{" "}
             <a

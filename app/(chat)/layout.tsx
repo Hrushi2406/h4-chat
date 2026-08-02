@@ -9,6 +9,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { GoogleLogo } from "@/lib/brand-logos";
 import { Loader2 } from "lucide-react";
+import { EmailPasswordLoginForm } from "@/components/auth/email-password-login-form";
 
 export default function RootLayout({
   children,
@@ -49,7 +50,7 @@ export default function RootLayout({
           <CardHeader>
             <CardTitle className="text-xl font-semibold">Sign in required</CardTitle>
             <CardDescription>
-              Please sign in with Google to access chat.
+              Sign in to access chat.
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -66,6 +67,7 @@ export default function RootLayout({
               )}
               Sign in with Google
             </Button>
+            <EmailPasswordLoginForm />
           </CardContent>
         </Card>
       </div>
