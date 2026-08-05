@@ -70,15 +70,40 @@ export const WaitlistFooter = () => {
             Sakhi
           </Link>
         </motion.div>
-        <motion.p
+        <motion.div
           initial={shouldReduceMotion ? false : { opacity: 0 }}
           whileInView={{ opacity: 1 }}
           viewport={{ once: true }}
           transition={{ duration: 0.6, delay: 0.2, ease }}
-          className="relative z-10 mt-4 text-[11px] tracking-widest text-neutral-500 uppercase"
+          className="relative z-10 mt-5 flex flex-col items-center gap-3 text-[11px] text-neutral-500"
         >
-          © {new Date().getFullYear()} Sakhi AI
-        </motion.p>
+          <nav
+            aria-label="Legal"
+            className="flex flex-wrap items-center justify-center gap-x-4 gap-y-2"
+          >
+            <Link href="/legal/terms" className="transition-colors hover:text-neutral-300">
+              Terms
+            </Link>
+            <Link href="/legal/privacy" className="transition-colors hover:text-neutral-300">
+              Privacy
+            </Link>
+            <Link
+              href="/legal/subscription-terms"
+              className="transition-colors hover:text-neutral-300"
+            >
+              Subscriptions
+            </Link>
+            <Link href="/legal/refunds" className="transition-colors hover:text-neutral-300">
+              Refunds
+            </Link>
+            <Link href="/legal/contact" className="transition-colors hover:text-neutral-300">
+              Contact
+            </Link>
+          </nav>
+          <p className="uppercase tracking-widest">
+            © {new Date().getFullYear()} WestCoast Technologies LLP
+          </p>
+        </motion.div>
       </div>
     </footer>
   );

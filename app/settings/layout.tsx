@@ -13,6 +13,7 @@ import { useAuth } from "@/lib/hooks/auth/use-auth";
 import { useAuthActions } from "@/lib/hooks/auth/use-auth-actions";
 import { GoogleLogo } from "@/lib/brand-logos";
 import { Loader2 } from "lucide-react";
+import { EmailPasswordLoginForm } from "@/components/auth/email-password-login-form";
 
 const SettingsLayout = ({ children }: { children: React.ReactNode }) => {
   const { uid, isLoading } = useAuth();
@@ -58,7 +59,7 @@ const AuthContainer = () => {
           Welcome to Sakhi Chat
         </CardTitle>
         <CardDescription>
-          Sign In to access settings (we'll increase your limits)
+          Sign in to access settings
         </CardDescription>
       </CardHeader>
       <CardContent className="">
@@ -77,16 +78,17 @@ const AuthContainer = () => {
           )}
           Sign in with Google
         </Button>
+        <EmailPasswordLoginForm />
       </CardContent>
 
       <CardFooter className="mx-auto">
         <p className="text-xs text-muted-foreground text-center">
           By signing in, you accept our{" "}
-          <a href="/terms" className="underline hover:text-primary">
+          <a href="/legal/terms" className="underline hover:text-primary">
             Terms of Service
           </a>{" "}
           and{" "}
-          <a href="/privacy" className="underline hover:text-primary">
+          <a href="/legal/privacy" className="underline hover:text-primary">
             Privacy Policy
           </a>
         </p>

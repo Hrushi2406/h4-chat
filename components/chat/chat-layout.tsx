@@ -197,17 +197,6 @@ const ThreadSidebar = () => {
             </SidebarMenuItem>
             <SidebarMenuItem>
               <SidebarMenuButton
-                tooltip="Helpers"
-                isActive={isHelpersActive}
-                onClick={handleHelpersClick}
-                className="cursor-pointer gap-2.5"
-              >
-                <BookOpen className="h-4 w-4" />
-                <span>Helpers</span>
-              </SidebarMenuButton>
-            </SidebarMenuItem>
-            <SidebarMenuItem>
-              <SidebarMenuButton
                 tooltip="Apps"
                 isActive={isConnectionsActive}
                 onClick={handleConnectionsClick}
@@ -215,6 +204,17 @@ const ThreadSidebar = () => {
               >
                 <Blocks className="h-4 w-4" />
                 <span>Apps</span>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+            <SidebarMenuItem>
+              <SidebarMenuButton
+                tooltip="Helpers"
+                isActive={isHelpersActive}
+                onClick={handleHelpersClick}
+                className="cursor-pointer gap-2.5"
+              >
+                <BookOpen className="h-4 w-4" />
+                <span>Helpers</span>
               </SidebarMenuButton>
             </SidebarMenuItem>
             <SidebarMenuItem>
