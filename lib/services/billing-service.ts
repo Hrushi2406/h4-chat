@@ -8,8 +8,15 @@ type CheckoutOutcome = {
   activationPending: boolean;
 };
 
+export type RechargeVerificationInput = {
+  razorpayPaymentId: string;
+  razorpayOrderId: string;
+  razorpaySignature: string;
+};
+
 type RechargeCheckoutOutcome = {
   creditingPending: boolean;
+  verification: RechargeVerificationInput;
 };
 
 type PaymentCompletedCallback = () => void;
@@ -255,21 +262,15 @@ class BillingService {
               if (!payment.razorpay_order_id) {
                 throw new Error("Razorpay did not return an order ID");
               }
-              const verification = await fetch("/api/billing/recharge", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                  action: "verify",
-                  authToken: await getAuthToken(),
-                  razorpayPaymentId: payment.razorpay_payment_id,
-                  razorpayOrderId: payment.razorpay_order_id,
-                  razorpaySignature: payment.razorpay_signature,
-                }),
-              });
-              if (!verification.ok && verification.status !== 202) {
-                throw new Error(await readError(verification));
-              }
-              resolve({ creditingPending: verification.status === 202 });
+              const verificationInput: RechargeVerificationInput = {
+                razorpayPaymentId: payment.razorpay_payment_id,
+                razorpayOrderId: payment.razorpay_order_id,
+                razorpaySignature: payment.razorpay_signature,
+              };
+              const verification = await this.verifyRechargePurchase(
+                verificationInput,
+              );
+              resolve({ ...verification, verification: verificationInput });
             } catch (error) {
               reject(error);
             }
@@ -291,6 +292,22 @@ class BillingService {
         checkout.open();
       },
     );
+  }
+
+  async verifyRechargePurchase(input: RechargeVerificationInput) {
+    const verification = await fetch("/api/billing/recharge", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        action: "verify",
+        authToken: await getAuthToken(),
+        ...input,
+      }),
+    });
+    if (!verification.ok && verification.status !== 202) {
+      throw new Error(await readError(verification));
+    }
+    return { creditingPending: verification.status === 202 };
   }
 
   async changeSubscription(

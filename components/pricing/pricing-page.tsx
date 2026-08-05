@@ -30,6 +30,9 @@ import {
   type BillingPlanId,
 } from "@/lib/billing/config";
 import { getPostPurchasePath } from "@/lib/billing/pricing-return";
+import billingService, {
+  type RechargeVerificationInput,
+} from "@/lib/services/billing-service";
 
 type BillingPeriod = "monthly" | "yearly";
 
@@ -41,7 +44,7 @@ type PendingPurchaseInput =
   | {
       kind: "recharge";
       credits: number;
-      expectedRechargeBalance: number;
+      verification?: RechargeVerificationInput;
     };
 
 type PendingPurchase = PendingPurchaseInput & {
@@ -141,6 +144,7 @@ const plans: Plan[] = [
 const priceFormatter = new Intl.NumberFormat("en-IN", {
   maximumFractionDigits: 0,
 });
+const RECHARGE_CONFIRMATION_TIMEOUT_MS = 2 * 60 * 1_000;
 
 const easeOut = [0.22, 1, 0.36, 1] as const;
 
@@ -209,21 +213,39 @@ export function PricingPage() {
 
     let stopped = false;
     let checking = false;
+    const startedAt = Date.now();
 
     const checkConfirmation = async () => {
       if (checking) return;
+      if (
+        pendingPurchase.kind === "recharge" &&
+        Date.now() - startedAt >= RECHARGE_CONFIRMATION_TIMEOUT_MS
+      ) {
+        toast.info(
+          "Payment is still being confirmed. Check Billing again shortly.",
+        );
+        setPendingPurchase(undefined);
+        return;
+      }
       checking = true;
       try {
-        const result = await billingQuery.refetch();
-        if (stopped || !result.data) return;
-
-        const billing = result.data.billing;
-        const confirmed =
-          pendingPurchase.kind === "plan"
-            ? billing.planId === pendingPurchase.planId &&
-              billing.subscriptionStatus === "active"
-            : billing.rechargeCreditsAvailable >=
-              pendingPurchase.expectedRechargeBalance;
+        let confirmed = false;
+        if (pendingPurchase.kind === "plan") {
+          const result = await billingQuery.refetch();
+          if (stopped || !result.data) return;
+          confirmed =
+            result.data.billing.planId === pendingPurchase.planId &&
+            result.data.billing.subscriptionStatus === "active";
+        } else {
+          if (!pendingPurchase.verification) return;
+          const result = await billingService.verifyRechargePurchase(
+            pendingPurchase.verification,
+          );
+          if (stopped || result.creditingPending) return;
+          await billingQuery.refetch();
+          if (stopped) return;
+          confirmed = true;
+        }
 
         if (!confirmed) return;
 
@@ -238,6 +260,8 @@ export function PricingPage() {
         );
         setPendingPurchase(undefined);
         setPurchaseCelebration(celebration);
+      } catch (error) {
+        console.error("Unable to confirm purchase:", error);
       } finally {
         checking = false;
       }
@@ -332,16 +356,12 @@ export function PricingPage() {
 
     const credits = getRechargeCredits(rechargeUnits);
     try {
-      const currentBilling = (await billingQuery.refetch()).data;
-      const expectedRechargeBalance =
-        (currentBilling?.billing.rechargeCreditsAvailable ?? 0) + credits;
       const result = await recharge.mutateAsync({
         credits,
         onPaymentCompleted: () =>
           showPaymentConfirmation({
             kind: "recharge",
             credits,
-            expectedRechargeBalance,
           }),
       });
       if (!result) return;
@@ -349,7 +369,7 @@ export function PricingPage() {
         {
           kind: "recharge",
           credits,
-          expectedRechargeBalance,
+          verification: result.verification,
         },
         true,
       );
