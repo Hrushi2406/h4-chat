@@ -1,23 +1,24 @@
 import {
-  collection,
-  deleteDoc,
-  doc,
-  getDocs,
-  setDoc,
-  updateDoc,
   type Timestamp,
 } from "firebase/firestore";
-import { db } from "@/lib/clients/firebase";
+import { auth } from "@/lib/clients/firebase";
 import {
   normalizeMcpHeaders,
   type StoredMcpServer,
 } from "@/lib/types/mcp-server";
 
-const getMcpServersCollection = (uid: string) =>
-  collection(db, "users", uid, "mcpServers");
+const getAuthToken = async () => {
+  const token = await auth.currentUser?.getIdToken();
+  if (!token) throw new Error("Sign in is required");
+  return token;
+};
 
-const getMcpServerDoc = (uid: string, serverId: string) =>
-  doc(db, "users", uid, "mcpServers", serverId);
+const readError = async (response: Response) => {
+  const body = (await response.json().catch(() => undefined)) as
+    | { error?: string }
+    | undefined;
+  return body?.error || "MCP server request failed";
+};
 
 const normalizeDate = (value: unknown) => {
   if (typeof value === "string") {
@@ -86,29 +87,37 @@ const removeUndefinedValues = <T>(value: T): T => {
 
 class McpServerService {
   async getServers(uid: string): Promise<StoredMcpServer[]> {
-    const snapshot = await getDocs(getMcpServersCollection(uid));
+    if (!uid) return [];
+    const response = await fetch("/api/mcp-servers", {
+      cache: "no-store",
+      headers: {
+        Authorization: `Bearer ${await getAuthToken()}`,
+      },
+    });
+    if (!response.ok) throw new Error(await readError(response));
+    const body = (await response.json()) as {
+      servers?: Array<Record<string, unknown> & { id: string }>;
+    };
 
-    return snapshot.docs
+    return (body.servers ?? [])
       .map((item) =>
-        normalizeMcpServer(item.id, item.data() as Record<string, unknown>),
+        normalizeMcpServer(item.id, item),
       )
       .filter((server): server is StoredMcpServer => Boolean(server))
       .sort((a, b) => a.name.localeCompare(b.name));
   }
 
   async saveServer(uid: string, server: StoredMcpServer) {
-    const now = new Date().toISOString();
-    const docRef = getMcpServerDoc(uid, server.id);
-
-    await setDoc(
-      docRef,
-      removeUndefinedValues({
-        ...server,
-        createdAt: server.createdAt ?? now,
-        updatedAt: now,
+    if (!uid) throw new Error("Sign in is required");
+    const response = await fetch("/api/mcp-servers", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        authToken: await getAuthToken(),
+        server: removeUndefinedValues(server),
       }),
-      { merge: true },
-    );
+    });
+    if (!response.ok) throw new Error(await readError(response));
   }
 
   async updateServer(
@@ -116,17 +125,30 @@ class McpServerService {
     serverId: string,
     update: Partial<StoredMcpServer>,
   ) {
-    await updateDoc(
-      getMcpServerDoc(uid, serverId),
-      removeUndefinedValues({
-        ...update,
-        updatedAt: new Date().toISOString(),
+    if (!uid) throw new Error("Sign in is required");
+    const response = await fetch("/api/mcp-servers", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        authToken: await getAuthToken(),
+        serverId,
+        update: removeUndefinedValues(update),
       }),
-    );
+    });
+    if (!response.ok) throw new Error(await readError(response));
   }
 
   async deleteServer(uid: string, serverId: string) {
-    await deleteDoc(getMcpServerDoc(uid, serverId));
+    if (!uid) throw new Error("Sign in is required");
+    const response = await fetch("/api/mcp-servers", {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        authToken: await getAuthToken(),
+        serverId,
+      }),
+    });
+    if (!response.ok) throw new Error(await readError(response));
   }
 }
 

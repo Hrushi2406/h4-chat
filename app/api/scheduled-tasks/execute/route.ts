@@ -4,6 +4,7 @@ import scheduledTaskServerService, {
 } from "@/lib/services/scheduled-task-server-service";
 
 export const dynamic = "force-dynamic";
+export const maxDuration = 900;
 
 export async function POST(req: Request) {
   const bodyText = await req.text();
@@ -35,6 +36,7 @@ export async function POST(req: Request) {
       taskId: body.taskId,
       trigger: "schedule",
       baseUrl: getBaseUrl(req),
+      deliveryId: req.headers.get("upstash-message-id") ?? undefined,
     });
 
     return Response.json({ run });

@@ -699,7 +699,10 @@ function HelperEditor({
       const response = await fetch("/api/helpers/generate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ description: idea.trim(), authToken }),
+        body: JSON.stringify({
+          description: idea.trim(),
+          authToken,
+        }),
       });
       const payload = (await response.json()) as {
         draft?: { title: string; emoji: string; whenToUse: string; instructions: string };

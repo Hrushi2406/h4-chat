@@ -573,6 +573,52 @@
     animation: hero-bar-wave 4.5s ease-in-out infinite;
   }
 
+  @property --card-glow-x {
+    syntax: "<percentage>";
+    inherits: false;
+    initial-value: 94%;
+  }
+
+  @property --card-glow-y {
+    syntax: "<percentage>";
+    inherits: false;
+    initial-value: 6%;
+  }
+
+  @keyframes card-glow-travel {
+    0% {
+      --card-glow-x: 94%;
+      --card-glow-y: 6%;
+    }
+    25% {
+      --card-glow-x: 94%;
+      --card-glow-y: 94%;
+    }
+    50% {
+      --card-glow-x: 6%;
+      --card-glow-y: 94%;
+    }
+    75% {
+      --card-glow-x: 6%;
+      --card-glow-y: 6%;
+    }
+    100% {
+      --card-glow-x: 94%;
+      --card-glow-y: 6%;
+    }
+  }
+
+  .card-ring-animate {
+    overflow: hidden;
+    background: radial-gradient(
+      circle 180px at var(--card-glow-x) var(--card-glow-y),
+      rgba(96, 165, 250, 0.85) 0%,
+      rgba(59, 130, 246, 0.3) 48%,
+      transparent 72%
+    );
+    animation: card-glow-travel 4.5s linear infinite;
+  }
+
   @property --pill-glow-x {
     syntax: "<percentage>";
     inherits: false;
@@ -649,6 +695,12 @@
       animation: none;
       --pill-glow-x: 92%;
       --pill-glow-y: 82%;
+    }
+
+    .card-ring-animate {
+      animation: none;
+      --card-glow-x: 94%;
+      --card-glow-y: 6%;
     }
 
     .attachment-upload-progress {

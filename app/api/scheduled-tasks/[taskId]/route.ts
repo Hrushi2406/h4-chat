@@ -64,14 +64,13 @@ function getBaseUrl(req: Request) {
 
 function scheduledTaskErrorResponse(error: unknown) {
   console.error("Automation API failed:", error);
+  const message =
+    error instanceof Error ? error.message : "Unable to update automation";
+  const status =
+    message === "Forbidden" || message.includes("plan allows") ? 403 : 500;
 
   return Response.json(
-    {
-      error:
-        error instanceof Error
-          ? error.message
-          : "Unable to update automation",
-    },
-    { status: error instanceof Error && error.message === "Forbidden" ? 403 : 500 },
+    { error: message },
+    { status },
   );
 }

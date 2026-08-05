@@ -4,7 +4,11 @@ import { useChat } from "@ai-sdk/react";
 import { MessageList } from "@/components/chat/message-list";
 import { ChatInput } from "@/components/chat/chat-input";
 import { useState, useEffect, useMemo, useRef, useCallback } from "react";
-import { getDefaultModel, type AIModel } from "@/lib/available-models";
+import {
+  getDefaultModel,
+  getModelById,
+  type AIModel,
+} from "@/lib/available-models";
 import { useThreadActions } from "@/lib/hooks/thread/use-thread-actions";
 import { threadKeys, useThread } from "@/lib/hooks/thread/use-threads";
 import {
@@ -19,7 +23,7 @@ import {
 } from "@/lib/types/thread";
 import { useAuth } from "@/lib/hooks/auth/use-auth";
 import { ChatRequestOptions, DefaultChatTransport } from "ai";
-import { useUser } from "@/lib/hooks/user/use-user";
+import { userKeys, useUser } from "@/lib/hooks/user/use-user";
 import { auth } from "@/lib/clients/firebase";
 import { motion, useReducedMotion, type Variants } from "framer-motion";
 import {
@@ -29,6 +33,9 @@ import {
 import { useQueryClient, type InfiniteData } from "@tanstack/react-query";
 import { useMcpServers } from "@/lib/hooks/mcp/use-mcp-servers";
 import type { ThreadCursor, ThreadsPage } from "@/lib/services/thread-service";
+import { parseChatApiError } from "@/lib/billing/chat-error";
+import type { IUser } from "@/lib/types/user";
+import { createDefaultClientBilling } from "@/lib/billing/summary";
 
 interface ChatProps {
   threadId: string;
@@ -49,6 +56,42 @@ type GeneratedTitleResponse = {
 
 let newThreadDraft = "";
 let consumedPromptFromUrl: string | undefined;
+
+const deductCreditsFromCachedUser = (
+  data: IUser | undefined,
+  creditsUsed: number,
+) => {
+  if (!data || creditsUsed <= 0) return data;
+
+  let remaining = Math.floor(creditsUsed);
+  const billing = data.billing ?? createDefaultClientBilling();
+  const paidDeduction = Math.min(billing.credits.paidAvailable, remaining);
+  remaining -= paidDeduction;
+  const permanentDeduction = Math.min(
+    billing.credits.permanentAvailable,
+    remaining,
+  );
+  remaining -= permanentDeduction;
+  const rechargeDeduction = Math.min(
+    billing.credits.rechargeAvailable,
+    remaining,
+  );
+
+  return {
+    ...data,
+    billing: {
+      ...billing,
+      credits: {
+        ...billing.credits,
+        paidAvailable: billing.credits.paidAvailable - paidDeduction,
+        permanentAvailable:
+          billing.credits.permanentAvailable - permanentDeduction,
+        rechargeAvailable:
+          billing.credits.rechargeAvailable - rechargeDeduction,
+      },
+    },
+  };
+};
 
 const promptFromUrlStorageKey = (prompt: string) =>
   `prompt-from-url-sent:${prompt}`;
@@ -142,17 +185,54 @@ export function Chat({ threadId, isNew = false }: ChatProps) {
             : { hasMcpServers: hasMcpServersRef.current },
       }),
       onError: (error) => {
-        const msg = generateDefaultErrorMessage(
-          error.message ||
-            "I'm sorry, I'm having trouble processing your request. Please try again later.",
-        );
+        const parsedError = parseChatApiError(error.message);
+        if (parsedError.code === "INVALID_MODEL") {
+          setSelectedModel(
+            (parsedError.fallbackModelId
+              ? getModelById(parsedError.fallbackModelId)
+              : undefined) ?? getDefaultModel(),
+          );
+        }
+        if (uid && parsedError.billingCode) {
+          void queryClient.invalidateQueries({
+            queryKey: userKeys.detail(uid),
+          });
+        }
+        const msg =
+          parsedError.code === "INSUFFICIENT_CREDITS"
+            ? {
+                ...generateDefaultErrorMessage("Credit limit reached"),
+                metadata: {
+                  creditLimitReached: true,
+                  creditLimitNotice: "credits_exhausted" as const,
+                },
+              }
+            : generateDefaultErrorMessage(
+                parsedError.message ||
+                  "I'm sorry, I'm having trouble processing your request. Please try again later.",
+              );
         setMessages((prevMessages) => [...prevMessages, msg]);
+        if (
+          parsedError.code === "INSUFFICIENT_CREDITS" &&
+          threadId
+        ) {
+          enqueueThreadWrite(() => saveMessageToThread(msg)).catch((error) => {
+            console.error("Failed to save credit-limit notice:", error);
+          });
+        }
       },
       onToolCall: ({ toolCall }) => {
         console.log("Tool call: ", toolCall);
       },
       onFinish: ({ message, messages: finishedMessages }) => {
         console.log("threadId: ", threadId);
+        const creditsUsed = message.metadata?.creditsUsed ?? 0;
+        if (uid && creditsUsed > 0) {
+          queryClient.setQueryData<IUser>(
+            userKeys.detail(uid),
+            (data) => deductCreditsFromCachedUser(data, creditsUsed),
+          );
+        }
 
         // Save assistant message to thread when response is complete
         if (threadId) {
@@ -271,7 +351,10 @@ export function Chat({ threadId, isNew = false }: ChatProps) {
     ).catch((error) => {
       console.error("Failed to save user message:", error);
     });
-    sendMessage({ text: suggestion }, await getChatRequestOptions()).catch(
+    sendMessage(
+      { text: suggestion },
+      await getChatRequestOptions(),
+    ).catch(
       (error) => {
         console.error("Failed to send message:", error);
       },
@@ -408,7 +491,10 @@ export function Chat({ threadId, isNew = false }: ChatProps) {
           console.error("Failed to save Composio resume message:", error);
         });
 
-        await sendMessage({ text }, await getChatRequestOptions());
+        await sendMessage(
+          { text },
+          await getChatRequestOptions(),
+        );
 
         void queryClient.invalidateQueries({
           queryKey: connectionKeys.list(uid),

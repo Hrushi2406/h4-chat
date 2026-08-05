@@ -28,12 +28,15 @@ import {
   ArrowDown,
   ArrowUp,
   Check,
+  CircleAlert,
+  Coins,
   FileAudio,
   FileText,
   ChevronDown,
   ChevronRight,
   Copy,
   ListTree,
+  TriangleAlert,
   Zap,
 } from "lucide-react";
 import CodeBlock from "./code-block";
@@ -44,6 +47,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { toast } from "sonner";
+import { PricingLink } from "@/components/billing/pricing-link";
 
 type ToolAppIcon = {
   slug: string;
@@ -76,10 +80,28 @@ const markdownComponents = {
       {children}
     </div>
   ),
-  a: ({ href, children }) => (
-    isImageUrl(href) ? (
-      <InlineImage src={href} alt={getNodeText(children) || "Generated image"} />
-    ) : (
+  a: ({ href, children }) => {
+    if (isImageUrl(href)) {
+      return (
+        <InlineImage
+          src={href}
+          alt={getNodeText(children) || "Generated image"}
+        />
+      );
+    }
+
+    if (href === "/pricing" || href === "/pricing#recharge") {
+      return (
+        <PricingLink
+          section={href.endsWith("#recharge") ? "recharge" : undefined}
+          className="text-primary transition-colors hover:text-primary/80"
+        >
+          {children}
+        </PricingLink>
+      );
+    }
+
+    return (
       <a
         href={href}
         target="_blank"
@@ -88,8 +110,8 @@ const markdownComponents = {
       >
         {children}
       </a>
-    )
-  ),
+    );
+  },
   img: ({ src, alt }) => (
     <InlineImage
       src={typeof src === "string" ? src : undefined}
@@ -668,7 +690,8 @@ const AssistantMessage = memo(
         {reasoningPart?.text && (
           <ReasoningBlock text={reasoningPart.text} isStreaming={isStreaming} />
         )}
-        {message.parts?.map((part, index) => {
+        {message.metadata?.creditLimitNotice !== "credits_exhausted" &&
+          message.parts?.map((part, index) => {
           if (part.type === "reasoning") return null;
 
           if (part.type === "dynamic-tool" || part.type.startsWith("tool-")) {
@@ -697,13 +720,71 @@ const AssistantMessage = memo(
           }
 
           return null;
-        })}
+          })}
+        {message.metadata?.creditLimitNotice === "credits_exhausted" ? (
+          <OutOfCreditsNotice />
+        ) : message.metadata?.creditLimitReached ? (
+          <div
+            role="status"
+            className="mt-3 flex max-w-xl items-center gap-2.5 rounded-xl border border-amber-300/70 bg-amber-50 px-3 py-2.5 text-sm text-amber-900 dark:border-amber-500/40 dark:bg-amber-950/30 dark:text-amber-200"
+          >
+            <CircleAlert
+              className="h-4 w-4 shrink-0"
+              aria-hidden="true"
+            />
+            <p className="leading-relaxed">
+              You’ve reached your usage limit.{" "}
+              <PricingLink
+                section="recharge"
+                className="font-medium underline underline-offset-2 hover:no-underline"
+              >
+                Add credits
+              </PricingLink>{" "}
+              to keep going ✌️
+            </p>
+          </div>
+        ) : null}
       </>
     );
   },
 );
 
 AssistantMessage.displayName = "AssistantMessage";
+
+const OutOfCreditsNotice = () => (
+  <div
+    role="alert"
+    className="mt-3 w-fit max-w-full rounded-[1.375rem] border border-amber-300/80 bg-amber-50 p-5 text-amber-950 dark:border-amber-500/40 dark:bg-amber-950/30 dark:text-amber-100 sm:p-6"
+  >
+    <div className="flex items-center gap-2">
+      <TriangleAlert
+        className="h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400"
+        aria-hidden="true"
+      />
+      <p className="text-[17px] font-medium leading-6 tracking-[-0.01em]">
+        You’re out of credits
+      </p>
+    </div>
+    <p className="mt-1.5 max-w-none text-[15px] leading-6 text-amber-800 dark:text-amber-200/80 sm:whitespace-nowrap">
+      Add credits now, or choose a plan to get 5x usage every month.
+    </p>
+    <div className="mt-5 flex flex-row gap-2.5">
+      <Button
+        asChild
+        className="h-11 min-w-0 flex-1 rounded-full bg-amber-950 px-3 text-amber-50 shadow-none hover:bg-amber-900 focus-visible:ring-amber-500/40 dark:bg-amber-300 dark:text-amber-950 dark:hover:bg-amber-200 sm:flex-none sm:px-6"
+      >
+        <PricingLink section="recharge">Add Credits</PricingLink>
+      </Button>
+      <Button
+        asChild
+        variant="outline"
+        className="h-11 min-w-0 flex-1 rounded-full border-amber-400/70 bg-transparent px-3 text-amber-950 shadow-none hover:bg-amber-100 hover:text-amber-950 focus-visible:ring-amber-500/40 dark:border-amber-500/50 dark:text-amber-100 dark:hover:bg-amber-900/50 dark:hover:text-amber-50 sm:flex-none sm:px-6"
+      >
+        <PricingLink>Compare Plans</PricingLink>
+      </Button>
+    </div>
+  </div>
+);
 
 const ToolPart = memo(
   ({
@@ -1353,25 +1434,30 @@ const MessageMetadataRow = ({
   message: ThreadMessage;
   showCopy: boolean;
 }) => {
-  if (!showCopy && !hasTokenUsage(message)) {
+  const canCopy =
+    showCopy &&
+    message.metadata?.creditLimitNotice !== "credits_exhausted" &&
+    getRenderableMessageLength(message) > 0;
+  if (!canCopy && !hasMessageUsage(message)) {
     return null;
   }
 
   return (
     <div className="flex items-center justify-start gap-1 text-muted-foreground/70">
       <MessageTokenUsage message={message} />
-      {showCopy && <MessageCopyButton message={message} />}
+      <MessageCreditUsage message={message} />
+      {canCopy && <MessageCopyButton message={message} />}
     </div>
   );
 };
 
-const hasTokenUsage = (message: ThreadMessage) => {
+const hasMessageUsage = (message: ThreadMessage) => {
   const metadata = message.metadata;
   const inputTokens = metadata?.inputTokens ?? 0;
   const outputTokens = metadata?.outputTokens ?? 0;
   const totalTokens = metadata?.totalTokens ?? inputTokens + outputTokens;
 
-  return totalTokens > 0;
+  return totalTokens > 0 || (metadata?.creditsUsed ?? 0) > 0;
 };
 
 const MessageTokenUsage = ({ message }: { message: ThreadMessage }) => {
@@ -1407,6 +1493,24 @@ const MessageTokenUsage = ({ message }: { message: ThreadMessage }) => {
       </TooltipTrigger>
       <TooltipContent side="top">{formatTokenUsage(metadata)}</TooltipContent>
     </Tooltip>
+  );
+};
+
+const MessageCreditUsage = ({ message }: { message: ThreadMessage }) => {
+  const creditsUsed = message.metadata?.creditsUsed ?? 0;
+
+  if (creditsUsed <= 0) {
+    return null;
+  }
+
+  return (
+    <span
+      className="inline-flex items-center gap-1 rounded-full px-1.5 py-1 text-[11px] leading-none tabular-nums"
+      aria-label={`${creditsUsed.toLocaleString("en-IN")} credits used`}
+    >
+      <Coins className="h-3 w-3" aria-hidden="true" />
+      {creditsUsed.toLocaleString("en-IN")} credits used
+    </span>
   );
 };
 

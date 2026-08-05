@@ -7,6 +7,8 @@ import {
   isSupportedComposioToolkit,
 } from "@/lib/composio";
 import { verifyFirebaseIdToken } from "@/lib/firebase-auth-server";
+import { getConnectionLimitForUser } from "@/lib/billing/server";
+import { getUserMcpServersFromFirestore } from "@/lib/mcp-firestore";
 
 export const dynamic = "force-dynamic";
 
@@ -96,6 +98,38 @@ export async function POST(req: Request) {
 
     if (toolkitState?.isNoAuth) {
       return Response.json({ isConnected: true, isNoAuth: true });
+    }
+    if (toolkitState?.connection?.isActive) {
+      return Response.json({ isConnected: true, isNoAuth: false });
+    }
+
+    const connectionLimit = await getConnectionLimitForUser(userId);
+    if (connectionLimit !== null) {
+      const [allToolkits, mcpServers] = await Promise.all([
+        session.toolkits({
+          toolkits: [...COMPOSIO_TOOLKITS],
+          limit: COMPOSIO_TOOLKITS.length,
+        }),
+        getUserMcpServersFromFirestore({ userId }).catch(() => []),
+      ]);
+      const activeComposioConnections = allToolkits.items.filter(
+        (item) => !item.isNoAuth && item.connection?.isActive,
+      ).length;
+      const enabledMcpServers = mcpServers.filter(
+        (server) => server.enabled !== false,
+      ).length;
+
+      if (
+        activeComposioConnections + enabledMcpServers >=
+        connectionLimit
+      ) {
+        return Response.json(
+          {
+            error: `Your plan allows ${connectionLimit} connected apps. Disconnect one or upgrade your plan.`,
+          },
+          { status: 403 },
+        );
+      }
     }
 
     const connectionRequest = await createComposioConnectionRequest({

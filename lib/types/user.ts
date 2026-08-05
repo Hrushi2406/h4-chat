@@ -1,3 +1,5 @@
+import type { UserBilling } from "@/lib/billing/types";
+
 export interface IMemory {
   id: string;
   content: string;
@@ -17,6 +19,7 @@ export interface IUser {
   memoryEnabled: boolean;
   composioSessionId?: string;
   composioSessionUpdatedAt?: string;
+  billing?: UserBilling;
 }
 
 export const MAX_USER_MEMORIES = 40;

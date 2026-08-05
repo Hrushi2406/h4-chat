@@ -49,6 +49,7 @@ import {
   getTimePeriodLabel,
 } from "@/lib/types/thread";
 import { useAuth } from "@/lib/hooks/auth/use-auth";
+import { useBilling } from "@/lib/hooks/billing/use-billing";
 import Navbar from "../ui/navbar";
 import { useUser } from "@/lib/hooks/user/use-user";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -76,6 +77,7 @@ export default function ChatLayout({
 const ThreadSidebar = () => {
   const { uid } = useAuth();
   const { data: user } = useUser();
+  const { data: billingData } = useBilling();
   const {
     data: threads = [],
     isLoading,
@@ -166,6 +168,9 @@ const ThreadSidebar = () => {
   const groupedThreads = useMemo(() => {
     return groupThreadsByTimePeriod(threads);
   }, [threads]);
+  const brandLabel = billingData
+    ? `Sakhi ${billingData.billing.planName}`
+    : "Sakhi";
 
   return (
     <>
@@ -177,7 +182,7 @@ const ThreadSidebar = () => {
               alt="Sakhi AI"
               className="h-7 w-7 object-contain"
             />
-            <h2 className="font-semibold">Sakhi Plus</h2>
+            <h2 className="font-semibold">{brandLabel}</h2>
           </div>
           <SidebarMenu>
             <SidebarMenuItem>

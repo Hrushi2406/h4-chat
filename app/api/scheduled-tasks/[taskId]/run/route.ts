@@ -2,6 +2,7 @@ import scheduledTaskServerService from "@/lib/services/scheduled-task-server-ser
 import { verifyFirebaseIdToken } from "@/lib/firebase-auth-server";
 
 export const dynamic = "force-dynamic";
+export const maxDuration = 900;
 
 interface RouteContext {
   params: Promise<{ taskId: string }>;
