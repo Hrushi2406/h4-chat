@@ -1124,7 +1124,7 @@ function getProviderOptions(modelId: string, userId: string) {
     return {
       providerOptions: {
         gateway: {
-          order: ["deepinfra", "deepseek", "fireworks"],
+          order: ["novita", "digitalocean", "deepseek", "fireworks"],
           user: userId,
           tags: ["feature:chat"],
         },
