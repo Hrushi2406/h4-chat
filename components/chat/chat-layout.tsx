@@ -36,10 +36,12 @@ import {
   Edit,
   Blocks,
   BookOpen,
+  Star,
+  ChevronDown,
 } from "lucide-react";
 import Link from "next/link";
 import { useRouter, usePathname } from "next/navigation";
-import { useThreads } from "@/lib/hooks/thread/use-threads";
+import { useStarredThreads, useThreads } from "@/lib/hooks/thread/use-threads";
 import { useThreadActions } from "@/lib/hooks/thread/use-thread-actions";
 import { useState, useMemo } from "react";
 import {
@@ -50,6 +52,7 @@ import {
 } from "@/lib/types/thread";
 import { useAuth } from "@/lib/hooks/auth/use-auth";
 import { useBilling } from "@/lib/hooks/billing/use-billing";
+import { cn } from "@/lib/utils";
 import Navbar from "../ui/navbar";
 import { useUser } from "@/lib/hooks/user/use-user";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -85,6 +88,7 @@ const ThreadSidebar = () => {
     hasNextPage,
     isFetchingNextPage,
   } = useThreads();
+  const { data: starredThreads } = useStarredThreads();
   const router = useRouter();
   const pathname = usePathname();
   const currentThreadId = pathname.split("/").pop() as string;
@@ -165,8 +169,11 @@ const ThreadSidebar = () => {
     setThreadToDelete(null);
   };
 
+  // Starred chats get their own section, so keep them out of the date groups.
   const groupedThreads = useMemo(() => {
-    return groupThreadsByTimePeriod(threads);
+    return groupThreadsByTimePeriod(
+      threads.filter((thread) => !thread.isStarred)
+    );
   }, [threads]);
   const brandLabel = billingData
     ? `Sakhi ${billingData.billing.planName}`
@@ -243,6 +250,7 @@ const ThreadSidebar = () => {
             <ThreadsList
               threads={threads}
               groupedThreads={groupedThreads}
+              starredThreads={starredThreads}
               currentThreadId={currentThreadId}
               onThreadClick={handleThreadClick}
               onDeleteThread={handleDeleteThread}
@@ -374,6 +382,7 @@ const EmptyState = () => (
 interface ThreadsListProps {
   groupedThreads: Record<ThreadTimePeriod, Thread[]>;
   threads: Thread[];
+  starredThreads: Thread[];
   currentThreadId: string;
   onThreadClick: (threadId: string) => void;
   onDeleteThread: (threadId: string, threadTitle: string) => void;
@@ -384,6 +393,7 @@ interface ThreadsListProps {
 
 const ThreadsList = ({
   groupedThreads,
+  starredThreads,
   currentThreadId,
   onThreadClick,
   onDeleteThread,
@@ -425,6 +435,14 @@ const ThreadsList = ({
 
   return (
     <div className="min-h-0">
+      {starredThreads.length ? (
+        <StarredThreadsSection
+          starredThreads={starredThreads}
+          currentThreadId={currentThreadId}
+          onThreadClick={onThreadClick}
+          onDeleteThread={onDeleteThread}
+        />
+      ) : null}
       {timePeriods.map((period) => {
         const threadsInPeriod = groupedThreads[period];
         if (!threadsInPeriod.length) return null;
@@ -470,6 +488,80 @@ const ThreadsList = ({
         ) : null}
       </div>
     </div>
+  );
+};
+
+const STARRED_OPEN_STORAGE_KEY = "sidebar:starred-open";
+
+interface StarredThreadsSectionProps {
+  starredThreads: Thread[];
+  currentThreadId: string;
+  onThreadClick: (threadId: string) => void;
+  onDeleteThread: (threadId: string, threadTitle: string) => void;
+}
+
+const StarredThreadsSection = ({
+  starredThreads,
+  currentThreadId,
+  onThreadClick,
+  onDeleteThread,
+}: StarredThreadsSectionProps) => {
+  const [isOpen, setIsOpen] = useState(true);
+
+  // Read persisted state after mount so server and client markup stay identical.
+  React.useEffect(() => {
+    setIsOpen(
+      window.localStorage.getItem(STARRED_OPEN_STORAGE_KEY) !== "closed"
+    );
+  }, []);
+
+  const handleToggle = () => {
+    const nextIsOpen = !isOpen;
+    setIsOpen(nextIsOpen);
+    window.localStorage.setItem(
+      STARRED_OPEN_STORAGE_KEY,
+      nextIsOpen ? "open" : "closed"
+    );
+  };
+
+  return (
+    <SidebarGroup className="px-2 py-1">
+      <SidebarMenu>
+        <SidebarMenuItem>
+          <SidebarMenuButton
+            tooltip="Starred"
+            onClick={handleToggle}
+            aria-expanded={isOpen}
+            className="cursor-pointer gap-2.5"
+          >
+            <Star className="h-4 w-4 fill-current text-primary" />
+            <span>Starred</span>
+            <ChevronDown
+              className={cn(
+                "ml-auto h-4 w-4 shrink-0 text-muted-foreground transition-transform duration-200",
+                !isOpen && "-rotate-90"
+              )}
+            />
+          </SidebarMenuButton>
+        </SidebarMenuItem>
+      </SidebarMenu>
+
+      {isOpen ? (
+        <SidebarGroupContent>
+          <SidebarMenu>
+            {starredThreads.map((thread) => (
+              <ThreadItem
+                key={thread.id}
+                thread={thread}
+                isActive={currentThreadId === thread.id}
+                onThreadClick={onThreadClick}
+                onDeleteThread={onDeleteThread}
+              />
+            ))}
+          </SidebarMenu>
+        </SidebarGroupContent>
+      ) : null}
+    </SidebarGroup>
   );
 };
 
@@ -597,8 +689,33 @@ const ThreadItemActions = ({
   onEditThread,
   onDeleteThread,
 }: ThreadItemActionsProps) => {
+  const { setThreadStarred } = useThreadActions();
+  const isStarred = Boolean(thread.isStarred);
+
   return (
     <div className="absolute right-1 top-1/2 flex -translate-y-1/2 items-center gap-0.5 rounded-md bg-sidebar-accent opacity-0 transition-opacity [div[data-threadid]:focus-within_&]:opacity-100 [div[data-threadid]:hover_&]:opacity-100">
+      <SidebarMenuAction
+        type="button"
+        className={`static size-7 translate-y-0 cursor-pointer ${
+          isStarred
+            ? "text-primary hover:text-primary"
+            : "text-muted-foreground hover:text-foreground"
+        }`}
+        data-starred={isStarred}
+        aria-pressed={isStarred}
+        onClick={(e) => {
+          e.stopPropagation();
+          setThreadStarred.mutate({
+            threadId: thread.id,
+            isStarred: !isStarred,
+          });
+        }}
+      >
+        <Star className={`h-4 w-4 ${isStarred ? "fill-current" : ""}`} />
+        <span className="sr-only">
+          {isStarred ? "Remove chat from starred" : "Star chat"}
+        </span>
+      </SidebarMenuAction>
       <SidebarMenuAction
         type="button"
         className="static size-7 translate-y-0 cursor-pointer text-muted-foreground hover:text-foreground"

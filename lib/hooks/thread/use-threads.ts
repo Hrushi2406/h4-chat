@@ -10,6 +10,7 @@ import { useAuth } from "../auth/use-auth";
 
 export const threadKeys = {
   all: (uid: string) => ["threads", "infinite", uid] as const,
+  starred: (uid: string) => ["threads", "starred", uid] as const,
   detail: (uid: string, id: string) => ["threads", uid, id] as const,
 };
 
@@ -42,6 +43,27 @@ export const useThreads = () => {
   );
 
   return { ...query, data: threads };
+};
+
+export const useStarredThreads = () => {
+  const qc = useQueryClient();
+  const { uid } = useAuth();
+
+  const query = useQuery({
+    queryKey: threadKeys.starred(uid ?? ""),
+    queryFn: async () => {
+      const threads = await threadService.getStarredThreads({ userId: uid! });
+
+      threads.forEach((thread: Thread) => {
+        qc.setQueryData(threadKeys.detail(uid!, thread.id), thread);
+      });
+
+      return threads;
+    },
+    enabled: !!uid,
+  });
+
+  return { ...query, data: query.data ?? [] };
 };
 
 export const useThread = (threadId: string, isNew?: boolean) => {
