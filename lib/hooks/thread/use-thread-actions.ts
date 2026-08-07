@@ -121,6 +121,33 @@ const removeThreadFromList = (
   };
 };
 
+const findThreadInList = (
+  data: ThreadsInfiniteData | undefined,
+  threadId: string
+): Thread | undefined => {
+  if (!data) return undefined;
+
+  for (const page of data.pages) {
+    const match = page.threads.find((thread) => thread.id === threadId);
+    if (match) return match;
+  }
+
+  return undefined;
+};
+
+/** Patches a thread already in the starred list. No-op when it isn't starred. */
+const updateThreadInStarredList = (
+  data: Thread[] | undefined,
+  threadId: string,
+  update: (thread: Thread) => Thread
+): Thread[] | undefined =>
+  data?.map((thread) => (thread.id === threadId ? update(thread) : thread));
+
+const sortByUpdatedAtDesc = (threads: Thread[]): Thread[] =>
+  [...threads].sort(
+    (a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
+  );
+
 export const useThreadActions = () => {
   const qc = useQueryClient();
   const { uid } = useAuth();
@@ -204,6 +231,13 @@ export const useThreadActions = () => {
           titleSource: "manual",
         }))
       );
+      qc.setQueryData<Thread[]>(threadKeys.starred(uid), (oldData) =>
+        updateThreadInStarredList(oldData, threadId, (thread) => ({
+          ...thread,
+          title,
+          titleSource: "manual",
+        }))
+      );
       qc.invalidateQueries({ queryKey: threadKeys.all(uid) });
     },
     onError: (error) => handleError(error, "Failed to update thread"),
@@ -217,9 +251,80 @@ export const useThreadActions = () => {
       qc.setQueryData<ThreadsInfiniteData>(threadKeys.all(uid), (oldData) =>
         removeThreadFromList(oldData, threadId)
       );
+      qc.setQueryData<Thread[]>(threadKeys.starred(uid), (oldData) =>
+        oldData?.filter((thread) => thread.id !== threadId)
+      );
       qc.invalidateQueries({ queryKey: threadKeys.all(uid) });
     },
     onError: (error) => handleError(error, "Failed to delete thread"),
+  });
+
+  const setThreadStarred = useMutation({
+    mutationFn: threadService.setThreadStarred,
+    onMutate: async ({ threadId, isStarred }) => {
+      if (!uid) return;
+
+      await Promise.all([
+        qc.cancelQueries({ queryKey: threadKeys.all(uid) }),
+        qc.cancelQueries({ queryKey: threadKeys.starred(uid) }),
+      ]);
+
+      const previousThreadList = qc.getQueryData<ThreadsInfiniteData>(
+        threadKeys.all(uid)
+      );
+      const previousStarred = qc.getQueryData<Thread[]>(
+        threadKeys.starred(uid)
+      );
+      const previousThread = qc.getQueryData<Thread>(
+        threadKeys.detail(uid, threadId)
+      );
+
+      const thread =
+        previousThread ?? findThreadInList(previousThreadList, threadId);
+
+      qc.setQueryData(
+        threadKeys.detail(uid, threadId),
+        (oldData: Thread | undefined) =>
+          oldData ? { ...oldData, isStarred } : oldData
+      );
+      qc.setQueryData<ThreadsInfiniteData>(threadKeys.all(uid), (oldData) =>
+        updateThreadInList(oldData, threadId, (current) => ({
+          ...current,
+          isStarred,
+        }))
+      );
+      qc.setQueryData<Thread[]>(threadKeys.starred(uid), (oldData) => {
+        if (!oldData) return oldData;
+
+        const withoutCurrent = oldData.filter(
+          (current) => current.id !== threadId
+        );
+
+        if (!isStarred || !thread) return withoutCurrent;
+
+        return sortByUpdatedAtDesc([
+          ...withoutCurrent,
+          { ...thread, isStarred: true },
+        ]);
+      });
+
+      return { previousThreadList, previousStarred, previousThread };
+    },
+    onError: (error, { threadId }, context) => {
+      if (uid && context) {
+        qc.setQueryData(threadKeys.all(uid), context.previousThreadList);
+        qc.setQueryData(threadKeys.starred(uid), context.previousStarred);
+        qc.setQueryData(
+          threadKeys.detail(uid, threadId),
+          context.previousThread
+        );
+      }
+      handleError(error, "Failed to update starred chats");
+    },
+    onSettled: () => {
+      if (!uid) return;
+      qc.invalidateQueries({ queryKey: threadKeys.starred(uid) });
+    },
   });
 
   const addMessageToThread = useMutation({
@@ -253,6 +358,20 @@ export const useThreadActions = () => {
           updatedAt: new Date(updatedAt),
         }))
       );
+      qc.setQueryData<Thread[]>(threadKeys.starred(uid), (oldData) => {
+        const updated = updateThreadInStarredList(
+          oldData,
+          threadId,
+          (thread) => ({
+            ...thread,
+            messageCount: thread.messageCount + 1,
+            lastMessagePreview: getMessageContent(messageData).substring(0, 100),
+            updatedAt: new Date(updatedAt),
+          })
+        );
+
+        return updated ? sortByUpdatedAtDesc(updated) : updated;
+      });
     },
     onError: (error) => handleError(error, "Failed to add message to thread"),
   });
@@ -296,6 +415,7 @@ export const useThreadActions = () => {
     createThread,
     updateThread,
     deleteThread,
+    setThreadStarred,
     addMessageToThread,
     shareThread,
   };

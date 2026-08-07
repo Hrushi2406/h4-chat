@@ -50,6 +50,7 @@ export interface Thread {
   // Composio Tool Router session id, written server-side by the chat route so
   // multi-turn messages reuse one session instead of recreating it each turn.
   composioSessionId?: string;
+  isStarred?: boolean;
   messageCount: number;
   lastMessagePreview?: string;
 }
@@ -67,6 +68,7 @@ export const generateDefaultThread = (userId?: string): Thread => {
     createdAt: now,
     updatedAt: now,
     userId,
+    isStarred: false,
     messageCount: 0,
     lastMessagePreview: undefined,
   };

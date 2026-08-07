@@ -30,6 +30,7 @@ import { v4 } from "uuid";
 
 const colThreads = "threads";
 const colUsers = "users";
+const STARRED_THREADS_LIMIT = 50;
 export type ThreadCursor = QueryDocumentSnapshot<DocumentData>;
 
 export interface ThreadsPage {
@@ -126,7 +127,6 @@ class ThreadService {
         id: threadId,
         title: title,
         titleSource: "fallback" as const,
-        isPinned: false,
         createdAt: now,
         updatedAt: now,
       };
@@ -212,6 +212,62 @@ class ThreadService {
       return { threads, nextCursor };
     } catch (error) {
       console.error("Failed to fetch threads:", error);
+      throw error;
+    }
+  }
+
+  // Get starred threads. Queried separately from the paginated list so a
+  // starred chat stays reachable even when it falls outside the loaded pages.
+  async getStarredThreads({
+    userId,
+    pageSize = STARRED_THREADS_LIMIT,
+  }: {
+    userId: string;
+    pageSize?: number;
+  }): Promise<Thread[]> {
+    try {
+      const q = query(
+        collection(db, colThreads),
+        where("userId", "==", userId),
+        where("isStarred", "==", true),
+        orderBy("updatedAt", "desc"),
+        limit(pageSize)
+      );
+
+      const querySnapshot = await getDocs(q);
+      const threads = querySnapshot.docs.map((doc) =>
+        normalizeThreadData(doc.data() as Thread)
+      );
+
+      console.log(`Retrieved ${threads.length} starred threads`);
+      return threads;
+    } catch (error) {
+      console.error("Failed to fetch starred threads:", error);
+      throw error;
+    }
+  }
+
+  // Star or unstar a thread
+  async setThreadStarred({
+    threadId,
+    isStarred,
+  }: {
+    threadId: string;
+    isStarred: boolean;
+  }): Promise<void> {
+    try {
+      console.log("Setting thread starred:", { threadId, isStarred });
+
+      const docRef = doc(db, colThreads, threadId);
+      await updateDoc(docRef, { isStarred });
+
+      console.log("Thread starred state updated:", { threadId, isStarred });
+    } catch (error) {
+      console.error(
+        "Failed to update thread starred state:",
+        { threadId, isStarred },
+        error
+      );
       throw error;
     }
   }
