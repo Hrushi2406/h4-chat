@@ -43,7 +43,7 @@ const colRuns = "scheduledTaskRuns";
 const colThreads = "threads";
 const automationExecutionTimeoutSeconds = 900;
 const automationExecutionTimeoutMs = automationExecutionTimeoutSeconds * 1_000;
-const automationStepLimit = 25;
+const automationStepLimit = 100;
 
 const getQstashScheduleId = (taskId: string) => `scheduled-task-${taskId}`;
 
