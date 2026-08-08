@@ -132,6 +132,7 @@ export async function POST(req: Request) {
   })();
 
   let availableCredits: number;
+  let creditMultiplier: number;
   let resolvedUserInfo: Partial<IUser>;
   const billingStart = performance.now();
   try {
@@ -140,6 +141,7 @@ export async function POST(req: Request) {
       modelId: model.id,
     });
     availableCredits = access.availableCredits;
+    creditMultiplier = access.plan.creditMultiplier;
     resolvedUserInfo = (access.userData as Partial<IUser> | undefined) ?? {};
     console.log(
       `billing/user firestore: +${Math.round(performance.now() - billingStart)}ms (${Math.round(performance.now() - parallelStart)}ms since parallel start)`,
@@ -248,6 +250,7 @@ export async function POST(req: Request) {
     calculateCredits({
       models,
       toolCostNanoUsd: meteredToolCostNanoUsd,
+      creditMultiplier,
     });
   const deductUsage = async (models: BillableModelUsage[]) => {
     if (billingFinalized || models.length === 0) return;
@@ -327,6 +330,7 @@ export async function POST(req: Request) {
               step.toolCalls.map((toolCall) => toolCall.toolName),
             ),
           ),
+          creditMultiplier,
         }).credits >= availableCredits;
         if (reached) {
           creditLimitReached = true;

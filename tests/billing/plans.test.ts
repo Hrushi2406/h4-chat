@@ -13,8 +13,11 @@ describe("billing plan configuration", () => {
   it("keeps plan limits and prices in code", () => {
     expect(BILLING_PLANS.plus_monthly.pricePaise).toBe(39_900);
     expect(BILLING_PLANS.plus_monthly.monthlyCredits).toBe(10_000);
+    expect(BILLING_PLANS.plus_monthly.creditMultiplier).toBe(2);
     expect(BILLING_PLANS.pro_annual.pricePaise).toBe(1_999_000);
     expect(BILLING_PLANS.pro_annual.monthlyCredits).toBe(50_000);
+    expect(BILLING_PLANS.pro_annual.creditMultiplier).toBe(2);
+    expect(BILLING_PLANS.free.creditMultiplier).toBe(7);
   });
 
   it("distinguishes public plan IDs from invalid input", () => {

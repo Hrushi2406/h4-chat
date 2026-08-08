@@ -377,11 +377,13 @@ class ScheduledTaskServerService {
         input.baseUrl,
         model.id,
         access.availableCredits,
+        access.plan.creditMultiplier,
       );
       const output = execution.output;
       const calculation = calculateCredits({
         models: [usageFromAiSdk(model.id, execution.usage)],
         toolCostNanoUsd: execution.toolCostNanoUsd,
+        creditMultiplier: access.plan.creditMultiplier,
       });
       await deductCredits({
         userId: task.userId,
@@ -586,6 +588,7 @@ class ScheduledTaskServerService {
     baseUrl: string,
     modelId: string,
     availableCredits: number,
+    creditMultiplier: number,
   ) {
     const mcpServers = await getUserMcpServersFromFirestore({
       userId: task.userId,
@@ -633,6 +636,7 @@ class ScheduledTaskServerService {
                   step.toolCalls.map((toolCall) => toolCall.toolName),
                 ),
               ),
+              creditMultiplier,
             }).credits >= availableCredits,
         ],
         abortSignal: timeoutController.signal,

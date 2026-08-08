@@ -10,7 +10,6 @@ import { getModelById } from "@/lib/available-models";
 import {
   BILLING_PLANS,
   BILLING_TIMEZONE,
-  CREDIT_MULTIPLIER,
   MODEL_RATES,
   WELCOME_CREDITS,
   getRechargeCreditsToRevoke,
@@ -1599,7 +1598,8 @@ export const getConnectionLimitForUser = async (userId: string) => {
   return BILLING_PLANS[billing.planId].connectionLimit;
 };
 
-export const getCreditMultiplier = () => CREDIT_MULTIPLIER;
+export const getCreditMultiplier = (planId: BillingPlanId) =>
+  BILLING_PLANS[planId].creditMultiplier;
 
 export const runBillingTransaction = <T>(
   callback: (transaction: Transaction) => Promise<T>,

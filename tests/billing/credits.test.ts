@@ -5,7 +5,7 @@ import {
 } from "@/lib/billing/credits";
 
 describe("credit calculation", () => {
-  it("charges exactly 10 credits for the agreed Sakhi 1 example", () => {
+  it("uses the default paid-plan multiplier", () => {
     const result = calculateCredits({
       models: [
         {
@@ -17,7 +17,8 @@ describe("credit calculation", () => {
     });
 
     expect(result.modelCostNanoUsd).toBe(6_538_140);
-    expect(result.credits).toBe(10);
+    expect(result.credits).toBe(14);
+    expect(result.creditMultiplier).toBe(2);
   });
 
   it("rounds once after summing every model step", () => {
@@ -42,7 +43,7 @@ describe("credit calculation", () => {
     });
 
     // Each step costs $0.00042, but the whole task costs $0.00126.
-    expect(result.credits).toBe(2);
+    expect(result.credits).toBe(3);
   });
 
   it("uses cached-input rates without double-counting cached tokens", () => {
@@ -69,7 +70,7 @@ describe("credit calculation", () => {
       toolCostNanoUsd: 1_000_000,
     });
 
-    expect(result.credits).toBe(2);
+    expect(result.credits).toBe(3);
   });
 
   it("applies the explicit multiplier after actual cost", () => {
@@ -85,6 +86,22 @@ describe("credit calculation", () => {
     });
 
     expect(result.credits).toBe(14);
+  });
+
+  it("supports the free-plan multiplier", () => {
+    const result = calculateCredits({
+      models: [
+        {
+          modelId: "deepseek/deepseek-v4-flash",
+          inputTokens: 45_125,
+          outputTokens: 788,
+        },
+      ],
+      creditMultiplier: 7,
+    });
+
+    expect(result.credits).toBe(46);
+    expect(result.creditMultiplier).toBe(7);
   });
 
   it("charges a minimum of one credit for a successful billable task", () => {

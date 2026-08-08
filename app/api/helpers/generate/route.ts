@@ -46,7 +46,7 @@ export async function POST(request: Request) {
     }
 
     const billingModelId = "anthropic/claude-haiku-4.5";
-    await checkTaskAccess({
+    const access = await checkTaskAccess({
       userId,
       modelId: billingModelId,
       enforceModelAccess: false,
@@ -111,6 +111,7 @@ These examples demonstrate capability-aware depth. Do not copy them unless they 
 
     const calculation = calculateCredits({
       models: [usageFromAiSdk(billingModelId, result.usage)],
+      creditMultiplier: access.plan.creditMultiplier,
     });
     await deductCredits({
       userId,

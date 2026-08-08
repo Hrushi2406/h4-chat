@@ -3,7 +3,8 @@ import type { AIModel } from "@/lib/available-models";
 export const BILLING_TIMEZONE = "Asia/Kolkata";
 export const CREDIT_FORMULA_VERSION = 1;
 export const MODEL_RATE_VERSION = 1;
-export const CREDIT_MULTIPLIER = 1.5;
+export const CREDIT_MULTIPLIER = 2;
+export const FREE_CREDIT_MULTIPLIER = 7;
 export const WELCOME_CREDITS = 1_000;
 
 export const CREDIT_RECHARGE = {
@@ -61,6 +62,7 @@ export type BillingPlan = {
   interval: "none" | "monthly" | "annual";
   pricePaise: number;
   monthlyCredits: number;
+  creditMultiplier: number;
   connectionLimit: number | null;
   automationLimit: number;
   allowParallelTasks: boolean;
@@ -76,6 +78,7 @@ export const BILLING_PLANS: Record<BillingPlanId, BillingPlan> = {
     interval: "none",
     pricePaise: 0,
     monthlyCredits: WELCOME_CREDITS,
+    creditMultiplier: FREE_CREDIT_MULTIPLIER,
     connectionLimit: 5,
     automationLimit: 1,
     allowParallelTasks: false,
@@ -87,6 +90,7 @@ export const BILLING_PLANS: Record<BillingPlanId, BillingPlan> = {
     interval: "monthly",
     pricePaise: 39_900,
     monthlyCredits: 10_000,
+    creditMultiplier: CREDIT_MULTIPLIER,
     connectionLimit: null,
     automationLimit: 10,
     allowParallelTasks: false,
@@ -100,6 +104,7 @@ export const BILLING_PLANS: Record<BillingPlanId, BillingPlan> = {
     interval: "annual",
     pricePaise: 399_000,
     monthlyCredits: 10_000,
+    creditMultiplier: CREDIT_MULTIPLIER,
     connectionLimit: null,
     automationLimit: 10,
     allowParallelTasks: false,
@@ -113,6 +118,7 @@ export const BILLING_PLANS: Record<BillingPlanId, BillingPlan> = {
     interval: "monthly",
     pricePaise: 199_900,
     monthlyCredits: 50_000,
+    creditMultiplier: CREDIT_MULTIPLIER,
     connectionLimit: null,
     automationLimit: 50,
     allowParallelTasks: true,
@@ -126,6 +132,7 @@ export const BILLING_PLANS: Record<BillingPlanId, BillingPlan> = {
     interval: "annual",
     pricePaise: 1_999_000,
     monthlyCredits: 50_000,
+    creditMultiplier: CREDIT_MULTIPLIER,
     connectionLimit: null,
     automationLimit: 50,
     allowParallelTasks: true,
