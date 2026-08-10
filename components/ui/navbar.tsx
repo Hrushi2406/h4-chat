@@ -4,12 +4,10 @@ import {
   Plus,
   Share,
   Settings2,
-  Star,
 } from "lucide-react";
 import { Button } from "./button";
 import { SidebarTrigger } from "./sidebar";
 import { useThreadActions } from "@/lib/hooks/thread/use-thread-actions";
-import { useThread } from "@/lib/hooks/thread/use-threads";
 import { usePathname, useRouter } from "next/navigation";
 import Link from "next/link";
 import { ThemeToggle } from "@/components/theme-toggle";
@@ -37,12 +35,11 @@ const getThreadIdFromPathname = (pathname: string) => {
 };
 
 export default function Navbar() {
-  const { shareThread, setThreadStarred } = useThreadActions();
+  // Star button removed from navbar (starring still available from the sidebar).
+  const { shareThread } = useThreadActions();
   const pathname = usePathname();
   const currentThreadId = getThreadIdFromPathname(pathname);
-  const { data: currentThread } = useThread(currentThreadId ?? "");
   const router = useRouter();
-  const isStarred = Boolean(currentThread?.isStarred);
 
   const handleNewThread = () => {
     router.push("/chat");
@@ -51,14 +48,6 @@ export default function Navbar() {
   const handleShare = () => {
     if (!currentThreadId) return;
     shareThread.mutate({ threadId: currentThreadId });
-  };
-
-  const handleToggleStar = () => {
-    if (!currentThreadId) return;
-    setThreadStarred.mutate({
-      threadId: currentThreadId,
-      isStarred: !isStarred,
-    });
   };
 
   return (
@@ -80,26 +69,6 @@ export default function Navbar() {
             <Plus className="h-4 w-4 shrink-0" />
             <span className="sr-only md:not-sr-only md:inline">New Chat</span>
           </Button>
-          {currentThreadId ? (
-            <Button
-              variant="secondary"
-              size="sm"
-              className={navToolbarSecondaryBtnClass}
-              aria-pressed={isStarred}
-              aria-label={isStarred ? "Remove chat from starred" : "Star chat"}
-              data-starred={isStarred}
-              onClick={handleToggleStar}
-            >
-              <Star
-                className={`h-4 w-4 shrink-0 ${
-                  isStarred ? "fill-current text-primary" : ""
-                }`}
-              />
-              <span className="sr-only md:not-sr-only md:inline">
-                {isStarred ? "Starred" : "Star"}
-              </span>
-            </Button>
-          ) : null}
           {currentThreadId ? (
             <Button
               variant="secondary"
