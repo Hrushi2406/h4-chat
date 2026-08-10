@@ -1,0 +1,66 @@
+rules_version = '2';
+
+// Storage rules for the Firebase project shared by Sakhi and Sakhi Admin.
+// lib/services/storage-service.ts (identical in both repos) only ever
+// writes to users/{userId}/files/{fileName} or
+// users/{userId}/threads/{threadId}/{fileName}, gated by MAX_UPLOAD_FILE_SIZE
+// (25MB) and ALLOWED_FILE_TYPES client-side — enforced again here since
+// client-side validation can be bypassed.
+service firebase.storage {
+  match /b/{bucket}/o {
+
+    function isOwner(uid) {
+      return request.auth != null && request.auth.uid == uid;
+    }
+
+    // <= to match the client's own `file.size > MAX_UPLOAD_FILE_SIZE`
+    // rejection — a file of exactly 25MB passes the client and must pass
+    // here too.
+    function isValidSize() {
+      return request.resource.size <= 25 * 1024 * 1024;
+    }
+
+    // Mirrors ALLOWED_FILE_TYPES' keys in storage-service.ts. The client
+    // also accepts a file by extension alone when its reported MIME type
+    // is missing/generic (e.g. "application/octet-stream") — rules can't
+    // easily replicate that fallback, so this is intentionally a bit
+    // stricter than the client, not looser.
+    function isAllowedContentType() {
+      return request.resource.contentType in [
+        'image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp',
+        'audio/mpeg', 'audio/mp3', 'audio/mp4', 'audio/x-m4a', 'audio/wav',
+        'audio/x-wav', 'audio/webm', 'audio/ogg', 'audio/aac', 'audio/flac',
+        'audio/x-flac',
+        'application/pdf', 'text/csv', 'application/csv',
+        'text/comma-separated-values', 'application/vnd.ms-excel',
+        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        'application/vnd.oasis.opendocument.spreadsheet',
+        'application/msword',
+        'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        'application/vnd.oasis.opendocument.text',
+        'application/vnd.ms-powerpoint',
+        'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+        'application/vnd.oasis.opendocument.presentation',
+        'text/plain', 'text/markdown', 'application/json', 'application/zip'
+      ];
+    }
+
+    function isValidUpload() {
+      return isValidSize() && isAllowedContentType();
+    }
+
+    match /users/{userId}/files/{fileName} {
+      allow read, delete: if isOwner(userId);
+      allow create, update: if isOwner(userId) && isValidUpload();
+    }
+
+    match /users/{userId}/threads/{threadId}/{fileName} {
+      allow read, delete: if isOwner(userId);
+      allow create, update: if isOwner(userId) && isValidUpload();
+    }
+
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}

@@ -1,0 +1,358 @@
+rules_version = '2';
+
+// Security rules for the Firebase project shared by the Sakhi app (this repo)
+// and the Sakhi Admin panel (sakhi-admin, same Firestore backend).
+//
+// Written by walking both codebases for every collection.collection(db, ...)
+// / .collection("...") call and matching each rule to what the client code
+// actually reads and writes, then reviewed by Codex (findings applied
+// inline — search "flagged for review" for the two that need an app change,
+// not just a rules change, to fully close). Not deployed.
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ---------------------------------------------------------------------
+    // Shared helpers
+    // ---------------------------------------------------------------------
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(uid) {
+      return isSignedIn() && request.auth.uid == uid;
+    }
+
+    // Analytics-only admins can view dashboards (sakhi-admin app/page.tsx).
+    // Mirrors lib/admin-auth.ts ADMIN_EMAILS. Keep these two lists in sync
+    // by hand — Firestore rules can't import app code.
+    function adminEmails() {
+      return [
+        'fredrenis@gmail.com',
+        'kukularehrushi@gmail.com',
+        'bandgarsiddhesh1@gmail.com',
+        'ajaxx642000@gmail.com',
+        'rohan.pandeykr@gmail.com'
+      ];
+    }
+
+    // Full admins can mutate data and reach every admin page (mirrors
+    // lib/admin-auth.ts FULL_ADMIN_EMAILS, used by AdminAuthGate
+    // requireFullAccess).
+    function fullAdminEmails() {
+      return [
+        'fredrenis@gmail.com',
+        'kukularehrushi@gmail.com',
+        'bandgarsiddhesh1@gmail.com',
+        'ajaxx642000@gmail.com'
+      ];
+    }
+
+    // NOTE (flagged for review): sakhi-admin's root dashboard gives the
+    // analytics-only tier aggregate-only reads (useThreadCounts /
+    // useThreadGrowth — count()/sum() queries, no per-user list, see
+    // app/page.tsx's canViewSensitiveData = isFullAdminEmail(email) gate).
+    // Firestore rules can't distinguish "aggregate query" from "full read"
+    // on the same collection — both need the same list permission — so
+    // isAdmin() below necessarily also grants analytics-only admins the
+    // *ability* to read full thread/user documents (raw chat content
+    // included) directly via the SDK, even though the current UI never
+    // does that for them. Accepted as a Firestore rules limitation rather
+    // than breaking the dashboard; worth a second opinion.
+    function isAdmin() {
+      return isSignedIn()
+        && request.auth.token.email_verified == true
+        && request.auth.token.email in adminEmails();
+    }
+
+    function isFullAdmin() {
+      return isSignedIn()
+        && request.auth.token.email_verified == true
+        && request.auth.token.email in fullAdminEmails();
+    }
+
+    // ---------------------------------------------------------------------
+    // users/{userId}
+    // lib/services/user-service.ts (sakhi + sakhi-admin), thread-service.ts
+    // (writes users/{uid}.updatedAt alongside a new thread).
+    //
+    // Client writes are limited to profile-ish fields; billing, uid and
+    // createdAt are server-owned (lib/billing/server.ts uses the Admin SDK,
+    // which bypasses these rules entirely). isStarred/starredAt/chatCount/
+    // hasChats are admin/derived fields written from the admin panel.
+    // ---------------------------------------------------------------------
+
+    function userEditableKeys() {
+      return [
+        'name', 'email', 'avatar', 'occupation', 'userPreferences',
+        'memories', 'memoryEnabled', 'updatedAt'
+      ];
+    }
+
+    // MAX_USER_MEMORIES from lib/types/user.ts. Rules can't reach into
+    // array elements to cap MAX_MEMORY_CONTENT_LENGTH per-memory, but the
+    // count cap is cheap and blocks unbounded doc growth either way.
+    function hasValidMemoryCount() {
+      return !('memories' in request.resource.data)
+        || request.resource.data.memories.size() <= 40;
+    }
+
+    // Email is refreshed from the Firebase Auth profile on every sign-in
+    // (syncAuthenticatedUser) — never a user-chosen value, so pin it to the
+    // token instead of just allowlisting the key. get(..., '') covers the
+    // rare provider that doesn't supply an email, which the app falls back
+    // to "" for.
+    function hasValidEmail() {
+      return request.resource.data.email == request.auth.token.get('email', '');
+    }
+
+    function isSelfUserWrite() {
+      return request.resource.data.diff(resource.data).affectedKeys()
+        .hasOnly(userEditableKeys())
+        && hasValidEmail()
+        && hasValidMemoryCount();
+    }
+
+    // Admin-panel writes (sakhi-admin's user-service.ts updateUser/
+    // setUserStarred) touch profile fields plus these derived/admin-only
+    // ones — but never billing, uid, or createdAt, which stay Admin-SDK-only.
+    function adminEditableKeys() {
+      return userEditableKeys().concat([
+        'isAnonymous', 'isStarred', 'starredAt', 'chatCount', 'hasChats'
+      ]);
+    }
+
+    function isFullAdminUserWrite() {
+      return request.resource.data.diff(resource.data).affectedKeys()
+        .hasOnly(adminEditableKeys());
+    }
+
+    // generateDefaultUser()'s shape, plus the auth-profile overrides
+    // syncAuthenticatedUser() applies on first sign-in. sakhi-admin's
+    // IUser is a superset (isAnonymous/isStarred/starredAt) — its own
+    // createUserGoogle() runs on this same isOwner(userId) path whenever
+    // someone signs into the admin app (before the admin-email gate runs),
+    // so those three have to be allowed here too, not just under
+    // adminEditableKeys().
+    function userCreatableKeys() {
+      return [
+        'uid', 'email', 'name', 'avatar', 'occupation', 'userPreferences',
+        'memories', 'memoryEnabled', 'createdAt', 'updatedAt', 'isAnonymous',
+        'isStarred', 'starredAt'
+      ];
+    }
+
+    // generateDefaultUser() in sakhi-admin always creates with isStarred:
+    // false, starredAt: null — enforce that instead of leaving them
+    // free-form, so a crafted create() can't pre-empt admin starring.
+    function hasValidStarredDefaults() {
+      return (!('isStarred' in request.resource.data) || request.resource.data.isStarred == false)
+        && (!('starredAt' in request.resource.data) || request.resource.data.starredAt == null);
+    }
+
+    match /users/{userId} {
+      allow get: if isOwner(userId) || isAdmin();
+      // Only admin dashboards run unfiltered/collection-wide queries here;
+      // a signed-in user's own reads always go through get() by uid.
+      allow list: if isAdmin();
+
+      allow create: if isOwner(userId)
+        && request.resource.data.uid == userId
+        && request.resource.data.keys().hasOnly(userCreatableKeys())
+        && hasValidEmail()
+        && hasValidMemoryCount()
+        && hasValidStarredDefaults();
+
+      allow update: if (isOwner(userId) && isSelfUserWrite())
+        || (isFullAdmin() && isFullAdminUserWrite());
+
+      allow delete: if false;
+
+      // users/{uid}/helpers/{helperId} — a user's added-Helper library.
+      // lib/services/helper-service.ts add()/unadd(); only ever touched by
+      // the owner, never by an admin panel.
+      match /helpers/{helperId} {
+        allow read, delete: if isOwner(userId);
+        allow create, update: if isOwner(userId)
+          && request.resource.data.keys().hasOnly(['helperId', 'autoUse', 'addedAt'])
+          && request.resource.data.helperId == helperId
+          && request.resource.data.autoUse is bool
+          && request.resource.data.addedAt is string
+          // Mirrors helperService.add()'s own check: you can only add a
+          // Helper that has actually been published.
+          && get(/databases/$(database)/documents/helpers/$(helperId)).data.status == 'published';
+      }
+
+      // users/{uid}/mcpServers/{id} and users/{uid}/creditUsage/{id} are
+      // intentionally NOT declared here. Both are written and read only via
+      // the Admin SDK (app/api/mcp-servers, lib/billing/server.ts), which
+      // ignores these rules, so leaving them out denies all direct client
+      // access via the fallback rule at the bottom of this file.
+    }
+
+    // ---------------------------------------------------------------------
+    // threads/{threadId}
+    // lib/services/thread-service.ts (sakhi + sakhi-admin). Direct
+    // client-SDK reads/writes gated on ownership; shared threads (shareId)
+    // are meant to be readable only by someone who has the link.
+    //
+    // NOTE (flagged for review, not resolved by rules alone): the app
+    // always looks a shared thread up with `where("shareId","==",code)`,
+    // but Firestore rules evaluate `hasShareId` per matching document, not
+    // against the caller-supplied filter value — so this rule can't tell
+    // "I already know the code" from "I'm scanning for any doc that has
+    // one." A client that queries for existence of shareId (rather than a
+    // specific value) can enumerate every shared thread, not just ones it
+    // was given a link to. Firestore has no rules primitive for "prove you
+    // knew the value." Fixing this properly means keying shared threads by
+    // shareId in their own collection (get-only, like promptLinks below)
+    // instead of a query — an app change, not a rules one.
+    // ---------------------------------------------------------------------
+
+    function hasShareId(data) {
+      return 'shareId' in data && data.shareId is string && data.shareId.size() > 0;
+    }
+
+    match /threads/{threadId} {
+      allow read: if isOwner(resource.data.userId) || hasShareId(resource.data) || isAdmin();
+
+      allow create: if isOwner(request.resource.data.userId);
+
+      allow update: if (isOwner(resource.data.userId)
+          // Ownership can't be reassigned by an update.
+          && request.resource.data.userId == resource.data.userId)
+        || isFullAdmin();
+
+      allow delete: if isOwner(resource.data.userId) || isFullAdmin();
+    }
+
+    // ---------------------------------------------------------------------
+    // helpers/{helperId}
+    // lib/services/helper-service.ts (sakhi) + helper-admin-service.ts
+    // (sakhi-admin, read-only client-side — moderation writes go through
+    // /api/helpers with the Admin SDK).
+    // ---------------------------------------------------------------------
+
+    // Matches the Helper object literal built by helperService.create() —
+    // no rejectionReason (an optional field the create path never sets).
+    function helperCreatableKeys() {
+      return [
+        'id', 'slug', 'title', 'emoji', 'appearance', 'logoUrl', 'whenToUse',
+        'instructions', 'authorId', 'authorName', 'status',
+        'verificationStatus', 'usageCount', 'createdAt', 'updatedAt'
+      ];
+    }
+
+    // Fields helperService.update()/remove() ever touch. usageCount,
+    // slug, authorName and createdAt are owner-immutable after creation.
+    function helperEditableKeys() {
+      return [
+        'title', 'emoji', 'appearance', 'logoUrl', 'whenToUse',
+        'instructions', 'status', 'verificationStatus', 'rejectionReason',
+        'updatedAt'
+      ];
+    }
+
+    match /helpers/{helperId} {
+      allow read: if resource.data.status == 'published'
+        || isOwner(resource.data.authorId)
+        || isAdmin();
+
+      allow create: if isOwner(request.resource.data.authorId)
+        && request.resource.data.id == helperId
+        && request.resource.data.keys().hasOnly(helperCreatableKeys())
+        && request.resource.data.status in ['draft', 'pending_review']
+        && request.resource.data.verificationStatus == 'unverified'
+        && request.resource.data.usageCount == 0;
+
+      // Owners can edit/withdraw/resubmit their own Helper, but publishing
+      // and verification are admin-only actions (sakhi-admin's
+      // updateStatus() always goes through /api/helpers with the Admin
+      // SDK, which bypasses this rule anyway).
+      allow update: if (isOwner(resource.data.authorId)
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(helperEditableKeys())
+          // Block the owner *escalating into* published/verified; don't
+          // block leaving an already-published/verified Helper at that
+          // value while changing something else (e.g. remove() only
+          // touches status -> 'removed', leaving a prior 'verified'
+          // verificationStatus untouched).
+          && (request.resource.data.status != 'published' || resource.data.status == 'published')
+          && (request.resource.data.verificationStatus != 'verified' || resource.data.verificationStatus == 'verified'))
+        || isFullAdmin();
+
+      allow delete: if false;
+    }
+
+    // ---------------------------------------------------------------------
+    // waitlist/{id}
+    // lib/services/waitlist-service.ts. Public, unauthenticated signup form
+    // (no anonymous auth in this app), so create must stay open.
+    //
+    // NOTE (flagged for review, not resolved by rules alone): joinWaitlist()
+    // does a `where("email","==")` query to skip duplicates before writing,
+    // which is a *list* op — Firestore rules can't scope `list` to "only
+    // when this exact filter is present," so `read` has to stay open too,
+    // or every signup throws. That means anyone can currently list every
+    // submitted email address — this IS PII, not a low-sensitivity
+    // tradeoff, even though the doc only holds an email + timestamp. A
+    // proper fix needs an app change: blind create with no client-side
+    // dedup, or a server endpoint that dedups with the Admin SDK. Left open
+    // here rather than deployed as-is.
+    // ---------------------------------------------------------------------
+
+    match /waitlist/{id} {
+      allow read: if true;
+      allow create: if request.resource.data.id == id
+        && request.resource.data.keys().hasOnly(['id', 'email', 'createdAt'])
+        && request.resource.data.email is string
+        && request.resource.data.email.matches('^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$')
+        && request.resource.data.email.size() <= 254
+        && request.resource.data.createdAt is string
+        && request.resource.data.createdAt.size() <= 40;
+      allow update, delete: if false;
+    }
+
+    // ---------------------------------------------------------------------
+    // promptLinks/{code}
+    // lib/services/prompt-link-service.ts. Links are minted server-side
+    // (lib/prompt-links-admin.ts, Admin SDK) and only ever read back by
+    // exact code (app/p/[code]/page.tsx) — never listed.
+    // ---------------------------------------------------------------------
+
+    match /promptLinks/{code} {
+      allow get: if true;
+      allow list: if false;
+      allow write: if false;
+    }
+
+    // ---------------------------------------------------------------------
+    // scheduledTasks/{taskId}, scheduledTaskRuns/{runId}
+    // sakhi never touches these via the client SDK (scheduled-task-service
+    // calls /api/scheduled-tasks only). sakhi-admin's automation-admin-
+    // service.ts DOES read them directly for the automations dashboard
+    // (requireFullAccess page) but always mutates through /api/automations
+    // with the Admin SDK.
+    // ---------------------------------------------------------------------
+
+    match /scheduledTasks/{taskId} {
+      allow read: if isFullAdmin();
+      allow write: if false;
+    }
+
+    match /scheduledTaskRuns/{runId} {
+      allow read: if isFullAdmin();
+      allow write: if false;
+    }
+
+    // ---------------------------------------------------------------------
+    // Everything else (composioAuthIntents, users/*/mcpServers,
+    // users/*/creditUsage, etc.) is written and read exclusively through
+    // the Admin SDK on the server, which never goes through these rules —
+    // so direct client access is denied by default here.
+    // ---------------------------------------------------------------------
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
