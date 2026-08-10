@@ -1,37 +1,50 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Sakhi AI
+
+Sakhi AI is a general-purpose chat assistant for everyday users — fast, personalized conversations with support for sharing images, documents, audio, and PDFs. Built with Next.js.
 
 ## Getting Started
 
-First, run the development server:
+1. Copy the environment template and fill in the values you need:
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
-```
+   ```bash
+   cp env.example .env.local
+   ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+2. Install dependencies and start the development server:
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+   ```bash
+   pnpm install
+   pnpm dev
+   ```
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+3. Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
 
-## Learn More
+You can start editing the app by modifying files under `app/`. The page auto-updates as you edit.
 
-To learn more about Next.js, take a look at the following resources:
+## Tech Stack
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+- [Next.js](https://nextjs.org) (App Router, Turbopack) with TypeScript
+- [Vercel AI SDK](https://sdk.vercel.ai) for model access and streaming chat
+- [Firebase](https://firebase.google.com) for auth and Firestore
+- [Composio](https://composio.dev) for tool/integration connections
+- [Upstash QStash](https://upstash.com/docs/qstash) for scheduled/automation triggers
+- [Razorpay](https://razorpay.com) for subscription billing
+- [Radix UI](https://www.radix-ui.com) + Tailwind for the component layer
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## Scripts
 
-## Deploy on Vercel
+- `pnpm dev` — run the development server
+- `pnpm build` — build for production
+- `pnpm start` — start the production server
+- `pnpm lint` — run ESLint
+- `pnpm test` — run the test suite once (Vitest)
+- `pnpm test:watch` — run tests in watch mode
+- `pnpm tunnel` — run a Cloudflare tunnel (needed locally for QStash callbacks)
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## Environment Variables
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
-# h4-chat
+See [`env.example`](./env.example) for the full list of required and optional variables, including Firebase, AI provider keys, QStash, and Razorpay configuration.
+
+## Deploy
+
+This project is set up to deploy on [Vercel](https://vercel.com). Configure the environment variables above in your Vercel project settings before deploying.
