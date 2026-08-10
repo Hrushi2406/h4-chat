@@ -37,7 +37,7 @@ const FeaturedDemo = () => {
 
   return (
     <motion.div
-      className="mx-auto mt-14 w-full max-w-3xl px-4 sm:mt-16 sm:px-6"
+      className="mx-auto mt-14 w-full max-w-3xl px-4 sm:mt-16 sm:px-6 lg:max-w-4xl xl:max-w-5xl"
       initial={shouldReduceMotion ? false : "hidden"}
       whileInView="visible"
       viewport={{ once: true, margin: "-60px" }}
@@ -63,7 +63,7 @@ const FeaturedDemo = () => {
               src={FEATURED_DEMO.poster}
               alt={FEATURED_DEMO.title}
               fill
-              sizes="(min-width: 768px) 768px, 100vw"
+              sizes="(min-width: 1280px) 1024px, (min-width: 1024px) 896px, (min-width: 768px) 768px, 100vw"
               className="object-cover transition-transform duration-500 group-hover/demo:scale-[1.02]"
               priority={false}
             />
