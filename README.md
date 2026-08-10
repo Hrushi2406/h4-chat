@@ -48,3 +48,7 @@ See [`env.example`](./env.example) for the full list of required and optional va
 ## Deploy
 
 This project is set up to deploy on [Vercel](https://vercel.com). Configure the environment variables above in your Vercel project settings before deploying.
+
+## Contributing
+
+Pull requests are welcome. For major changes, please open an issue first to discuss what you would like to change.
