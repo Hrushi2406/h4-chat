@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { MarketingNavbar } from "@/components/marketing/marketing-navbar";
 import { WaitlistFooter } from "@/components/waitlist/waitlist-footer";
 import { UseCasesSection } from "@/components/waitlist/use-cases-section";
+import { ReelUseCasesSection } from "@/components/waitlist/reel-use-cases-section";
 import { WaitlistHeroBackground } from "@/components/waitlist/waitlist-hero-background";
 import { TrustedBySection } from "@/components/waitlist/trusted-by-section";
 import { motion, useReducedMotion, type Variants } from "framer-motion";
@@ -85,6 +86,7 @@ export default function WaitlistPage() {
       </section>
 
       <UseCasesSection />
+      <ReelUseCasesSection />
       <WaitlistFooter />
     </div>
   );
