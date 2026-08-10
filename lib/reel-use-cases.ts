@@ -15,6 +15,18 @@ export const getInstagramReelUrl = (code: string) =>
  */
 export const getReelPosterPath = (code: string) => `/reels/${code}.jpg`;
 
+/** Long-form demo featured above the reels. */
+export const FEATURED_DEMO = {
+  youtubeId: "_ffNuFeWZmw",
+  title: "Sakhi AI Demo: Daily Automation of 50+ Job Openings",
+  description: "A full run-through: Sakhi finds the day's openings and files them for you.",
+  poster: "/videos/_ffNuFeWZmw.jpg",
+};
+
+/** `youtube-nocookie` keeps the player off YouTube's ad-tracking cookies. */
+export const getYouTubeEmbedUrl = (id: string) =>
+  `https://www.youtube-nocookie.com/embed/${id}?autoplay=1&rel=0&modestbranding=1`;
+
 export const REEL_USE_CASES: ReelUseCase[] = [
   {
     code: "DbmTvr2MhUO",

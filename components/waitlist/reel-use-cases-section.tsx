@@ -6,8 +6,10 @@ import { ChevronLeft, ChevronRight, Play } from "lucide-react";
 import { motion, useReducedMotion } from "framer-motion";
 
 import {
+  FEATURED_DEMO,
   getInstagramReelUrl,
   getReelPosterPath,
+  getYouTubeEmbedUrl,
   REEL_USE_CASES,
   type ReelUseCase,
 } from "@/lib/reel-use-cases";
@@ -26,6 +28,64 @@ const fadeUp = {
 const cardVariants = {
   hidden: { opacity: 0, y: 24 },
   visible: { opacity: 1, y: 0, transition: { duration: 0.6, ease } },
+};
+
+/** Poster façade — YouTube's player only loads once someone hits play. */
+const FeaturedDemo = () => {
+  const shouldReduceMotion = useReducedMotion();
+  const [isPlaying, setIsPlaying] = useState(false);
+
+  return (
+    <motion.div
+      className="mx-auto mt-14 w-full max-w-3xl px-4 sm:mt-16 sm:px-6"
+      initial={shouldReduceMotion ? false : "hidden"}
+      whileInView="visible"
+      viewport={{ once: true, margin: "-60px" }}
+      variants={cardVariants}
+    >
+      <div className="group/demo relative aspect-video overflow-hidden rounded-2xl border border-white/[0.08] bg-[#0c0c0c] shadow-[0_0_60px_-20px_rgba(59,130,246,0.5)]">
+        {isPlaying ? (
+          <iframe
+            src={getYouTubeEmbedUrl(FEATURED_DEMO.youtubeId)}
+            title={FEATURED_DEMO.title}
+            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+            allowFullScreen
+            className="absolute inset-0 size-full border-0"
+          />
+        ) : (
+          <button
+            type="button"
+            onClick={() => setIsPlaying(true)}
+            aria-label={`Play ${FEATURED_DEMO.title}`}
+            className="absolute inset-0 size-full cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400/60"
+          >
+            <Image
+              src={FEATURED_DEMO.poster}
+              alt={FEATURED_DEMO.title}
+              fill
+              sizes="(min-width: 768px) 768px, 100vw"
+              className="object-cover transition-transform duration-500 group-hover/demo:scale-[1.02]"
+              priority={false}
+            />
+            <span
+              aria-hidden
+              className="absolute inset-0 bg-gradient-to-t from-black/50 via-transparent to-black/10"
+            />
+            <span
+              aria-hidden
+              className="absolute left-1/2 top-1/2 flex size-16 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border border-white/25 bg-black/35 backdrop-blur-md transition-all duration-300 group-hover/demo:scale-105 group-hover/demo:border-white/40 group-hover/demo:bg-black/50"
+            >
+              <Play className="size-6 translate-x-px fill-white text-white" />
+            </span>
+          </button>
+        )}
+      </div>
+
+      <p className="mt-4 text-center text-sm leading-relaxed text-neutral-500">
+        {FEATURED_DEMO.description}
+      </p>
+    </motion.div>
+  );
 };
 
 const ReelCard = ({ reel }: { reel: ReelUseCase }) => (
@@ -130,6 +190,8 @@ export const ReelUseCasesSection = () => {
             Landing the internship.
           </motion.p>
         </motion.div>
+
+        <FeaturedDemo />
 
         <div className="relative mt-14 sm:mt-16">
           <div className="pointer-events-none absolute inset-y-0 left-0 z-20 w-10 bg-gradient-to-r from-[#0a0a0a] to-transparent sm:w-20" />
