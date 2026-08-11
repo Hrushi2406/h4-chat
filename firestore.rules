@@ -113,6 +113,20 @@ service cloud.firestore {
         && hasValidMemoryCount();
     }
 
+    // Billing and other server flows can create a partial users/{uid} doc
+    // immediately after authentication. Allow the owner to fill in the normal
+    // profile fields exactly once without modifying those server-owned fields.
+    function isSelfUserInitialization(userId) {
+      return !('uid' in resource.data)
+        && request.resource.data.uid == userId
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'uid', 'email', 'name', 'avatar', 'occupation', 'userPreferences',
+          'memories', 'memoryEnabled', 'createdAt', 'updatedAt'
+        ])
+        && hasValidEmail()
+        && hasValidMemoryCount();
+    }
+
     // Admin-panel writes (sakhi-admin's user-service.ts updateUser/
     // setUserStarred) touch profile fields plus these derived/admin-only
     // ones — but never billing, uid, or createdAt, which stay Admin-SDK-only.
@@ -163,7 +177,8 @@ service cloud.firestore {
         && hasValidMemoryCount()
         && hasValidStarredDefaults();
 
-      allow update: if (isOwner(userId) && isSelfUserWrite())
+      allow update: if (isOwner(userId)
+          && (isSelfUserWrite() || isSelfUserInitialization(userId)))
         || (isFullAdmin() && isFullAdminUserWrite());
 
       allow delete: if false;

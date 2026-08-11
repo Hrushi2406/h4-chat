@@ -29,8 +29,11 @@ class UserService {
     const userRef = doc(db, `users/${uid}`);
     const snap = await getDoc(userRef);
 
-    // Existing users: only refresh auth profile fields, never wipe prefs/memories.
-    if (snap.exists()) {
+    // Existing initialized users: only refresh auth profile fields, never wipe
+    // prefs/memories. Server-side billing may create a partial user document
+    // before this client write completes, so the uid field is the initialization
+    // marker rather than document existence alone.
+    if (snap.exists() && snap.data()?.uid === uid) {
       await updateDoc(userRef, {
         email: fbUser.email ?? "",
         name: fbUser.displayName ?? snap.data()?.name ?? "",
@@ -40,12 +43,16 @@ class UserService {
       return false;
     }
 
-    await setDoc(userRef, {
-      ...generateDefaultUser(uid),
-      email: fbUser.email ?? "",
-      name: fbUser.displayName ?? "",
-      avatar: fbUser.photoURL ?? "",
-    });
+    await setDoc(
+      userRef,
+      {
+        ...generateDefaultUser(uid),
+        email: fbUser.email ?? "",
+        name: fbUser.displayName ?? "",
+        avatar: fbUser.photoURL ?? "",
+      },
+      { merge: true },
+    );
     return true;
   }
 
