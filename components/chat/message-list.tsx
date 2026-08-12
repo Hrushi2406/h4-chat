@@ -59,6 +59,10 @@ const scrollBottomThreshold = 120;
 const streamingRenderThrottleMs = 80;
 const longChatMessageThreshold = 15;
 const recentMessagesAlwaysRendered = 10;
+// Matches the `line-clamp-10` used while a long user message is collapsed.
+const collapsedUserMessageLineClamp = 10;
+const collapsedUserMessageMinLength = 420;
+const collapsedUserMessageOverflowSlack = 8;
 
 const markdownComponents = {
   code: ({ children, className }) => {
@@ -1063,99 +1067,180 @@ const UserMessage = memo(
   }: {
     content: string;
     attachments: ReturnType<typeof getMessageAttachments>;
-  }) => (
-    <div className="">
-      {attachments.length > 0 && (
-        <div
-          className={`mb-3 flex justify-end ${
-            attachments.length > 1 ? "flex-wrap gap-1" : ""
-          }`}
-        >
-          {attachments.map((attachment, attachmentIndex) => {
-            const isImage = isImageAttachment(attachment);
-            const isAudio = isAudioAttachment(attachment);
+  }) => {
+    const isCollapsible = isCollapsibleUserMessage(content);
 
-            return (
-              <div
-                key={`${attachment.url}-${attachmentIndex}`}
-                className={`rounded-lg overflow-hidden border border-border ${
-                  attachments.length > 1
-                    ? "max-w-[48%] max-h-[100px] aspect-square bg-muted"
-                    : "min-w-0 max-w-[min(280px,calc(100vw-3rem))]"
-                }`}
-              >
-                {isImage ? (
-                  <a
-                    href={attachment.url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                  >
-                    <img
-                      src={attachment.url}
-                      alt={attachment.name || "Attachment"}
-                      className="h-full w-full object-cover"
-                      loading="lazy"
-                    />
-                  </a>
-                ) : isAudio ? (
-                  <div className="flex h-full min-h-[120px] w-full flex-col items-center justify-center gap-2 bg-muted p-3">
+    return (
+      <div className="">
+        {attachments.length > 0 && (
+          <div
+            className={`mb-3 flex justify-end ${
+              attachments.length > 1 ? "flex-wrap gap-1" : ""
+            }`}
+          >
+            {attachments.map((attachment, attachmentIndex) => {
+              const isImage = isImageAttachment(attachment);
+              const isAudio = isAudioAttachment(attachment);
+  
+              return (
+                <div
+                  key={`${attachment.url}-${attachmentIndex}`}
+                  className={`rounded-lg overflow-hidden border border-border ${
+                    attachments.length > 1
+                      ? "max-w-[48%] max-h-[100px] aspect-square bg-muted"
+                      : "min-w-0 max-w-[min(280px,calc(100vw-3rem))]"
+                  }`}
+                >
+                  {isImage ? (
                     <a
                       href={attachment.url}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="flex max-w-full items-center gap-2 text-xs text-primary transition-colors hover:text-primary/80"
                     >
-                      <FileAudio className="h-5 w-5 shrink-0 text-muted-foreground" />
-                      <span className="truncate">
-                        {attachment.name || "Attached audio"}
-                      </span>
+                      <img
+                        src={attachment.url}
+                        alt={attachment.name || "Attachment"}
+                        className="h-full w-full object-cover"
+                        loading="lazy"
+                      />
                     </a>
-                    {attachments.length === 1 && (
-                      <audio controls src={attachment.url} className="w-full" />
-                    )}
-                  </div>
-                ) : (
-                  <a
-                    href={attachment.url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="block h-full w-full min-h-[120px]"
-                  >
-                    <div className="flex h-full w-full flex-col items-center justify-center gap-2 bg-muted p-2">
-                      <FileText className="h-8 w-8 text-muted-foreground" />
-                      <span className="rounded bg-background px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">
-                        {getAttachmentExtension(attachment.name)}
-                      </span>
-                      <span className="mt-1 max-w-full truncate text-center text-xs text-primary transition-colors hover:text-primary/80">
-                        {attachment.name || "Attached file"}
-                      </span>
+                  ) : isAudio ? (
+                    <div className="flex h-full min-h-[120px] w-full flex-col items-center justify-center gap-2 bg-muted p-3">
+                      <a
+                        href={attachment.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex max-w-full items-center gap-2 text-xs text-primary transition-colors hover:text-primary/80"
+                      >
+                        <FileAudio className="h-5 w-5 shrink-0 text-muted-foreground" />
+                        <span className="truncate">
+                          {attachment.name || "Attached audio"}
+                        </span>
+                      </a>
+                      {attachments.length === 1 && (
+                        <audio controls src={attachment.url} className="w-full" />
+                      )}
                     </div>
-                  </a>
-                )}
-              </div>
-            );
-          })}
+                  ) : (
+                    <a
+                      href={attachment.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="block h-full w-full min-h-[120px]"
+                    >
+                      <div className="flex h-full w-full flex-col items-center justify-center gap-2 bg-muted p-2">
+                        <FileText className="h-8 w-8 text-muted-foreground" />
+                        <span className="rounded bg-background px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">
+                          {getAttachmentExtension(attachment.name)}
+                        </span>
+                        <span className="mt-1 max-w-full truncate text-center text-xs text-primary transition-colors hover:text-primary/80">
+                          {attachment.name || "Attached file"}
+                        </span>
+                      </div>
+                    </a>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
+        <div
+          className={
+            attachments.length > 0
+              ? clsx(
+                  "max-w-max ml-auto text-right self-end justify-end",
+                  userMessageStyle(content),
+                )
+              : undefined
+          }
+        >
+          {isCollapsible ? (
+            <CollapsibleUserText content={content} />
+          ) : (
+            <p className="break-words text-sm md:text-base whitespace-pre-wrap leading-loose">
+              {content}
+            </p>
+          )}
         </div>
-      )}
-      <div
-        className={
-          attachments.length > 0
-            ? clsx(
-                "max-w-max ml-auto text-right self-end justify-end",
-                userMessageStyle(content),
-              )
-            : undefined
-        }
-      >
-        <p className="break-words text-sm md:text-base whitespace-pre-wrap leading-loose">
-          {content}
-        </p>
       </div>
-    </div>
-  ),
+    );
+  },
 );
 
 UserMessage.displayName = "UserMessage";
+
+const CollapsibleUserText = ({ content }: { content: string }) => {
+  const textRef = useRef<HTMLParagraphElement>(null);
+  const [isExpanded, setIsExpanded] = useState(false);
+  const [isOverflowing, setIsOverflowing] = useState(false);
+
+  useLayoutEffect(() => {
+    const textElement = textRef.current;
+
+    if (!textElement || isExpanded) {
+      return;
+    }
+
+    const measureOverflow = () => {
+      setIsOverflowing(
+        textElement.scrollHeight - textElement.clientHeight >
+          collapsedUserMessageOverflowSlack,
+      );
+    };
+
+    measureOverflow();
+
+    if (typeof ResizeObserver === "undefined") {
+      return;
+    }
+
+    // Wrapping changes with viewport width, so a message can stop overflowing.
+    const resizeObserver = new ResizeObserver(measureOverflow);
+    resizeObserver.observe(textElement);
+
+    return () => {
+      resizeObserver.disconnect();
+    };
+  }, [content, isExpanded]);
+
+  const isCollapsed = !isExpanded && isOverflowing;
+
+  return (
+    <>
+      <div className="relative">
+        <p
+          ref={textRef}
+          className={clsx(
+            "break-words text-sm md:text-base whitespace-pre-wrap leading-loose",
+            !isExpanded && "line-clamp-10",
+          )}
+        >
+          {content}
+        </p>
+        {isCollapsed && (
+          <div
+            aria-hidden="true"
+            className="pointer-events-none absolute inset-x-0 bottom-0 h-8 bg-gradient-to-t from-secondary to-transparent"
+          />
+        )}
+      </div>
+      {(isCollapsed || isExpanded) && (
+        <button
+          type="button"
+          onClick={() => setIsExpanded((expanded) => !expanded)}
+          aria-expanded={isExpanded}
+          className="mt-1 inline-flex items-center gap-1 text-xs font-medium text-current/70 transition-colors hover:text-current"
+        >
+          {isExpanded ? "Show less" : "Show more"}
+          <ChevronDown
+            className={clsx("h-3.5 w-3.5 transition-transform", isExpanded && "rotate-180")}
+            aria-hidden="true"
+          />
+        </button>
+      )}
+    </>
+  );
+};
 
 const MessageCopyButton = ({
   message,
@@ -1537,6 +1622,12 @@ const userMessageStyle = (content: string) => {
     content.length <= 50 ? "rounded-full" : "rounded-2xl",
   );
 };
+
+// Cheap pre-filter so short messages skip the clamp and its resize observer;
+// whether the clamp actually hides anything is measured after render.
+const isCollapsibleUserMessage = (content: string) =>
+  content.length >= collapsedUserMessageMinLength ||
+  content.split("\n").length > collapsedUserMessageLineClamp;
 
 const shouldDockCopyButton = (content: string, attachmentCount: number) =>
   attachmentCount > 0 || content.includes("\n") || content.length > 50;
