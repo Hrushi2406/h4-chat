@@ -31,9 +31,9 @@ describe("billing plan configuration", () => {
 });
 
 describe("complimentary one-time credit grant configuration", () => {
-  it("defaults to a 10,000-credit permanent grant", () => {
-    expect(COMPLIMENTARY_ONE_TIME_CREDITS).toBe(10_000);
-    expect(DEFAULT_COMPLIMENTARY_GRANT_KEY).toBe("one_time_10k");
+  it("defaults to a 50,000-credit permanent grant", () => {
+    expect(COMPLIMENTARY_ONE_TIME_CREDITS).toBe(50_000);
+    expect(DEFAULT_COMPLIMENTARY_GRANT_KEY).toBe("one_time_50k");
   });
 });
 

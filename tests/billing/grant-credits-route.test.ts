@@ -30,8 +30,8 @@ vi.mock("@/lib/clients/firebase-admin", () => ({
 import { POST } from "@/app/api/billing/grant-credits/route";
 
 const billingSummary = {
-  permanentCreditsAvailable: 11_000,
-  totalCreditsAvailable: 11_000,
+  permanentCreditsAvailable: 51_000,
+  totalCreditsAvailable: 51_000,
 };
 
 const requestFor = (body: unknown, secret = "cron-secret") =>
@@ -50,7 +50,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   process.env.BILLING_CRON_SECRET = "cron-secret";
   mocks.grantComplimentaryCredits.mockResolvedValue({
-    billing: { credits: { permanentAvailable: 11_000 } },
+    billing: { credits: { permanentAvailable: 51_000 } },
     duplicate: false,
     creditsGranted: COMPLIMENTARY_ONE_TIME_CREDITS,
     grantId: `complimentary_credit_grant_${DEFAULT_COMPLIMENTARY_GRANT_KEY}`,
@@ -89,7 +89,7 @@ describe("complimentary credit grant route", () => {
   });
 
   it("requires a userId or email", async () => {
-    const response = await POST(requestFor({ credits: 10_000 }));
+    const response = await POST(requestFor({ credits: 50_000 }));
 
     expect(response.status).toBe(400);
     await expect(response.json()).resolves.toMatchObject({
@@ -98,7 +98,7 @@ describe("complimentary credit grant route", () => {
     expect(mocks.grantComplimentaryCredits).not.toHaveBeenCalled();
   });
 
-  it("grants 10,000 permanent credits once for a user id", async () => {
+  it("grants 50,000 permanent credits once for a user id", async () => {
     const response = await POST(requestFor({ userId: "user_test" }));
 
     expect(response.status).toBe(200);
@@ -112,7 +112,7 @@ describe("complimentary credit grant route", () => {
       duplicate: false,
       userId: "user_test",
       grantId: `complimentary_credit_grant_${DEFAULT_COMPLIMENTARY_GRANT_KEY}`,
-      creditsGranted: 10_000,
+      creditsGranted: 50_000,
       billing: billingSummary,
     });
   });
@@ -133,7 +133,7 @@ describe("complimentary credit grant route", () => {
 
   it("returns the existing grant without adding credits again", async () => {
     mocks.grantComplimentaryCredits.mockResolvedValue({
-      billing: { credits: { permanentAvailable: 11_000 } },
+      billing: { credits: { permanentAvailable: 51_000 } },
       duplicate: true,
       creditsGranted: 0,
       grantId: `complimentary_credit_grant_${DEFAULT_COMPLIMENTARY_GRANT_KEY}`,
