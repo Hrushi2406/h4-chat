@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
   BILLING_PLANS,
+  COMPLIMENTARY_ONE_TIME_CREDITS,
   CREDIT_RECHARGE,
+  DEFAULT_COMPLIMENTARY_GRANT_KEY,
   getRechargeCreditsToRevoke,
   getRechargePricePaise,
   isBillingPlanId,
@@ -25,6 +27,13 @@ describe("billing plan configuration", () => {
     expect(isPaidPlanId("plus_monthly")).toBe(true);
     expect(isPaidPlanId("free")).toBe(false);
     expect(isBillingPlanId("admin_unlimited")).toBe(false);
+  });
+});
+
+describe("complimentary one-time credit grant configuration", () => {
+  it("defaults to a 10,000-credit permanent grant", () => {
+    expect(COMPLIMENTARY_ONE_TIME_CREDITS).toBe(10_000);
+    expect(DEFAULT_COMPLIMENTARY_GRANT_KEY).toBe("one_time_10k");
   });
 });
 
