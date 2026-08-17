@@ -5,6 +5,7 @@ import type { WhatsAppStore } from "@/lib/whatsapp/store";
 interface WebhookDependencies {
   verifyToken: string;
   appSecret: string;
+  phoneNumberId: string;
   store: Pick<WhatsAppStore, "acceptInbound" | "recordStatus">;
   schedule: (callback: () => void | Promise<void>) => void;
   process: (messageId: string) => Promise<void>;
@@ -35,6 +36,7 @@ export const createWhatsAppWebhookHandlers = (dependencies: WebhookDependencies)
     const parsed = parseMetaWebhook(payload);
     const acceptedIds: string[] = [];
     for (const message of parsed.messages) {
+      if (message.phoneNumberId !== dependencies.phoneNumberId) continue;
       if (await dependencies.store.acceptInbound(message)) acceptedIds.push(message.id);
     }
     await Promise.all(parsed.statuses.map((status) => dependencies.store.recordStatus(status)));

@@ -51,15 +51,20 @@ export interface WhatsAppAccountState {
   optedOut: boolean;
   blocked: boolean;
   cooldownUntil?: Date;
+  cooldownNotifiedAt?: Date;
+  consentPromptedAt?: Date;
   modelId: string;
   activeThreadId?: string;
   lastInboundAt?: Date;
   lastConversationAt?: Date;
   serviceWindowEndsAt?: Date;
   activeMessageId?: string;
+  activeMessageClaimedAt?: Date;
   pendingMessageIds: string[];
   lastUnprocessedMessageId?: string;
   lastFailedOutboundId?: string;
+  deliveryRetryOfferedFor?: string;
+  requiresWebLink: boolean;
   welcomeCreditsGranted: boolean;
 }
 

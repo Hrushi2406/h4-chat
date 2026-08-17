@@ -32,7 +32,16 @@ const actionHash = (toolName: string, args: unknown) =>
 
 export const isConsequentialWhatsAppTool = (toolName: string) => {
   const name = toolName.toLowerCase();
-  if (name === "use_helper" || name === "composio_manage_connections") return false;
+  if (
+    [
+      "use_helper",
+      "composio_manage_connections",
+      "save_memory",
+      "update_memory",
+      "delete_memory",
+      "create_prompt_share_link",
+    ].includes(name)
+  ) return false;
   const tokens = new Set(name.split(/[^a-z0-9]+/));
   if (
     ["mark", "create", "update", "delete", "send", "write", "add", "remove", "publish", "post", "upload", "move", "copy", "schedule", "cancel", "execute", "run", "trigger", "reply", "forward", "archive", "trash", "star", "label", "invite", "share", "manage", "connect", "disconnect", "set"]
@@ -67,6 +76,34 @@ export class WhatsAppToolApprovalStore {
 
   async hasPending(userId: string, threadId: string) {
     return Boolean(await this.getPending(userId, threadId));
+  }
+
+  async claimPending(userId: string, threadId: string) {
+    const database = db();
+    const ref = database.collection(COLLECTION).doc(threadId);
+    return database.runTransaction(async (transaction) => {
+      const snapshot = await transaction.get(ref);
+      const data = snapshot.data();
+      const expiresAt = data?.expiresAt instanceof Timestamp
+        ? data.expiresAt.toDate()
+        : undefined;
+      if (
+        !snapshot.exists ||
+        !["pending", "awaiting_auth"].includes(String(data?.status)) ||
+        data?.userId !== userId ||
+        !expiresAt ||
+        expiresAt.getTime() <= Date.now()
+      ) return;
+      transaction.update(ref, {
+        status: "executing",
+        executionStartedAt: Timestamp.now(),
+        updatedAt: Timestamp.now(),
+      });
+      return {
+        toolName: String(data.toolName),
+        exactInput: stableValue(data.args),
+      };
+    });
   }
 
   async request(input: {

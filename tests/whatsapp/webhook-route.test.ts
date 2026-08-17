@@ -18,6 +18,7 @@ describe("WhatsApp webhook route", () => {
     const handlers = createWhatsAppWebhookHandlers({
       verifyToken: "verify-me",
       appSecret,
+      phoneNumberId: "phone",
       store: { acceptInbound: vi.fn(), recordStatus: vi.fn() },
       schedule: vi.fn(),
       process: vi.fn(),
@@ -32,6 +33,7 @@ describe("WhatsApp webhook route", () => {
     const handlers = createWhatsAppWebhookHandlers({
       verifyToken: "token",
       appSecret,
+      phoneNumberId: "phone",
       store: { acceptInbound, recordStatus: vi.fn() },
       schedule: vi.fn(),
       process: vi.fn(),
@@ -47,6 +49,7 @@ describe("WhatsApp webhook route", () => {
     const handlers = createWhatsAppWebhookHandlers({
       verifyToken: "token",
       appSecret,
+      phoneNumberId: "phone",
       store: {
         acceptInbound: vi.fn().mockResolvedValueOnce(true).mockResolvedValueOnce(false),
         recordStatus: vi.fn(),
@@ -61,5 +64,29 @@ describe("WhatsApp webhook route", () => {
     expect(process).not.toHaveBeenCalled();
     await scheduled?.();
     expect(process).toHaveBeenCalledExactlyOnceWith("wamid.1");
+  });
+
+  it("ignores messages addressed to another number in the WABA", async () => {
+    const acceptInbound = vi.fn();
+    const handlers = createWhatsAppWebhookHandlers({
+      verifyToken: "token",
+      appSecret,
+      phoneNumberId: "sakhi-phone",
+      store: { acceptInbound, recordStatus: vi.fn() },
+      schedule: vi.fn(),
+      process: vi.fn(),
+    });
+    const payload = {
+      object: "whatsapp_business_account",
+      entry: [{ changes: [{ field: "messages", value: {
+        metadata: { phone_number_id: "another-phone" },
+        messages: [{ id: "wamid.other", from: "919999999999", timestamp: "1700000000", type: "text", text: { body: "Hi" } }],
+      } }] }],
+    };
+
+    const response = await handlers.POST(signedRequest(payload));
+
+    expect(response.status).toBe(200);
+    expect(acceptInbound).not.toHaveBeenCalled();
   });
 });

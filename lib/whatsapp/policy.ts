@@ -62,9 +62,15 @@ export const isRetryableMetaFailure = (errors: unknown[] | undefined) =>
 
 export const normalizeWhatsAppCommand = (
   input: string | undefined,
+  source: "text" | "interactive" = "text",
 ): WhatsAppCommand | undefined => {
   if (!input) return;
-  const normalized = input.trim().toLowerCase().replace(/^\//, "");
+  const trimmed = input.trim().toLowerCase();
+  const hasSlash = trimmed.startsWith("/");
+  const normalized = hasSlash ? trimmed.slice(1) : trimmed;
+  if (!hasSlash && source !== "interactive" && normalized !== "stop" && normalized !== "start") {
+    return;
+  }
   return COMMANDS.has(normalized as WhatsAppCommand)
     ? (normalized as WhatsAppCommand)
     : undefined;

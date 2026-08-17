@@ -8,6 +8,7 @@ import {
 } from "@/lib/whatsapp/policy";
 import { getOggOpusDurationSeconds } from "@/lib/whatsapp/transcription";
 import { isConsequentialWhatsAppTool } from "@/lib/whatsapp/tool-approval";
+import { getWhatsAppToolProgress } from "@/lib/whatsapp/progress";
 
 describe("WhatsApp policy", () => {
   it("rolls a conversation after four hours, not at the boundary", () => {
@@ -19,6 +20,9 @@ describe("WhatsApp policy", () => {
   it("normalizes channel commands without treating normal text as a command", () => {
     expect(normalizeWhatsAppCommand("  /NEW  ")).toBe("new");
     expect(normalizeWhatsAppCommand("STOP")).toBe("stop");
+    expect(normalizeWhatsAppCommand("new")).toBeUndefined();
+    expect(normalizeWhatsAppCommand("continue")).toBeUndefined();
+    expect(normalizeWhatsAppCommand("continue", "interactive")).toBe("continue");
     expect(normalizeWhatsAppCommand("please stop now")).toBeUndefined();
   });
 
@@ -56,11 +60,26 @@ describe("WhatsApp policy", () => {
   it("requires confirmation for mutations while allowing read-only tools", () => {
     expect(isConsequentialWhatsAppTool("gmail_send_email")).toBe(true);
     expect(isConsequentialWhatsAppTool("calendar_delete_event")).toBe(true);
-    expect(isConsequentialWhatsAppTool("delete_memory")).toBe(true);
+    expect(isConsequentialWhatsAppTool("delete_memory")).toBe(false);
+    expect(isConsequentialWhatsAppTool("save_memory")).toBe(false);
+    expect(isConsequentialWhatsAppTool("update_memory")).toBe(false);
+    expect(isConsequentialWhatsAppTool("create_prompt_share_link")).toBe(false);
     expect(isConsequentialWhatsAppTool("create_thread")).toBe(true);
     expect(isConsequentialWhatsAppTool("search_and_delete")).toBe(true);
     expect(isConsequentialWhatsAppTool("gmail_mark_as_read")).toBe(true);
     expect(isConsequentialWhatsAppTool("gmail_search_messages")).toBe(false);
     expect(isConsequentialWhatsAppTool("get_calendar_events")).toBe(false);
+  });
+
+  it("uses calm action-specific progress and keeps memory work silent", () => {
+    expect(getWhatsAppToolProgress("gmail_send_email")).toEqual([
+      { kind: "working", label: "Sending your email…" },
+      { kind: "completed", label: "Email sent" },
+    ]);
+    expect(getWhatsAppToolProgress("generate_image")).toEqual([
+      { kind: "working", label: "Creating your image…" },
+      { kind: "completed", label: "Image ready" },
+    ]);
+    expect(getWhatsAppToolProgress("save_memory")).toBeUndefined();
   });
 });

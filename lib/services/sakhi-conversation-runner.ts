@@ -14,6 +14,7 @@ import {
 } from "@/lib/billing/server";
 import type { IMemory, IUser } from "@/lib/types/user";
 import type { WhatsAppProgressEvent } from "@/lib/whatsapp/types";
+import { getWhatsAppToolProgress } from "@/lib/whatsapp/progress";
 import {
   isConsequentialWhatsAppTool,
   WhatsAppToolApprovalStore,
@@ -36,6 +37,7 @@ export interface SakhiConversationInput {
   onProgress?: (event: WhatsAppProgressEvent) => void | Promise<void>;
   shouldCancel?: () => Promise<boolean>;
   baseUrl?: string;
+  approvedAction?: { toolName: string; exactInput: unknown };
 }
 
 export interface SakhiConversationResult {
@@ -61,38 +63,6 @@ const memoryText = (memories: IMemory[] | undefined) =>
         .join("\n")}`
     : "";
 
-const progressForTools = (toolNames: string[]): WhatsAppProgressEvent | undefined => {
-  if (toolNames.length === 0) return;
-  const joined = toolNames.join(" ").toLowerCase();
-  if (joined.includes("gmail") || joined.includes("outlook")) {
-    return { kind: "connecting", label: "Working with email" };
-  }
-  if (joined.includes("calendar")) return { kind: "connecting", label: "Checking your calendar" };
-  if (joined.includes("scheduled_task")) return { kind: "working", label: "Setting up the automation" };
-  if (joined.includes("memory")) return { kind: "working", label: "Updating memory" };
-  return { kind: "working", label: "Using a connected tool" };
-};
-
-const progressPairForTool = (toolName: string) => {
-  const name = toolName.toLowerCase();
-  if ((name.includes("gmail") || name.includes("email") || name.includes("outlook")) && name.includes("send")) {
-    return [
-      { kind: "working", label: "Sending email" },
-      { kind: "completed", label: "Email sent" },
-    ] satisfies WhatsAppProgressEvent[];
-  }
-  if (name.includes("scheduled_task") || name.includes("automation")) {
-    return [
-      { kind: "working", label: "Creating automation" },
-      { kind: "completed", label: "Automation created" },
-    ] satisfies WhatsAppProgressEvent[];
-  }
-  return [
-    { kind: "connecting", label: "Connecting to your app" },
-    { kind: "completed", label: "App task completed" },
-  ] satisfies WhatsAppProgressEvent[];
-};
-
 const wrapToolsWithProgress = (
   tools: ToolSet,
   onProgress: SakhiConversationInput["onProgress"],
@@ -105,12 +75,14 @@ const wrapToolsWithProgress = (
       };
       if (typeof executable.execute !== "function") return [name, definition];
       const original = executable.execute;
+      const progress = getWhatsAppToolProgress(name);
+      if (!progress) return [name, definition];
       return [
         name,
         {
           ...definition,
           execute: async (...args: unknown[]) => {
-            const [started, completed] = progressPairForTool(name);
+            const [started, completed] = progress;
             await onProgress(started);
             const output = await original.apply(definition, args);
             await onProgress(completed);
@@ -120,18 +92,6 @@ const wrapToolsWithProgress = (
       ];
     }),
   ) as ToolSet;
-};
-
-const lastUserText = (messages: ModelMessage[]) => {
-  const message = [...messages].reverse().find((candidate) => candidate.role === "user");
-  if (!message) return "";
-  if (typeof message.content === "string") return message.content.trim().toLowerCase();
-  return message.content
-    .filter((part) => part.type === "text")
-    .map((part) => part.text)
-    .join("")
-    .trim()
-    .toLowerCase();
 };
 
 const requiresConnectedAppAuthorization = (value: unknown): boolean => {
@@ -154,7 +114,6 @@ const wrapToolsWithApproval = (
 ): ToolSet => {
   if (input.channel !== "whatsapp") return tools;
   const approval = new WhatsAppToolApprovalStore();
-  const userReply = lastUserText(input.messages);
   return Object.fromEntries(
     Object.entries(tools).map(([name, definition]) => {
       const executable = definition as typeof definition & {
@@ -164,33 +123,10 @@ const wrapToolsWithApproval = (
         typeof executable.execute !== "function" ||
         !isConsequentialWhatsAppTool(name)
       ) return [name, definition];
-      const original = executable.execute;
       return [name, {
         ...definition,
         execute: async (...args: unknown[]) => {
           const exactArgs = args[0];
-          if (userReply === "confirm_action") {
-            const approved = await approval.consume({
-              userId: input.userId,
-              threadId: input.threadId,
-              toolName: name,
-              args: exactArgs,
-            });
-            if (approved) {
-              try {
-                const output = await original.apply(definition, args);
-                await approval.finish(
-                  input.userId,
-                  input.threadId,
-                  requiresConnectedAppAuthorization(output) ? "awaiting_auth" : "completed",
-                );
-                return output;
-              } catch (error) {
-                await approval.finish(input.userId, input.threadId, "outcome_unknown");
-                throw error;
-              }
-            }
-          }
           return approval.request({
             userId: input.userId,
             threadId: input.threadId,
@@ -257,7 +193,6 @@ export const runSakhiConversation = async (
 
   await emitProgress(input.onProgress, { kind: "accepted", label: "Working on it" });
   const access = await checkAccess({ userId: input.userId, modelId });
-  await emitProgress(input.onProgress, { kind: "working", label: "Sakhi is thinking" });
   const user = (access.userData as Partial<IUser> | undefined) ?? {};
   const baseUrl = input.baseUrl ?? process.env.NEXT_PUBLIC_BASE_URL ?? process.env.APP_URL ?? "https://trysakhi.com";
   const context = await createServerConversationContext({
@@ -269,6 +204,7 @@ export const runSakhiConversation = async (
     channelMessageId: input.channelMessageId,
     user,
   });
+  const contextTools = context.tools as ToolSet;
   if (await input.shouldCancel?.()) throw cancellationError();
   const tools = wrapToolsWithCancellation(
     wrapToolsWithApproval(
@@ -280,8 +216,70 @@ export const runSakhiConversation = async (
     ),
     input.shouldCancel,
   );
+  const approvedToolNames: string[] = [];
   const result = await (async () => {
     try {
+      if (input.approvedAction) {
+        const definition = contextTools[input.approvedAction.toolName] as
+          | (ToolSet[string] & { execute?: (...args: unknown[]) => unknown })
+          | undefined;
+        if (!definition || typeof definition.execute !== "function") {
+          await new WhatsAppToolApprovalStore().finish(
+            input.userId,
+            input.threadId,
+            "outcome_unknown",
+          );
+          throw new Error("The confirmed action is no longer available");
+        }
+        if (await input.shouldCancel?.()) throw cancellationError();
+        const progress = getWhatsAppToolProgress(input.approvedAction.toolName);
+        if (progress) await emitProgress(input.onProgress, progress[0]);
+        approvedToolNames.push(input.approvedAction.toolName);
+        let output: unknown;
+        try {
+          output = await definition.execute(input.approvedAction.exactInput, {
+            toolCallId: `whatsapp-confirmed-${input.channelMessageId ?? input.threadId}`,
+            messages: input.messages,
+            abortSignal: input.signal,
+          });
+          const awaitingAuthorization = requiresConnectedAppAuthorization(output);
+          await new WhatsAppToolApprovalStore().finish(
+            input.userId,
+            input.threadId,
+            awaitingAuthorization ? "awaiting_auth" : "completed",
+          );
+          if (!awaitingAuthorization && progress) await emitProgress(input.onProgress, progress[1]);
+        } catch (error) {
+          await new WhatsAppToolApprovalStore().finish(
+            input.userId,
+            input.threadId,
+            "outcome_unknown",
+          );
+          throw error;
+        }
+        const connectionTool = contextTools.COMPOSIO_MANAGE_CONNECTIONS;
+        const summaryTools = requiresConnectedAppAuthorization(output) && connectionTool
+          ? wrapToolsWithCancellation(
+              wrapToolsWithProgress(
+                { COMPOSIO_MANAGE_CONNECTIONS: connectionTool },
+                (event) => emitProgress(input.onProgress, event),
+              ),
+              input.shouldCancel,
+            )
+          : undefined;
+        return generate({
+          model: modelId,
+          system: `${context.system}\nReport the confirmed tool result clearly and briefly. Preserve any connection or result URL exactly. You may use COMPOSIO_MANAGE_CONNECTIONS only when the result says authorization is required. Do not call any other tool or claim anything beyond the result.`,
+          messages: [{
+            role: "user",
+            content: `Confirmed action: ${input.approvedAction.toolName}\nTool result: ${JSON.stringify(output)}`,
+          }],
+          abortSignal: input.signal,
+          tools: summaryTools,
+          stopWhen: summaryTools ? stepCountIs(3) : undefined,
+          ...getConversationProviderOptions(modelId, input.userId),
+        });
+      }
       return await generate({
       model: modelId,
       system: context.system,
@@ -302,12 +300,6 @@ export const runSakhiConversation = async (
       ],
       abortSignal: input.signal,
       ...getConversationProviderOptions(modelId, input.userId),
-        onStepFinish: async ({ toolCalls }) => {
-          const progress = progressForTools(
-            toolCalls.flatMap((call) => (call ? [call.toolName] : [])),
-          );
-          if (progress) await emitProgress(input.onProgress, progress);
-        },
       });
     } finally {
       await closeMcpClients(context.mcpClients);
@@ -317,9 +309,19 @@ export const runSakhiConversation = async (
   const calculation = calculateCredits({
     models: [usage],
     toolCostNanoUsd: calculateMeteredToolCostNanoUsd(
-      result.steps.flatMap((step) =>
-        step.toolCalls.flatMap((call) => (call ? [call.toolName] : [])),
-      ),
+      [
+        ...approvedToolNames,
+        ...result.steps.flatMap((step) =>
+          step.toolCalls.flatMap((call) => {
+            if (!call) return [];
+            if (
+              input.channel === "whatsapp" &&
+              isConsequentialWhatsAppTool(call.toolName)
+            ) return [];
+            return [call.toolName];
+          }),
+        ),
+      ],
     ),
     creditMultiplier: access.plan.creditMultiplier,
   });

@@ -20,6 +20,7 @@ const handlers = () => {
   return createWhatsAppWebhookHandlers({
     verifyToken: config.verifyToken,
     appSecret: config.appSecret,
+    phoneNumberId: config.phoneNumberId,
     store,
     schedule: after,
     process: (messageId) => processWhatsAppMessage(messageId, { store, meta, baseUrl }),

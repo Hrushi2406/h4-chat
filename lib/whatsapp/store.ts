@@ -4,10 +4,8 @@ import { randomUUID } from "node:crypto";
 import { Timestamp } from "firebase-admin/firestore";
 import { getAdminAuth, getAdminFirestore, getAdminStorage } from "@/lib/clients/firebase-admin";
 import {
-  BillingAccessError,
   ensureBillingProfile,
   getCurrentBilling,
-  normalizeBilling,
 } from "@/lib/billing/server";
 import { BILLING_PLANS } from "@/lib/billing/config";
 import { generateDefaultUser } from "@/lib/types/user";
@@ -62,7 +60,7 @@ const removeUndefinedValues = <T>(value: T): T => {
   return value;
 };
 
-const mergeCreditUsageDocuments = (
+export const mergeCreditUsageDocuments = (
   target: Record<string, unknown> | undefined,
   source: Record<string, unknown> | undefined,
 ) => {
@@ -83,7 +81,7 @@ const mergeCreditUsageDocuments = (
     usage: entries,
     totalCreditsConsumed: sum("creditsConsumed", (entry) => "creditsConsumed" in entry),
     totalCreditsGranted: sum("creditsGranted", (entry) => "creditsGranted" in entry),
-    totalCreditsExpired: sum("creditsExpired", (entry) => "creditsGranted" in entry),
+    totalCreditsExpired: sum("creditsExpired", (entry) => "creditsExpired" in entry),
     totalModelCostNanoUsd: sum("modelCostNanoUsd", (entry) => "creditsConsumed" in entry),
     totalToolCostNanoUsd: sum("toolCostNanoUsd", (entry) => "creditsConsumed" in entry),
     updatedAt: Timestamp.now(),
@@ -106,6 +104,8 @@ const normalizeAccount = (
   optedOut: value?.optedOut === true,
   blocked: value?.blocked === true,
   cooldownUntil: asDate(value?.cooldownUntil),
+  cooldownNotifiedAt: asDate(value?.cooldownNotifiedAt),
+  consentPromptedAt: asDate(value?.consentPromptedAt),
   modelId:
     typeof value?.modelId === "string"
       ? value.modelId
@@ -117,6 +117,7 @@ const normalizeAccount = (
   serviceWindowEndsAt: asDate(value?.serviceWindowEndsAt),
   activeMessageId:
     typeof value?.activeMessageId === "string" ? value.activeMessageId : undefined,
+  activeMessageClaimedAt: asDate(value?.activeMessageClaimedAt),
   pendingMessageIds: Array.isArray(value?.pendingMessageIds)
     ? value.pendingMessageIds.filter((item): item is string => typeof item === "string")
     : [],
@@ -128,6 +129,11 @@ const normalizeAccount = (
     typeof value?.lastFailedOutboundId === "string"
       ? value.lastFailedOutboundId
       : undefined,
+  deliveryRetryOfferedFor:
+    typeof value?.deliveryRetryOfferedFor === "string"
+      ? value.deliveryRetryOfferedFor
+      : undefined,
+  requiresWebLink: value?.requiresWebLink === true,
   welcomeCreditsGranted: value?.welcomeCreditsGranted === true,
 });
 
@@ -167,6 +173,10 @@ export class WhatsAppStore {
       const inboundWindowCount = insideRateWindow
         ? Number(existingAccount?.inboundWindowCount ?? 0) + 1
         : 1;
+      const existingCooldownUntil = asDate(existingAccount?.cooldownUntil);
+      const cooldownIsActive = Boolean(
+        existingCooldownUntil && existingCooldownUntil.getTime() > now.getTime(),
+      );
       transaction.set(accountRef, {
         phoneNumber: phone,
         profileName: message.profileName ?? existingAccount?.profileName ?? null,
@@ -177,8 +187,11 @@ export class WhatsAppStore {
           ? existingAccount?.inboundWindowStartedAt
           : Timestamp.fromDate(message.timestamp),
         inboundWindowCount,
-        ...(inboundWindowCount > 20
-          ? { cooldownUntil: Timestamp.fromMillis(now.getTime() + 5 * 60 * 1_000) }
+        ...(inboundWindowCount > 20 && !cooldownIsActive
+          ? {
+              cooldownUntil: Timestamp.fromMillis(now.getTime() + 5 * 60 * 1_000),
+              cooldownNotifiedAt: null,
+            }
           : {}),
         ...(!accountSnapshot.exists
           ? {
@@ -331,54 +344,6 @@ export class WhatsAppStore {
     });
   }
 
-  async chargeTranscriptionCredit(userId: string, messageId: string): Promise<boolean> {
-    const database = db();
-    const inboxRef = database.collection(INBOX).doc(messageId);
-    const userRef = database.collection("users").doc(userId);
-    return database.runTransaction(async (transaction) => {
-      const [inboxSnapshot, userSnapshot] = await Promise.all([
-        transaction.get(inboxRef),
-        transaction.get(userRef),
-      ]);
-      if (!inboxSnapshot.exists || inboxSnapshot.data()?.transcriptionCharged === true) return false;
-      const billing = normalizeBilling(userSnapshot.data()?.billing);
-      const available =
-        billing.credits.paidAvailable +
-        billing.credits.permanentAvailable +
-        billing.credits.rechargeAvailable;
-      if (available <= 0) {
-        throw new BillingAccessError(
-          "You have used all your credits for this month.",
-          "INSUFFICIENT_CREDITS",
-        );
-      }
-      let remaining = 1;
-      const paidDeduction = Math.min(billing.credits.paidAvailable, remaining);
-      remaining -= paidDeduction;
-      const permanentDeduction = Math.min(billing.credits.permanentAvailable, remaining);
-      remaining -= permanentDeduction;
-      const rechargeDeduction = Math.min(billing.credits.rechargeAvailable, remaining);
-      transaction.update(userRef, {
-        billing: {
-          ...billing,
-          credits: {
-            ...billing.credits,
-            paidAvailable: billing.credits.paidAvailable - paidDeduction,
-            permanentAvailable: billing.credits.permanentAvailable - permanentDeduction,
-            rechargeAvailable: billing.credits.rechargeAvailable - rechargeDeduction,
-          },
-          updatedAt: Timestamp.now(),
-        },
-      });
-      transaction.update(inboxRef, {
-        transcriptionCharged: true,
-        transcriptionChargedAt: Timestamp.now(),
-        updatedAt: Timestamp.now(),
-      });
-      return true;
-    });
-  }
-
   async getAccount(phoneNumber: string): Promise<WhatsAppAccountState> {
     const phone = normalizePhone(phoneNumber);
     const snapshot = await db().collection(ACCOUNTS).doc(phone).get();
@@ -392,7 +357,16 @@ export class WhatsAppStore {
     return database.runTransaction(async (transaction) => {
       const snapshot = await transaction.get(ref);
       const account = normalizeAccount(normalizePhone(phoneNumber), snapshot.data());
-      if (account.activeMessageId && account.activeMessageId !== messageId) {
+      const activeLeaseIsFresh = Boolean(
+        account.activeMessageId &&
+        account.activeMessageClaimedAt &&
+        Date.now() - account.activeMessageClaimedAt.getTime() < PROCESSING_LEASE_MS,
+      );
+      if (
+        account.activeMessageId &&
+        account.activeMessageId !== messageId &&
+        activeLeaseIsFresh
+      ) {
         if (!account.pendingMessageIds.includes(messageId)) {
           transaction.set(
             ref,
@@ -411,9 +385,26 @@ export class WhatsAppStore {
         );
         return false;
       }
+      if (account.activeMessageId && account.activeMessageId !== messageId) {
+        transaction.set(
+          database.collection(INBOX).doc(account.activeMessageId),
+          {
+            status: "failed",
+            error: "Phone work lease expired before completion",
+            completedAt: Timestamp.now(),
+            updatedAt: Timestamp.now(),
+          },
+          { merge: true },
+        );
+      }
       transaction.set(
         ref,
-        { activeMessageId: messageId, updatedAt: Timestamp.now() },
+        {
+          activeMessageId: messageId,
+          activeMessageClaimedAt: Timestamp.now(),
+          pendingMessageIds: account.pendingMessageIds.filter((id) => id !== messageId),
+          updatedAt: Timestamp.now(),
+        },
         { merge: true },
       );
       return true;
@@ -432,6 +423,7 @@ export class WhatsAppStore {
         ref,
         {
           activeMessageId: next ?? null,
+          activeMessageClaimedAt: next ? Timestamp.now() : null,
           pendingMessageIds: remaining,
           updatedAt: Timestamp.now(),
         },
@@ -441,7 +433,10 @@ export class WhatsAppStore {
     });
   }
 
-  async cancelQueuedWork(phoneNumber: string) {
+  async cancelQueuedWork(
+    phoneNumber: string,
+    options: { releaseActive?: boolean } = {},
+  ) {
     const database = db();
     const ref = database.collection(ACCOUNTS).doc(normalizePhone(phoneNumber));
     const queued = await database.runTransaction(async (transaction) => {
@@ -449,7 +444,14 @@ export class WhatsAppStore {
       const account = normalizeAccount(normalizePhone(phoneNumber), snapshot.data());
       transaction.set(
         ref,
-        { pendingMessageIds: [], cancellationRequestedAt: Timestamp.now(), updatedAt: Timestamp.now() },
+        {
+          pendingMessageIds: [],
+          cancellationRequestedAt: Timestamp.now(),
+          ...(options.releaseActive
+            ? { activeMessageId: null, activeMessageClaimedAt: null }
+            : {}),
+          updatedAt: Timestamp.now(),
+        },
         { merge: true },
       );
       return account.pendingMessageIds;
@@ -468,12 +470,13 @@ export class WhatsAppStore {
     return queued.length;
   }
 
-  async isCancellationRequested(phoneNumber: string, activeMessageAt: Date) {
+  async isCancellationRequested(phoneNumber: string, messageId: string, activeMessageAt: Date) {
     const snapshot = await db().collection(ACCOUNTS).doc(normalizePhone(phoneNumber)).get();
     const data = snapshot.data();
     const cancellationRequestedAt = asDate(data?.cancellationRequestedAt);
     return Boolean(
       data?.optedOut === true ||
+      (typeof data?.activeMessageId === "string" && data.activeMessageId !== messageId) ||
       (cancellationRequestedAt && cancellationRequestedAt.getTime() > activeMessageAt.getTime()),
     );
   }
@@ -487,6 +490,10 @@ export class WhatsAppStore {
 
   async acceptConsent(phoneNumber: string, profileName?: string): Promise<WhatsAppAccountState> {
     const phone = normalizePhone(phoneNumber);
+    const existingAccount = await this.getAccount(phone);
+    if (existingAccount.requiresWebLink) {
+      throw new Error("This phone number must be reconnected from Sakhi Settings");
+    }
     const auth = getAdminAuth();
     if (!auth) throw new Error("Firebase Auth admin is not configured");
     let authUser;
@@ -509,6 +516,9 @@ export class WhatsAppStore {
         transaction.get(userRef),
       ]);
       const account = normalizeAccount(phone, accountSnapshot.data());
+      if (account.requiresWebLink) {
+        throw new Error("This phone number must be reconnected from Sakhi Settings");
+      }
       if (!userSnapshot.exists) {
         transaction.create(userRef, {
           ...generateDefaultUser(authUser.uid),
@@ -527,6 +537,8 @@ export class WhatsAppStore {
           consent: "accepted",
           consentVersion: CONSENT_VERSION,
           optedOut: false,
+          requiresWebLink: false,
+          consentPromptedAt: null,
           welcomeCreditsGranted: true,
           acceptedAt: Timestamp.now(),
           updatedAt: Timestamp.now(),
@@ -780,6 +792,12 @@ export class WhatsAppStore {
           userId: null,
           activeThreadId: null,
           optedOut: true,
+          consent: "pending",
+          consentVersion: null,
+          requiresWebLink: true,
+          activeMessageId: null,
+          activeMessageClaimedAt: null,
+          pendingMessageIds: [],
           disconnectedAt: Timestamp.now(),
           updatedAt: Timestamp.now(),
         },
@@ -792,6 +810,8 @@ export class WhatsAppStore {
       { merge: true },
     );
     await batch.commit();
+    const auth = getAdminAuth();
+    if (auth) await auth.updateUser(userId, { phoneNumber: null });
   }
 
   async consumeLinkIntent(phoneNumber: string, tokenHash: string): Promise<
@@ -935,6 +955,7 @@ export class WhatsAppStore {
           consent: "accepted",
           consentVersion: CONSENT_VERSION,
           optedOut: false,
+          requiresWebLink: false,
           connectedAt: Timestamp.now(),
           updatedAt: Timestamp.now(),
         },
