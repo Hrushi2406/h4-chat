@@ -60,6 +60,7 @@ class ScheduledTaskService {
     timezone: string;
     humanText: string;
     modelId?: string;
+    notifyOnWhatsApp?: boolean;
   }) {
     const response = await fetch("/api/scheduled-tasks", {
       method: "POST",
@@ -82,6 +83,7 @@ class ScheduledTaskService {
     humanText?: string;
     status?: "active" | "paused";
     modelId?: string;
+    notifyOnWhatsApp?: boolean;
   }) {
     const { taskId, ...payload } = input;
     const response = await fetch(`/api/scheduled-tasks/${taskId}`, {

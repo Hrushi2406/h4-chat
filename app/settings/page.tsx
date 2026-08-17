@@ -55,6 +55,7 @@ import {
   type IMemory,
 } from "@/lib/types/user";
 import { BillingSettings } from "@/components/billing/billing-settings";
+import { WhatsAppSettings } from "@/components/whatsapp/whatsapp-settings";
 
 const settingsCardClass = "rounded-3xl border bg-card text-card-foreground shadow-xs";
 const settingsPanelClass = "rounded-3xl border bg-card p-4 text-card-foreground shadow-xs";
@@ -372,6 +373,8 @@ const AccountSettings = () => {
             </div>
           )}
         </div>
+
+        <WhatsAppSettings />
 
         <div className="space-y-1.5 lg:hidden">
           <div className={iosListClass}>

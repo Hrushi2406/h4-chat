@@ -1,0 +1,143 @@
+import type { WhatsAppConfig } from "@/lib/whatsapp/config";
+
+const DEFAULT_TIMEOUT_MS = 15_000;
+
+export interface MetaSendResult {
+  messageId: string;
+}
+
+export interface MetaMediaDownload {
+  bytes: ArrayBuffer;
+  mimeType: string;
+}
+
+export class MetaWhatsAppClient {
+  constructor(
+    private readonly config: WhatsAppConfig,
+    private readonly fetchImpl: typeof fetch = fetch,
+  ) {}
+
+  private endpoint(path = "messages") {
+    return `https://graph.facebook.com/${this.config.graphApiVersion}/${this.config.phoneNumberId}/${path}`;
+  }
+
+  private async request<T>(url: string, init: RequestInit): Promise<T> {
+    const response = await this.fetchImpl(url, {
+      ...init,
+      signal: init.signal ?? AbortSignal.timeout(DEFAULT_TIMEOUT_MS),
+      headers: {
+        Authorization: `Bearer ${this.config.accessToken}`,
+        ...init.headers,
+      },
+    });
+    if (!response.ok) {
+      const text = await response.text();
+      throw new Error(`Meta WhatsApp request failed (${response.status}): ${text.slice(0, 500)}`);
+    }
+    return (await response.json()) as T;
+  }
+
+  private async send(payload: Record<string, unknown>): Promise<MetaSendResult> {
+    const result = await this.request<{ messages?: { id?: string }[] }>(
+      this.endpoint(),
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ messaging_product: "whatsapp", ...payload }),
+      },
+    );
+    const messageId = result.messages?.[0]?.id;
+    if (!messageId) throw new Error("Meta WhatsApp response did not include a message ID");
+    return { messageId };
+  }
+
+  sendText(to: string, body: string, replyToMessageId?: string) {
+    return this.send({
+      recipient_type: "individual",
+      to,
+      type: "text",
+      text: { preview_url: true, body: body.slice(0, 4_096) },
+      ...(replyToMessageId ? { context: { message_id: replyToMessageId } } : {}),
+    });
+  }
+
+  sendButtons(
+    to: string,
+    body: string,
+    buttons: { id: string; title: string }[],
+  ) {
+    return this.send({
+      to,
+      type: "interactive",
+      interactive: {
+        type: "button",
+        body: { text: body.slice(0, 1_024) },
+        action: {
+          buttons: buttons.slice(0, 3).map((button) => ({
+            type: "reply",
+            reply: { id: button.id.slice(0, 256), title: button.title.slice(0, 20) },
+          })),
+        },
+      },
+    });
+  }
+
+  markRead(messageId: string, typing = true) {
+    return this.request<Record<string, unknown>>(this.endpoint(), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        messaging_product: "whatsapp",
+        status: "read",
+        message_id: messageId,
+        ...(typing ? { typing_indicator: { type: "text" } } : {}),
+      }),
+    });
+  }
+
+  async downloadMedia(mediaId: string): Promise<MetaMediaDownload> {
+    const metadata = await this.request<{ url: string; mime_type?: string }>(
+      `https://graph.facebook.com/${this.config.graphApiVersion}/${mediaId}`,
+      { method: "GET" },
+    );
+    const response = await this.fetchImpl(metadata.url, {
+      headers: { Authorization: `Bearer ${this.config.accessToken}` },
+      signal: AbortSignal.timeout(DEFAULT_TIMEOUT_MS),
+    });
+    if (!response.ok) throw new Error(`WhatsApp media download failed (${response.status})`);
+    return {
+      bytes: await response.arrayBuffer(),
+      mimeType: response.headers.get("content-type") || metadata.mime_type || "application/octet-stream",
+    };
+  }
+
+  async uploadMedia(bytes: ArrayBuffer, mimeType: string, filename: string) {
+    const form = new FormData();
+    form.set("messaging_product", "whatsapp");
+    form.set("type", mimeType);
+    form.set("file", new Blob([bytes], { type: mimeType }), filename);
+    const result = await this.request<{ id?: string }>(this.endpoint("media"), {
+      method: "POST",
+      body: form,
+    });
+    if (!result.id) throw new Error("Meta WhatsApp upload did not include a media ID");
+    return result.id;
+  }
+
+  sendMedia(
+    to: string,
+    kind: "image" | "document" | "audio",
+    mediaId: string,
+    options: { caption?: string; filename?: string } = {},
+  ) {
+    return this.send({
+      to,
+      type: kind,
+      [kind]: {
+        id: mediaId,
+        ...(options.caption ? { caption: options.caption.slice(0, 1_024) } : {}),
+        ...(kind === "document" && options.filename ? { filename: options.filename } : {}),
+      },
+    });
+  }
+}

@@ -1,0 +1,5 @@
+# Use Meta Cloud API for the WhatsApp Channel
+
+Sakhi will integrate its one shared official WhatsApp Business number directly with Meta's WhatsApp Cloud API. Direct integration gives Sakhi control over inbound webhooks, media, interactive controls, templates, and delivery status without an intermediary provider's markup; Twilio or another Business Solution Provider would add unnecessary dependency for a single owned number, while the existing Composio WhatsApp tool is an outbound Connected App rather than an inbound conversation channel.
+
+The webhook acknowledges a verified, persisted Meta event immediately and uses Next.js `after()` to finish the usual two-to-three-minute task within a 600-second Node.js Vercel Function limit. WhatsApp processing does not use QStash; QStash remains in use only for the existing Scheduled Task scheduler. This intentionally accepts best-effort background execution for v1, with idempotent inbox records, visible failure state, and explicit manual retry as the recovery path.

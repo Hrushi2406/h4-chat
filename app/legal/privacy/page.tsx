@@ -43,14 +43,14 @@ export default function PrivacyPage() {
       <LegalSection id="collection" title="2. Personal data we collect">
         <p>The data we collect depends on how you use Sakhi:</p>
         <ul>
-          <li><strong>Account and identity data:</strong> name, email address, profile image, Google account identifier, authentication records and account status.</li>
+          <li><strong>Account and identity data:</strong> name, email address, profile image, Google account identifier, verified phone number, WhatsApp account identifier, authentication records, consent status and account-link or merge status.</li>
           <li><strong>Profile, preferences and memory:</strong> occupation, personalisation settings, model choices, interface settings and facts you ask Sakhi to remember.</li>
-          <li><strong>Content:</strong> prompts, messages, responses, chat titles, feedback, instructions, uploaded files, filenames, images, extracted file content, tool inputs and tool results.</li>
+          <li><strong>Content:</strong> prompts, web and WhatsApp messages, responses, chat titles, feedback, instructions, uploaded or WhatsApp-delivered files, filenames, images, voice notes, transcripts, extracted file content, tool inputs and tool results.</li>
           <li><strong>Integrations:</strong> connected-service identifiers, authorisation status and scopes, actions requested, information retrieved, connection metadata, and user-configured MCP server names, URLs, headers and tool definitions.</li>
           <li><strong>Helpers, sharing and automations:</strong> Helper instructions, public descriptions, logos, share links, author display information, usage counts, automation instructions, schedules, time zones, run history, results and errors.</li>
           <li><strong>Payments and entitlements:</strong> selected plan, billing interval, credit balance and consumption, transaction amount and status, and Razorpay customer, order, payment, mandate, subscription, refund and dispute identifiers. Sakhi does not receive or store your complete card number, bank password, UPI PIN or OTP.</li>
           <li><strong>Device, usage and network data:</strong> IP address, approximate location derived from IP, browser and device type, operating system, referring pages, timestamps, pages or features used, diagnostic events, cookies and local-storage identifiers.</li>
-          <li><strong>Communications:</strong> waitlist submissions, support messages, privacy requests, complaints, grievances and related correspondence.</li>
+          <li><strong>Communications:</strong> WhatsApp delivery identifiers and statuses, message timestamps, opt-out instructions, waitlist submissions, support messages, privacy requests, complaints, grievances and related correspondence.</li>
         </ul>
         <p>Please do not submit passwords, authentication secrets, payment credentials, government identifiers, health data or other highly sensitive information unless a specific feature requires it, you are authorised to provide it, and you understand which provider or Connected Service will receive it.</p>
       </LegalSection>
@@ -73,6 +73,7 @@ export default function PrivacyPage() {
           <li>to comply with law, lawful orders, tax and accounting duties, and establish or defend legal claims.</li>
         </ul>
         <p>Where applicable law requires consent, we will seek consent through an appropriate notice or product control. You may withdraw consent prospectively, but withdrawal does not affect processing already lawfully completed and may prevent us from providing a feature that requires the data.</p>
+        <p>For Sakhi on WhatsApp, we ask you to continue or exit before creating a WhatsApp-first Account or processing an AI request. You can send <strong>STOP</strong> to pause WhatsApp processing and <strong>START</strong> to resume. Disconnecting WhatsApp stops channel access but does not erase the Sakhi Account or its existing history.</p>
       </LegalSection>
 
       <LegalSection id="ai-processing" title="5. AI models and automated processing">
@@ -108,6 +109,7 @@ export default function PrivacyPage() {
               <tr><td>Vercel</td><td>Hosting, server functions, AI routing, analytics and approximate geolocation</td><td>Requests, prompts, technical and usage data</td></tr>
               <tr><td>OpenAI, Anthropic, Google, DeepSeek, Moonshot AI, MiniMax and xAI</td><td>AI model inference</td><td>Input, relevant context, files and tool results</td></tr>
               <tr><td>Composio</td><td>Connected-app authorisation and tool execution</td><td>Connection metadata, instructions, tool inputs and results</td></tr>
+              <tr><td>Meta Platforms (WhatsApp Cloud API)</td><td>Receive and deliver Sakhi messages, media, interactive controls, read receipts and delivery status</td><td>Phone number, WhatsApp identifiers, message and media content, timestamps, consent commands and delivery metadata</td></tr>
               <tr><td>Upstash</td><td>Scheduling and delivery of automation jobs</td><td>Automation identifiers, schedules and execution metadata</td></tr>
               <tr><td>Razorpay and payment networks</td><td>Checkout, mandates, subscriptions, payments, refunds and fraud prevention</td><td>Contact, transaction, payment and billing metadata</td></tr>
             </tbody>
@@ -129,6 +131,7 @@ export default function PrivacyPage() {
         <p>We retain personal data only for as long as reasonably necessary for the purposes described here, including to provide an active Account, maintain security, resolve disputes and meet legal, tax, accounting or regulatory duties.</p>
         <ul>
           <li>Account settings, chats, files, memories and integration data are generally retained while your Account or the relevant content remains active.</li>
+          <li>WhatsApp phone mappings, consent and opt-out state, messages, media, voice transcripts and delivery metadata are generally retained with the linked Account or relevant Thread. STOP pauses processing; it does not by itself delete prior data.</li>
           <li>Public content is retained until you unshare, unpublish or request removal, subject to copies made by others.</li>
           <li>Payment, invoice, tax, fraud and dispute records are retained for the period required by applicable law and legitimate recordkeeping needs.</li>
           <li>Security logs and backups are retained for limited operational cycles and deleted or overwritten in the ordinary course.</li>
@@ -156,7 +159,7 @@ export default function PrivacyPage() {
           <li>redressal of a grievance; and</li>
           <li>nomination or any other right available under applicable data-protection law.</li>
         </ul>
-        <p>Product controls may also let you edit memories, disconnect apps, remove MCP servers, delete chats, stop automations and disable public links. To exercise a right, email <a href="mailto:support@trysakhi.com">support@trysakhi.com</a> from the address associated with your Account and describe your request. We will respond within the period required by applicable law.</p>
+        <p>Product controls may also let you edit memories, disconnect apps or WhatsApp, remove MCP servers, delete chats, stop automations and disable public links. There is no self-service WhatsApp deletion command. For verified erasure of a WhatsApp-linked Account—including its phone mapping, channel records, stored media and transcripts—email <a href="mailto:support@trysakhi.com">support@trysakhi.com</a> from the address associated with your Account and include the last four digits of the connected number. We may request additional proportionate verification and will respond within the period required by applicable law.</p>
       </LegalSection>
 
       <LegalSection id="children" title="15. Children">

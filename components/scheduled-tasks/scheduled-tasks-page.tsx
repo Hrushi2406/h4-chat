@@ -78,6 +78,7 @@ type TaskFormState = {
   everyHours: string;
   customCron: string;
   timezone: string;
+  notifyOnWhatsApp: boolean;
 };
 
 const defaultFormState = (): TaskFormState => ({
@@ -91,6 +92,7 @@ const defaultFormState = (): TaskFormState => ({
   timezone: normalizeTaskTimezone(
     Intl.DateTimeFormat().resolvedOptions().timeZone || DEFAULT_TASK_TIMEZONE,
   ),
+  notifyOnWhatsApp: false,
 });
 
 const buildCreateFromChatDraft = (form: TaskFormState, humanText: string) => {
@@ -478,6 +480,7 @@ function TaskFormModal({
     cron: string;
     timezone: string;
     humanText: string;
+    notifyOnWhatsApp: boolean;
   }) => Promise<void>;
   isSaving: boolean;
 }) {
@@ -500,6 +503,7 @@ function TaskFormModal({
       everyHours: "6",
       customCron: stripCronTimezone(task.schedule.cron),
       timezone: task.schedule.timezone,
+      notifyOnWhatsApp: task.notifyOnWhatsApp === true,
     });
   }, [open, task]);
 
@@ -706,6 +710,19 @@ function TaskFormModal({
               </p>
             ) : null}
           </div>
+
+          <label htmlFor="task-whatsapp-notification" className="flex cursor-pointer items-center justify-between gap-4 rounded-2xl border px-3.5 py-3">
+            <span>
+              <span className="block text-sm font-medium">Notify me on WhatsApp</span>
+              <span className="mt-0.5 block text-xs text-muted-foreground">Sent only when you’ve messaged Sakhi on WhatsApp within the last 24 hours.</span>
+            </span>
+            <Switch
+              id="task-whatsapp-notification"
+              checked={form.notifyOnWhatsApp}
+              onCheckedChange={(checked) => updateForm("notifyOnWhatsApp", checked)}
+              aria-label="Notify me on WhatsApp"
+            />
+          </label>
         </div>
 
         <div className="space-y-3">
@@ -719,6 +736,7 @@ function TaskFormModal({
                 cron,
                 timezone: normalizeTaskTimezone(form.timezone),
                 humanText,
+                notifyOnWhatsApp: form.notifyOnWhatsApp,
               }).catch(() => undefined);
             }}
             disabled={isSaving || !isValid}

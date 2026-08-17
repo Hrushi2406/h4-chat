@@ -46,6 +46,7 @@ export async function POST(req: Request) {
       humanText: body.humanText,
       source: "manual",
       modelId: body.modelId,
+      notifyOnWhatsApp: body.notifyOnWhatsApp,
       baseUrl: getBaseUrl(req),
     });
 

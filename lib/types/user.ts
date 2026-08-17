@@ -19,6 +19,9 @@ export interface IUser {
   memoryEnabled: boolean;
   composioSessionId?: string;
   composioSessionUpdatedAt?: string;
+  phoneNumber?: string;
+  whatsappConnected?: boolean;
+  mergedInto?: string;
   billing?: UserBilling;
 }
 

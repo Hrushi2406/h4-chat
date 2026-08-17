@@ -37,6 +37,7 @@ import {
   deductCredits,
   getAutomationLimitForUser,
 } from "@/lib/billing/server";
+import { notifyAutomationOnWhatsApp } from "@/lib/whatsapp/automation-notifier";
 
 const colTasks = "scheduledTasks";
 const colRuns = "scheduledTaskRuns";
@@ -57,6 +58,7 @@ export interface CreateScheduledTaskInput {
   source?: ScheduledTaskSource;
   sourceThreadId?: string;
   modelId?: string;
+  notifyOnWhatsApp?: boolean;
   baseUrl: string;
 }
 
@@ -70,6 +72,7 @@ export interface UpdateScheduledTaskInput {
   humanText?: string;
   status?: "active" | "paused";
   modelId?: string;
+  notifyOnWhatsApp?: boolean;
   baseUrl: string;
 }
 
@@ -198,6 +201,7 @@ class ScheduledTaskServerService {
       source: input.source ?? "manual",
       sourceThreadId: input.sourceThreadId,
       modelId: input.modelId,
+      notifyOnWhatsApp: input.notifyOnWhatsApp ?? false,
       createdAt: new Date(now),
       updatedAt: new Date(now),
     };
@@ -264,6 +268,7 @@ class ScheduledTaskServerService {
       title: input.title?.trim(),
       instruction: input.instruction?.trim(),
       modelId: input.modelId,
+      notifyOnWhatsApp: input.notifyOnWhatsApp,
       status: nextStatus,
       qstashScheduleId,
       schedule:
@@ -414,6 +419,23 @@ class ScheduledTaskServerService {
         updatedAt: finishedAt,
       });
 
+      const whatsappNotification = await notifyAutomationOnWhatsApp({
+        userId: task.userId,
+        enabled: task.notifyOnWhatsApp === true,
+        title: task.title,
+        outputPreview,
+        threadUrl: `${input.baseUrl}/chat/${threadId}`,
+      }).catch((error) => ({
+        status: "failed" as const,
+        messageId: undefined,
+        error: error instanceof Error ? error.message.slice(0, 500) : "Unknown notification error",
+      }));
+      await runRef.update({
+        whatsappNotificationStatus: whatsappNotification.status,
+        whatsappNotificationMessageId: whatsappNotification.messageId ?? null,
+        whatsappNotificationError: whatsappNotification.error ?? null,
+      });
+
       return {
         id: runId,
         taskId: task.id,
@@ -424,6 +446,9 @@ class ScheduledTaskServerService {
         finishedAt: new Date(finishedAt),
         outputThreadId: threadId,
         outputPreview,
+        whatsappNotificationStatus: whatsappNotification.status,
+        whatsappNotificationMessageId: whatsappNotification.messageId,
+        whatsappNotificationError: whatsappNotification.error,
       };
     } catch (error) {
       const message =

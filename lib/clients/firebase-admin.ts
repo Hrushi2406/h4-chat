@@ -7,6 +7,7 @@ import {
 } from "firebase-admin/app";
 import { getAuth } from "firebase-admin/auth";
 import { getFirestore } from "firebase-admin/firestore";
+import { getStorage } from "firebase-admin/storage";
 
 // undefined = not yet attempted, null = attempted and failed (don't retry init storms)
 let cachedApp: App | null | undefined;
@@ -40,6 +41,7 @@ const getAdminApp = (): App | null => {
         ? cert(parseServiceAccount(serviceAccount))
         : applicationDefault(),
       projectId,
+      storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET,
     });
   } catch (error) {
     console.error(
@@ -60,4 +62,9 @@ export const getAdminAuth = () => {
 export const getAdminFirestore = () => {
   const app = getAdminApp();
   return app ? getFirestore(app) : undefined;
+};
+
+export const getAdminStorage = () => {
+  const app = getAdminApp();
+  return app ? getStorage(app) : undefined;
 };

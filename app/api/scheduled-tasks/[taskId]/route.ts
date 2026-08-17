@@ -27,6 +27,7 @@ export async function PATCH(req: Request, context: RouteContext) {
       humanText: body.humanText,
       status: body.status,
       modelId: body.modelId,
+      notifyOnWhatsApp: body.notifyOnWhatsApp,
       baseUrl: getBaseUrl(req),
     });
 

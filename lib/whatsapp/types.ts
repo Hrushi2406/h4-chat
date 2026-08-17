@@ -1,0 +1,77 @@
+export type WhatsAppInboundType =
+  | "text"
+  | "image"
+  | "document"
+  | "audio"
+  | "interactive"
+  | "unsupported";
+
+export interface WhatsAppMediaReference {
+  id: string;
+  mimeType?: string;
+  filename?: string;
+  caption?: string;
+  isVoice?: boolean;
+}
+
+export interface WhatsAppInboundMessage {
+  id: string;
+  from: string;
+  phoneNumberId: string;
+  profileName?: string;
+  timestamp: Date;
+  type: WhatsAppInboundType;
+  originalType: string;
+  text?: string;
+  media?: WhatsAppMediaReference;
+  replyToMessageId?: string;
+}
+
+export interface WhatsAppDeliveryStatus {
+  messageId: string;
+  recipientId: string;
+  status: "sent" | "delivered" | "read" | "failed" | "deleted" | "unknown";
+  timestamp: Date;
+  errors?: unknown[];
+}
+
+export interface ParsedMetaWebhook {
+  messages: WhatsAppInboundMessage[];
+  statuses: WhatsAppDeliveryStatus[];
+}
+
+export type WhatsAppConsentState = "pending" | "accepted" | "declined";
+
+export interface WhatsAppAccountState {
+  phoneNumber: string;
+  userId?: string;
+  profileName?: string;
+  consent: WhatsAppConsentState;
+  consentVersion?: string;
+  optedOut: boolean;
+  blocked: boolean;
+  cooldownUntil?: Date;
+  modelId: string;
+  activeThreadId?: string;
+  lastInboundAt?: Date;
+  lastConversationAt?: Date;
+  serviceWindowEndsAt?: Date;
+  activeMessageId?: string;
+  pendingMessageIds: string[];
+  lastUnprocessedMessageId?: string;
+  welcomeCreditsGranted: boolean;
+}
+
+export type WhatsAppProgressKind =
+  | "accepted"
+  | "connecting"
+  | "working"
+  | "confirmation"
+  | "completed"
+  | "failed"
+  | "cancelled";
+
+export interface WhatsAppProgressEvent {
+  kind: WhatsAppProgressKind;
+  label: string;
+}

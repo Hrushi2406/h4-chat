@@ -21,6 +21,7 @@ export interface ScheduledTask {
   sourceThreadId?: string;
   qstashScheduleId?: string;
   modelId?: string;
+  notifyOnWhatsApp?: boolean;
   createdAt: Date;
   updatedAt: Date;
   lastRunAt?: Date;
@@ -41,6 +42,15 @@ export interface ScheduledTaskRun {
   outputThreadId?: string;
   outputPreview?: string;
   error?: string;
+  whatsappNotificationStatus?:
+    | "sent"
+    | "skipped_disabled"
+    | "skipped_outside_window"
+    | "skipped_not_connected"
+    | "skipped_not_configured"
+    | "failed";
+  whatsappNotificationMessageId?: string;
+  whatsappNotificationError?: string;
 }
 
 export type FirestoreDate =
@@ -109,6 +119,7 @@ export const normalizeScheduledTask = (
     sourceThreadId: task.sourceThreadId,
     qstashScheduleId: task.qstashScheduleId,
     modelId: task.modelId,
+    notifyOnWhatsApp: task.notifyOnWhatsApp === true,
     createdAt: normalizeScheduledDate(task.createdAt) ?? now,
     updatedAt: normalizeScheduledDate(task.updatedAt) ?? now,
     lastRunAt: normalizeScheduledDate(task.lastRunAt),
@@ -135,5 +146,8 @@ export const normalizeScheduledTaskRun = (
     outputThreadId: run.outputThreadId,
     outputPreview: run.outputPreview,
     error: run.error,
+    whatsappNotificationStatus: run.whatsappNotificationStatus,
+    whatsappNotificationMessageId: run.whatsappNotificationMessageId,
+    whatsappNotificationError: run.whatsappNotificationError,
   };
 };

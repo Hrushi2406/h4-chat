@@ -901,11 +901,13 @@ function createScheduledTaskTools({
   threadId,
   modelId,
   baseUrl,
+  notifyOnWhatsApp = false,
 }: {
   userId?: string;
   threadId?: string;
   modelId: string;
   baseUrl: string;
+  notifyOnWhatsApp?: boolean;
 }): ToolSet {
   if (!userId) {
     return {};
@@ -979,6 +981,7 @@ function createScheduledTaskTools({
           sourceThreadId: threadId,
           modelId,
           baseUrl,
+          notifyOnWhatsApp,
         });
 
         return {
