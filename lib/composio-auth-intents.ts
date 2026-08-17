@@ -8,9 +8,11 @@ export type ComposioAuthIntent = {
   userId: string;
   source: ComposioAuthIntentSource;
   threadId?: string;
+  channelMessageId?: string;
   toolkit?: string;
   createdAt: string;
   expiresAt: string;
+  status?: "pending" | "consumed";
 };
 
 const INTENTS_COLLECTION = "composioAuthIntents";
@@ -20,11 +22,13 @@ export const createComposioAuthIntent = async ({
   userId,
   source,
   threadId,
+  channelMessageId,
   toolkit,
 }: {
   userId: string;
   source: ComposioAuthIntentSource;
   threadId?: string;
+  channelMessageId?: string;
   toolkit?: string;
 }) => {
   const db = getAdminFirestore();
@@ -37,10 +41,15 @@ export const createComposioAuthIntent = async ({
     source,
     createdAt: now.toISOString(),
     expiresAt: new Date(now.getTime() + INTENT_TTL_MS).toISOString(),
+    status: "pending",
   };
 
   if (threadId) {
     intent.threadId = threadId;
+  }
+
+  if (channelMessageId) {
+    intent.channelMessageId = channelMessageId;
   }
 
   if (toolkit) {
@@ -59,22 +68,19 @@ export const consumeComposioAuthIntent = async (
   if (!db) return undefined;
 
   const intentRef = db.collection(INTENTS_COLLECTION).doc(intentId);
-  const snap = await intentRef.get();
-
-  if (!snap.exists) return undefined;
-
-  const intent = snap.data() as ComposioAuthIntent;
-
-  await intentRef.delete().catch((error) => {
-    console.error(
-      "Failed to delete Composio auth intent:",
-      error instanceof Error ? error.message : error,
-    );
+  return db.runTransaction(async (transaction) => {
+    const snap = await transaction.get(intentRef);
+    if (!snap.exists) return undefined;
+    const intent = snap.data() as ComposioAuthIntent;
+    if (intent.status && intent.status !== "pending") return undefined;
+    if (new Date(intent.expiresAt).getTime() < Date.now()) {
+      transaction.update(intentRef, { status: "consumed", consumedAt: new Date().toISOString() });
+      return undefined;
+    }
+    transaction.update(intentRef, {
+      status: "consumed",
+      consumedAt: new Date().toISOString(),
+    });
+    return intent;
   });
-
-  if (new Date(intent.expiresAt).getTime() < Date.now()) {
-    return undefined;
-  }
-
-  return intent;
 };

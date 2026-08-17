@@ -1,6 +1,7 @@
 import type { WhatsAppConfig } from "@/lib/whatsapp/config";
 
 const DEFAULT_TIMEOUT_MS = 15_000;
+const MAX_MEDIA_BYTES = 25 * 1024 * 1024;
 
 export interface MetaSendResult {
   messageId: string;
@@ -100,13 +101,44 @@ export class MetaWhatsAppClient {
       `https://graph.facebook.com/${this.config.graphApiVersion}/${mediaId}`,
       { method: "GET" },
     );
+    const mediaUrl = new URL(metadata.url);
+    const trustedMediaHost =
+      mediaUrl.protocol === "https:" &&
+      (mediaUrl.hostname === "lookaside.fbsbx.com" ||
+        mediaUrl.hostname.endsWith(".facebook.com") ||
+        mediaUrl.hostname.endsWith(".fbcdn.net"));
+    if (!trustedMediaHost) throw new Error("Meta returned an untrusted media URL");
     const response = await this.fetchImpl(metadata.url, {
       headers: { Authorization: `Bearer ${this.config.accessToken}` },
+      redirect: "error",
       signal: AbortSignal.timeout(DEFAULT_TIMEOUT_MS),
     });
     if (!response.ok) throw new Error(`WhatsApp media download failed (${response.status})`);
+    const declaredLength = Number(response.headers.get("content-length") ?? 0);
+    if (declaredLength > MAX_MEDIA_BYTES || !response.body) {
+      throw new Error("WhatsApp media is larger than 25 MB");
+    }
+    const reader = response.body.getReader();
+    const chunks: Uint8Array[] = [];
+    let total = 0;
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      total += value.byteLength;
+      if (total > MAX_MEDIA_BYTES) {
+        await reader.cancel();
+        throw new Error("WhatsApp media is larger than 25 MB");
+      }
+      chunks.push(value);
+    }
+    const combined = new Uint8Array(total);
+    let offset = 0;
+    for (const chunk of chunks) {
+      combined.set(chunk, offset);
+      offset += chunk.byteLength;
+    }
     return {
-      bytes: await response.arrayBuffer(),
+      bytes: combined.buffer,
       mimeType: response.headers.get("content-type") || metadata.mime_type || "application/octet-stream",
     };
   }

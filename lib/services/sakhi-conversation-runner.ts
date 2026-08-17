@@ -14,7 +14,12 @@ import {
 } from "@/lib/billing/server";
 import type { IMemory, IUser } from "@/lib/types/user";
 import type { WhatsAppProgressEvent } from "@/lib/whatsapp/types";
+import {
+  isConsequentialWhatsAppTool,
+  WhatsAppToolApprovalStore,
+} from "@/lib/whatsapp/tool-approval";
 import { closeMcpClients } from "@/lib/mcp";
+import { recordWhatsAppCreditDeficit } from "@/lib/whatsapp/credit-deficit";
 import {
   createServerConversationContext,
   getConversationProviderOptions,
@@ -26,8 +31,10 @@ export interface SakhiConversationInput {
   modelId?: string;
   messages: ModelMessage[];
   channel: "web" | "whatsapp" | "automation";
+  channelMessageId?: string;
   signal?: AbortSignal;
   onProgress?: (event: WhatsAppProgressEvent) => void | Promise<void>;
+  shouldCancel?: () => Promise<boolean>;
   baseUrl?: string;
 }
 
@@ -115,6 +122,130 @@ const wrapToolsWithProgress = (
   ) as ToolSet;
 };
 
+const lastUserText = (messages: ModelMessage[]) => {
+  const message = [...messages].reverse().find((candidate) => candidate.role === "user");
+  if (!message) return "";
+  if (typeof message.content === "string") return message.content.trim().toLowerCase();
+  return message.content
+    .filter((part) => part.type === "text")
+    .map((part) => part.text)
+    .join("")
+    .trim()
+    .toLowerCase();
+};
+
+const requiresConnectedAppAuthorization = (value: unknown): boolean => {
+  if (typeof value === "string") {
+    return /needs[_ -]?connection|not connected|connection required|connectlink|redirecturl/i.test(value);
+  }
+  if (Array.isArray(value)) return value.some(requiresConnectedAppAuthorization);
+  if (value && typeof value === "object") {
+    return Object.entries(value as Record<string, unknown>).some(
+      ([key, item]) =>
+        /connectlink|redirecturl/i.test(key) || requiresConnectedAppAuthorization(item),
+    );
+  }
+  return false;
+};
+
+const wrapToolsWithApproval = (
+  tools: ToolSet,
+  input: SakhiConversationInput,
+): ToolSet => {
+  if (input.channel !== "whatsapp") return tools;
+  const approval = new WhatsAppToolApprovalStore();
+  const userReply = lastUserText(input.messages);
+  return Object.fromEntries(
+    Object.entries(tools).map(([name, definition]) => {
+      const executable = definition as typeof definition & {
+        execute?: (...args: unknown[]) => unknown;
+      };
+      if (
+        typeof executable.execute !== "function" ||
+        !isConsequentialWhatsAppTool(name)
+      ) return [name, definition];
+      const original = executable.execute;
+      return [name, {
+        ...definition,
+        execute: async (...args: unknown[]) => {
+          const exactArgs = args[0];
+          if (userReply === "confirm_action") {
+            const approved = await approval.consume({
+              userId: input.userId,
+              threadId: input.threadId,
+              toolName: name,
+              args: exactArgs,
+            });
+            if (approved) {
+              try {
+                const output = await original.apply(definition, args);
+                await approval.finish(
+                  input.userId,
+                  input.threadId,
+                  requiresConnectedAppAuthorization(output) ? "awaiting_auth" : "completed",
+                );
+                return output;
+              } catch (error) {
+                await approval.finish(input.userId, input.threadId, "outcome_unknown");
+                throw error;
+              }
+            }
+          }
+          return approval.request({
+            userId: input.userId,
+            threadId: input.threadId,
+            toolName: name,
+            args: exactArgs,
+          });
+        },
+      }];
+    }),
+  ) as ToolSet;
+};
+
+const cancellationError = () => {
+  const error = new Error("Cancelled");
+  error.name = "AbortError";
+  return error;
+};
+
+const wrapToolsWithCancellation = (
+  tools: ToolSet,
+  shouldCancel: SakhiConversationInput["shouldCancel"],
+): ToolSet => {
+  if (!shouldCancel) return tools;
+  return Object.fromEntries(
+    Object.entries(tools).map(([name, definition]) => {
+      const executable = definition as typeof definition & {
+        execute?: (...args: unknown[]) => unknown;
+      };
+      if (typeof executable.execute !== "function") return [name, definition];
+      const original = executable.execute;
+      return [name, {
+        ...definition,
+        execute: async (...args: unknown[]) => {
+          if (await shouldCancel()) throw cancellationError();
+          return original.apply(definition, args);
+        },
+      }];
+    }),
+  ) as ToolSet;
+};
+
+const emitProgress = async (
+  callback: SakhiConversationInput["onProgress"],
+  event: WhatsAppProgressEvent,
+) => {
+  try {
+    await callback?.(event);
+  } catch (error) {
+    console.error("Non-fatal Sakhi progress delivery failure", {
+      kind: event.kind,
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
+};
+
 export const runSakhiConversation = async (
   input: SakhiConversationInput,
   dependencies: SakhiConversationDependencies = {},
@@ -124,9 +255,9 @@ export const runSakhiConversation = async (
   const deduct = dependencies.deduct ?? deductCredits;
   const generate = dependencies.generate ?? generateText;
 
-  await input.onProgress?.({ kind: "accepted", label: "Working on it" });
+  await emitProgress(input.onProgress, { kind: "accepted", label: "Working on it" });
   const access = await checkAccess({ userId: input.userId, modelId });
-  await input.onProgress?.({ kind: "working", label: "Sakhi is thinking" });
+  await emitProgress(input.onProgress, { kind: "working", label: "Sakhi is thinking" });
   const user = (access.userData as Partial<IUser> | undefined) ?? {};
   const baseUrl = input.baseUrl ?? process.env.NEXT_PUBLIC_BASE_URL ?? process.env.APP_URL ?? "https://trysakhi.com";
   const context = await createServerConversationContext({
@@ -135,9 +266,20 @@ export const runSakhiConversation = async (
     modelId,
     baseUrl,
     channel: input.channel,
+    channelMessageId: input.channelMessageId,
     user,
   });
-  const tools = wrapToolsWithProgress(context.tools, input.onProgress);
+  if (await input.shouldCancel?.()) throw cancellationError();
+  const tools = wrapToolsWithCancellation(
+    wrapToolsWithApproval(
+      wrapToolsWithProgress(
+        context.tools,
+        (event) => emitProgress(input.onProgress, event),
+      ),
+      input,
+    ),
+    input.shouldCancel,
+  );
   const result = await (async () => {
     try {
       return await generate({
@@ -145,14 +287,26 @@ export const runSakhiConversation = async (
       system: context.system,
       messages: input.messages,
       tools,
-      stopWhen: stepCountIs(100),
+      stopWhen: [
+        stepCountIs(100),
+        ({ steps }) =>
+          calculateCredits({
+            models: steps.map((step) => usageFromAiSdk(modelId, step.usage)),
+            toolCostNanoUsd: calculateMeteredToolCostNanoUsd(
+              steps.flatMap((step) =>
+                step.toolCalls.flatMap((call) => (call ? [call.toolName] : [])),
+              ),
+            ),
+            creditMultiplier: access.plan.creditMultiplier,
+          }).credits >= access.availableCredits,
+      ],
       abortSignal: input.signal,
       ...getConversationProviderOptions(modelId, input.userId),
         onStepFinish: async ({ toolCalls }) => {
           const progress = progressForTools(
             toolCalls.flatMap((call) => (call ? [call.toolName] : [])),
           );
-          if (progress) await input.onProgress?.(progress);
+          if (progress) await emitProgress(input.onProgress, progress);
         },
       });
     } finally {
@@ -169,13 +323,34 @@ export const runSakhiConversation = async (
     ),
     creditMultiplier: access.plan.creditMultiplier,
   });
-  await deduct({ userId: input.userId, calculation });
-  await input.onProgress?.({ kind: "completed", label: "Done" });
+  const deduction = await deduct({
+    userId: input.userId,
+    calculation,
+    ...(input.channel === "whatsapp" && input.channelMessageId
+      ? { idempotencyKey: `whatsapp:${input.channelMessageId}:conversation` }
+      : {}),
+  });
+  if (
+    input.channel === "whatsapp" &&
+    deduction.deductedCredits < deduction.consumedCredits
+  ) {
+    await recordWhatsAppCreditDeficit({
+      userId: input.userId,
+      threadId: input.threadId,
+      modelId,
+      messageId: input.channelMessageId!,
+      consumedCredits: deduction.consumedCredits,
+      deductedCredits: deduction.deductedCredits,
+    }).catch((error) => {
+      console.error("Failed to record WhatsApp credit deficit", error);
+    });
+  }
+  await emitProgress(input.onProgress, { kind: "completed", label: "Done" });
 
   return {
     text: result.text,
     modelId,
-    creditsUsed: calculation.credits,
+    creditsUsed: deduction.deductedCredits,
     inputTokens: usage.inputTokens ?? 0,
     outputTokens: usage.outputTokens ?? 0,
   };

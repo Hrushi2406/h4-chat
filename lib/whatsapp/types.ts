@@ -59,6 +59,7 @@ export interface WhatsAppAccountState {
   activeMessageId?: string;
   pendingMessageIds: string[];
   lastUnprocessedMessageId?: string;
+  lastFailedOutboundId?: string;
   welcomeCreditsGranted: boolean;
 }
 

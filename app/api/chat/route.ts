@@ -45,6 +45,7 @@ import {
   checkTaskAccess,
   deductCredits,
 } from "@/lib/billing/server";
+import { getConversationProviderOptions } from "@/lib/chat/server-conversation-context";
 
 export const maxDuration = 600;
 
@@ -338,7 +339,7 @@ export async function POST(req: Request) {
         return reached;
       },
     ],
-    ...getProviderOptions(model.id, verifiedUserId),
+    ...getConversationProviderOptions(model.id, verifiedUserId),
     onStepFinish: ({ usage, toolCalls }) => {
       completedStepUsages.push(usageFromAiSdk(model.id, usage));
       meteredToolCostNanoUsd += calculateMeteredToolCostNanoUsd(
@@ -1124,29 +1125,6 @@ function createMemoryTools({ userId }: { userId?: string }): ToolSet {
       execute: async ({ memory_id }) => deleteUserMemory(userId, memory_id),
     }),
   } satisfies ToolSet;
-}
-
-function getProviderOptions(modelId: string, userId: string) {
-  if (modelId === "deepseek/deepseek-v4-flash") {
-    return {
-      providerOptions: {
-        gateway: {
-          order: ["novita", "digitalocean", "deepseek", "fireworks"],
-          user: userId,
-          tags: ["feature:chat"],
-        },
-      },
-    };
-  }
-
-  return {
-    providerOptions: {
-      gateway: {
-        user: userId,
-        tags: ["feature:chat"],
-      },
-    },
-  };
 }
 
 function getScheduledTaskSystemPrompt() {

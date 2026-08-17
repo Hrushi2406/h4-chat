@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const mocks = vi.hoisted(() => ({
   activatePaidPlan: vi.fn(),
   reconcileRechargePurchase: vi.fn(),
+  resolveCanonicalBillingUserId: vi.fn(),
   revokePaidCredits: vi.fn(),
   updateSubscriptionState: vi.fn(),
   cancelRazorpaySubscription: vi.fn(),
@@ -25,6 +26,7 @@ vi.mock("@/lib/billing/server", () => ({
   revokePaidCredits: mocks.revokePaidCredits,
   updateSubscriptionState: mocks.updateSubscriptionState,
   getCurrentBilling: mocks.getCurrentBilling,
+  resolveCanonicalBillingUserId: mocks.resolveCanonicalBillingUserId,
 }));
 
 vi.mock("@/lib/billing/razorpay", () => ({
@@ -103,6 +105,7 @@ beforeEach(() => {
   });
   mocks.cancelRazorpaySubscription.mockResolvedValue(subscription);
   mocks.getSubscriptionOwner.mockReturnValue("user_test");
+  mocks.resolveCanonicalBillingUserId.mockImplementation(async (userId: string) => userId);
   mocks.resolveInternalPlan.mockReturnValue("plus_monthly");
   mocks.getRechargeOrderDetails.mockReturnValue(undefined);
   mocks.unixDate.mockImplementation((value: number | null | undefined) =>

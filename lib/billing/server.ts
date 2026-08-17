@@ -642,6 +642,21 @@ export const getCurrentBilling = async (
   now = new Date(),
 ) => (await getCurrentBillingContext(userId, now)).billing;
 
+export const resolveCanonicalBillingUserId = async (userId: string) => {
+  const database = getDb();
+  const visited = new Set<string>();
+  let current = userId;
+  for (let depth = 0; depth < 5; depth += 1) {
+    if (visited.has(current)) throw new Error("Billing account merge cycle detected");
+    visited.add(current);
+    const snapshot = await database.collection(USERS_COLLECTION).doc(current).get();
+    const mergedInto = snapshot.data()?.mergedInto;
+    if (typeof mergedInto !== "string" || !mergedInto) return current;
+    current = mergedInto;
+  }
+  throw new Error("Billing account merge chain is too deep");
+};
+
 export const checkTaskAccess = async ({
   userId,
   modelId,
@@ -701,17 +716,34 @@ export const checkTaskAccess = async ({
 export const deductCredits = async ({
   userId,
   calculation,
+  idempotencyKey,
   now = new Date(),
 }: {
   userId: string;
   calculation: CreditCalculation;
+  idempotencyKey?: string;
   now?: Date;
 }) => {
   const db = getDb();
   const ref = db.collection(USERS_COLLECTION).doc(userId);
+  const deductionRef = idempotencyKey
+    ? db.collection("billingDeductions").doc(idempotencyKey.replaceAll("/", "_"))
+    : undefined;
 
   return db.runTransaction(async (transaction) => {
-    const userSnapshot = await transaction.get(ref);
+    const [userSnapshot, deductionSnapshot] = await Promise.all([
+      transaction.get(ref),
+      deductionRef ? transaction.get(deductionRef) : Promise.resolve(undefined),
+    ]);
+    if (deductionSnapshot?.exists) {
+      const existing = deductionSnapshot.data() ?? {};
+      if (existing.userId !== userId) throw new Error("Billing idempotency key owner mismatch");
+      return {
+        billing: normalizeBilling(userSnapshot.data()?.billing, now),
+        deductedCredits: Number(existing.deductedCredits ?? 0),
+        consumedCredits: Number(existing.consumedCredits ?? 0),
+      };
+    }
     const billing = normalizeBilling(userSnapshot.data()?.billing, now);
     let remaining = calculation.credits;
     const paidDeduction = Math.min(
@@ -743,6 +775,17 @@ export const deductCredits = async ({
     };
 
     transaction.update(ref, { billing: updated });
+
+    if (deductionRef) {
+      transaction.create(deductionRef, {
+        userId,
+        idempotencyKey,
+        deductedCredits: paidDeduction + permanentDeduction + rechargeDeduction,
+        consumedCredits: calculation.credits,
+        calculation,
+        createdAt: Timestamp.fromDate(now),
+      });
+    }
 
     return {
       billing: updated,

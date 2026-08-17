@@ -29,6 +29,7 @@ export const createServerConversationContext = async (input: {
   modelId: string;
   baseUrl: string;
   channel: "web" | "whatsapp" | "automation";
+  channelMessageId?: string;
   user: Partial<IUser>;
 }) => {
   const [helpers, mcpServers, composioTools] = await Promise.all([
@@ -43,6 +44,7 @@ export const createServerConversationContext = async (input: {
             baseUrl: input.baseUrl,
             source: "chat",
             threadId: input.threadId,
+            channelMessageId: input.channelMessageId,
           },
         }).catch((error) => {
           console.error("Failed to load server conversation Composio tools", error);
@@ -146,6 +148,7 @@ export const createServerConversationContext = async (input: {
   const helperLines = helpers.map((helper) => `- ${helper.slug}: ${helper.whenToUse}`);
   const system = `You are Sakhi, a trusted AI friend who helps people get things done. Answer directly and naturally, with concise formatting suitable for ${input.channel}.
 Never perform irreversible or consequential external actions without showing the exact action and receiving explicit confirmation. Drafting is not permission to send. Never claim an action succeeded unless its tool result proves it.
+When a tool returns requiresConfirmation, show its exactInput (including the exact recipient/destination and content), ask the user to use Confirm or Cancel, and stop. When the user replies confirm_action, call the same tool once with exactly the same arguments. Never alter confirmed arguments.
 Use connected-app and MCP tools when relevant. If authorization is needed, return the provided secure connection link and explain that the pending task can continue afterward.
 Use automation tools for repeated schedules. Automations created on WhatsApp notify on WhatsApp by default. Use memory tools silently for durable facts. Use a Helper only by an exact listed slug.
 ${input.user.name ? `User name: ${input.user.name}` : ""}

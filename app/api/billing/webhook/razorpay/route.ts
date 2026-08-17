@@ -2,6 +2,7 @@ import {
   activatePaidPlan,
   getCurrentBilling,
   reconcileRechargePurchase,
+  resolveCanonicalBillingUserId,
   revokePaidCredits,
   updateSubscriptionState,
 } from "@/lib/billing/server";
@@ -20,6 +21,7 @@ import {
   type RazorpayWebhook,
 } from "@/lib/billing/razorpay";
 import { billingOperationalErrorResponse } from "@/lib/billing/error-response";
+import { notifyRechargeOnWhatsApp } from "@/lib/whatsapp/recharge-notifier";
 
 export const dynamic = "force-dynamic";
 
@@ -54,6 +56,7 @@ export async function POST(request: Request) {
       const order = await fetchRazorpayOrder(orderId);
       const recharge = getRechargeOrderDetails(order);
       if (recharge) {
+        const rechargeUserId = await resolveCanonicalBillingUserId(recharge.userId);
         if (
           authoritativePayment.order_id !== order.id ||
           authoritativePayment.currency !== "INR" ||
@@ -96,7 +99,7 @@ export async function POST(request: Request) {
         }
 
         await reconcileRechargePurchase({
-          userId: recharge.userId,
+          userId: rechargeUserId,
           orderId: order.id,
           paymentId: authoritativePayment.id,
           creditsPurchased: recharge.credits,
@@ -106,6 +109,18 @@ export async function POST(request: Request) {
           dispute: isDispute,
           eventId: refund?.id,
         });
+        if (isCaptured) {
+          await notifyRechargeOnWhatsApp({
+            userId: rechargeUserId,
+            orderId: order.id,
+            credits: recharge.credits,
+          }).catch((error) => {
+            console.error("Failed to send WhatsApp recharge confirmation", {
+              orderId: order.id,
+              error: error instanceof Error ? error.message : String(error),
+            });
+          });
+        }
         return Response.json({ received: true });
       }
     }
@@ -126,11 +141,12 @@ export async function POST(request: Request) {
     }
 
     const subscription = await fetchRazorpaySubscription(subscriptionId);
-    const userId = getSubscriptionOwner(subscription);
+    const ownerUserId = getSubscriptionOwner(subscription);
     const planId = resolveInternalPlan(subscription);
-    if (!userId || !planId) {
+    if (!ownerUserId || !planId) {
       throw new Error("Webhook subscription is missing valid internal notes");
     }
+    const userId = await resolveCanonicalBillingUserId(ownerUserId);
 
     const currentBilling = await getCurrentBilling(userId);
     const isPendingReplacement =

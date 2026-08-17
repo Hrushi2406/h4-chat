@@ -35,6 +35,7 @@ const createStore = () => ({
   finishInbound: vi.fn().mockResolvedValue(undefined),
   recordOutbound: vi.fn().mockResolvedValue(undefined),
   getCreditSummary: vi.fn().mockResolvedValue({ available: 900, ratio: 0.9 }),
+  isCancellationRequested: vi.fn().mockResolvedValue(false),
 });
 
 const createMeta = () => ({
@@ -61,6 +62,7 @@ describe("WhatsApp processor", () => {
       store: store as unknown as WhatsAppStore,
       meta: meta as unknown as MetaWhatsAppClient,
       runConversation,
+      approvalStore: { getPending: vi.fn().mockResolvedValue(undefined) },
       baseUrl: "https://trysakhi.com",
       now: () => inbound.timestamp,
     });
@@ -102,6 +104,7 @@ describe("WhatsApp processor", () => {
       store: store as unknown as WhatsAppStore,
       meta: meta as unknown as MetaWhatsAppClient,
       runConversation,
+      approvalStore: { getPending: vi.fn().mockResolvedValue(undefined) },
       baseUrl: "https://trysakhi.com",
     });
 
@@ -111,5 +114,73 @@ describe("WhatsApp processor", () => {
       [{ id: "continue", title: "Continue" }, { id: "exit", title: "Exit" }],
     );
     expect(runConversation).not.toHaveBeenCalled();
+  });
+
+  it("renders durable Confirm and Cancel controls while an action is pending", async () => {
+    const store = createStore();
+    const meta = createMeta();
+    await processWhatsAppMessage(inbound.id, {
+      store: store as unknown as WhatsAppStore,
+      meta: meta as unknown as MetaWhatsAppClient,
+      runConversation: vi.fn().mockResolvedValue({
+        text: "I’m ready to send the email to alex@example.com.",
+        modelId: "deepseek/deepseek-v4-flash",
+        creditsUsed: 1,
+        inputTokens: 10,
+        outputTokens: 10,
+      }),
+      approvalStore: { getPending: vi.fn().mockResolvedValue({
+        toolName: "gmail_send_email",
+        exactInput: { to: "alex@example.com", body: "Hello" },
+      }) },
+      baseUrl: "https://trysakhi.com",
+    });
+
+    expect(meta.sendText).toHaveBeenCalledWith(
+      inbound.from,
+      expect.stringContaining("alex@example.com"),
+      inbound.id,
+    );
+    expect(meta.sendButtons).toHaveBeenCalledWith(
+      inbound.from,
+      expect.stringContaining("complete exact gmail_send_email"),
+      [{ id: "confirm_action", title: "Confirm" }, { id: "cancel_action", title: "Cancel" }],
+    );
+  });
+
+  it("rejects non-WhatsApp audio before transcription so four-minute enforcement cannot be bypassed", async () => {
+    const audioInbound = {
+      ...inbound,
+      id: "wamid.audio",
+      type: "audio" as const,
+      originalType: "audio",
+      text: undefined,
+      media: { id: "media-1", isVoice: true },
+    };
+    const store = createStore();
+    store.claimInbound.mockResolvedValue(audioInbound);
+    const meta = {
+      ...createMeta(),
+      downloadMedia: vi.fn().mockResolvedValue({
+        bytes: new ArrayBuffer(20),
+        mimeType: "audio/mpeg",
+      }),
+    };
+    const transcribe = vi.fn();
+
+    await processWhatsAppMessage(audioInbound.id, {
+      store: store as unknown as WhatsAppStore,
+      meta: meta as unknown as MetaWhatsAppClient,
+      transcribe,
+      approvalStore: { getPending: vi.fn().mockResolvedValue(undefined) },
+      baseUrl: "https://trysakhi.com",
+    });
+
+    expect(transcribe).not.toHaveBeenCalled();
+    expect(store.finishInbound).toHaveBeenCalledWith(
+      audioInbound.id,
+      "failed",
+      expect.stringContaining("Ogg/Opus"),
+    );
   });
 });

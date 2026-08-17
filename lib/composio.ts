@@ -127,6 +127,7 @@ type GetComposioSessionToolsOptions = CreateComposioSessionOptions & {
     baseUrl: string;
     source: ComposioAuthIntentSource;
     threadId?: string;
+    channelMessageId?: string;
   };
 };
 
@@ -612,6 +613,7 @@ const createConnectionCallbackUrl = async ({
     userId,
     source: authContext.source,
     threadId: authContext.threadId,
+    channelMessageId: authContext.channelMessageId,
     toolkit,
   });
 

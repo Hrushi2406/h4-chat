@@ -1,6 +1,10 @@
 import { consumeComposioAuthIntent } from "@/lib/composio-auth-intents";
+import { after } from "next/server";
+import { resumeWhatsAppAfterConnectedAppAuth } from "@/lib/whatsapp/composio-resume";
 
 export const dynamic = "force-dynamic";
+export const runtime = "nodejs";
+export const maxDuration = 600;
 
 export async function GET(req: Request) {
   const requestUrl = new URL(req.url);
@@ -16,6 +20,27 @@ export async function GET(req: Request) {
     : undefined;
 
   const redirectUrl = buildRedirectUrl(requestUrl, intent);
+
+  if (
+    intent?.source === "chat" &&
+    intent.threadId &&
+    requestUrl.searchParams.get("status") !== "error"
+  ) {
+    const baseUrl = getCallbackBaseUrl(requestUrl);
+    after(() =>
+      resumeWhatsAppAfterConnectedAppAuth(
+        intent.threadId!,
+        baseUrl,
+        intent.channelMessageId,
+        intent.userId,
+      ).catch((error) => {
+        console.error("Failed to resume WhatsApp task after app authorization", {
+          threadId: intent.threadId,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }),
+    );
+  }
 
   return Response.redirect(redirectUrl);
 }

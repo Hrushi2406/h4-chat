@@ -3,8 +3,11 @@ import {
   shouldStartNewThread,
   shouldNotifyAutomationOnWhatsApp,
   normalizeWhatsAppCommand,
+  isRetryableMetaFailure,
+  shouldApplyDeliveryStatus,
 } from "@/lib/whatsapp/policy";
 import { getOggOpusDurationSeconds } from "@/lib/whatsapp/transcription";
+import { isConsequentialWhatsAppTool } from "@/lib/whatsapp/tool-approval";
 
 describe("WhatsApp policy", () => {
   it("rolls a conversation after four hours, not at the boundary", () => {
@@ -34,5 +37,30 @@ describe("WhatsApp policy", () => {
     }
     view.setBigUint64(26, BigInt(48_000 * 241), true);
     expect(getOggOpusDurationSeconds(bytes)).toBe(241);
+  });
+
+  it("does not regress delivery state when Meta callbacks arrive out of order", () => {
+    const readAt = new Date("2026-08-17T10:01:00.000Z");
+    expect(shouldApplyDeliveryStatus(
+      { status: "read", timestamp: readAt },
+      { status: "delivered", timestamp: new Date("2026-08-17T10:00:30.000Z") },
+    )).toBe(false);
+    expect(shouldApplyDeliveryStatus(
+      { status: "sent", timestamp: readAt },
+      { status: "delivered", timestamp: new Date("2026-08-17T10:01:01.000Z") },
+    )).toBe(true);
+    expect(isRetryableMetaFailure([{ code: 130429 }])).toBe(true);
+    expect(isRetryableMetaFailure([{ code: 131026 }])).toBe(false);
+  });
+
+  it("requires confirmation for mutations while allowing read-only tools", () => {
+    expect(isConsequentialWhatsAppTool("gmail_send_email")).toBe(true);
+    expect(isConsequentialWhatsAppTool("calendar_delete_event")).toBe(true);
+    expect(isConsequentialWhatsAppTool("delete_memory")).toBe(true);
+    expect(isConsequentialWhatsAppTool("create_thread")).toBe(true);
+    expect(isConsequentialWhatsAppTool("search_and_delete")).toBe(true);
+    expect(isConsequentialWhatsAppTool("gmail_mark_as_read")).toBe(true);
+    expect(isConsequentialWhatsAppTool("gmail_search_messages")).toBe(false);
+    expect(isConsequentialWhatsAppTool("get_calendar_events")).toBe(false);
   });
 });
