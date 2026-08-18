@@ -233,6 +233,18 @@ const createWhatsAppPresentationTools = (
         return { queued: true, buttonCount: buttons.length };
       },
     }),
+    present_whatsapp_link_button: tool({
+      description: "Queue a native WhatsApp button that opens a URL directly, such as a Composio or app connection/authorization link. Use this instead of pasting the bare URL in the answer whenever a connection or secure link is being shared. Only one link button can be queued per turn.",
+      inputSchema: z.object({
+        body: z.string().min(1).max(1_024),
+        displayText: z.string().min(1).max(20),
+        url: z.string().url().startsWith("https://"),
+      }),
+      execute: async ({ body, displayText, url }) => {
+        presentation.linkButton = { body, displayText, url };
+        return { queued: true };
+      },
+    }),
     present_whatsapp_media: tool({
       description: "Queue an image, document, or audio file for native WhatsApp delivery. Use only an HTTPS URL returned by a tool in this conversation. The URL must still be included accurately in the answer as a fallback.",
       inputSchema: z.object({
@@ -559,7 +571,7 @@ export const runSakhiConversation = async (
     inputTokens: usage.inputTokens ?? 0,
     outputTokens: usage.outputTokens ?? 0,
     ...(input.channel === "whatsapp" &&
-    (whatsappPresentation.buttons || whatsappPresentation.media.length > 0)
+    (whatsappPresentation.buttons || whatsappPresentation.linkButton || whatsappPresentation.media.length > 0)
       ? { whatsappPresentation }
       : {}),
   };

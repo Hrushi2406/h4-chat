@@ -578,17 +578,28 @@ const handleCommand = async (
     const sent = await measureWhatsAppStage(
       message.id,
       "outbound.retry_delivery",
-      () => outbound.retryPayload.type === "text"
-        ? dependencies.meta.sendText(
+      () => {
+        if (outbound.retryPayload.type === "text") {
+          return dependencies.meta.sendText(
             message.from,
             outbound.retryPayload.body,
             outbound.retryPayload.replyToMessageId,
-          )
-        : dependencies.meta.sendButtons(
+          );
+        }
+        if (outbound.retryPayload.type === "link_button") {
+          return dependencies.meta.sendLinkButton(
             message.from,
             outbound.retryPayload.body,
-            outbound.retryPayload.buttons,
-          ),
+            outbound.retryPayload.displayText,
+            outbound.retryPayload.url,
+          );
+        }
+        return dependencies.meta.sendButtons(
+          message.from,
+          outbound.retryPayload.body,
+          outbound.retryPayload.buttons,
+        );
+      },
     );
     await measureWhatsAppStage(
       message.id,
@@ -1302,6 +1313,26 @@ export const processWhatsAppMessage = async (
           inboundMessageId: message.id,
           kind: "answer_buttons",
           retryPayload: { type: "buttons", body, buttons },
+        }),
+      );
+    }
+    if (result.whatsappPresentation?.linkButton) {
+      const { body, displayText, url } = result.whatsappPresentation.linkButton;
+      const sent = await measureWhatsAppStage(
+        message.id,
+        "outbound.send_link_button.answer",
+        () => meta.sendLinkButton(message.from, body, displayText, url),
+      );
+      await measureWhatsAppStage(
+        message.id,
+        "outbound.persist.answer_link_button",
+        () => store.recordOutbound({
+          messageId: sent.messageId,
+          to: message.from,
+          threadId,
+          inboundMessageId: message.id,
+          kind: "answer_link_button",
+          retryPayload: { type: "link_button", body, displayText, url },
         }),
       );
     }

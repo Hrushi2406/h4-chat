@@ -83,6 +83,24 @@ export class MetaWhatsAppClient {
     });
   }
 
+  sendLinkButton(to: string, body: string, displayText: string, url: string) {
+    return this.send({
+      to,
+      type: "interactive",
+      interactive: {
+        type: "cta_url",
+        body: { text: body.slice(0, 1_024) },
+        action: {
+          name: "cta_url",
+          parameters: {
+            display_text: displayText.slice(0, 20),
+            url,
+          },
+        },
+      },
+    });
+  }
+
   markRead(messageId: string, typing = true) {
     return this.request<Record<string, unknown>>(this.endpoint(), {
       method: "POST",

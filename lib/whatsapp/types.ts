@@ -74,6 +74,12 @@ export interface WhatsAppButtonPresentation {
   buttons: { id: string; title: string }[];
 }
 
+export interface WhatsAppLinkButtonPresentation {
+  body: string;
+  displayText: string;
+  url: string;
+}
+
 export interface WhatsAppMediaPresentation {
   url: string;
   kind?: "image" | "document" | "audio";
@@ -83,5 +89,6 @@ export interface WhatsAppMediaPresentation {
 
 export interface WhatsAppPresentation {
   buttons?: WhatsAppButtonPresentation;
+  linkButton?: WhatsAppLinkButtonPresentation;
   media: WhatsAppMediaPresentation[];
 }

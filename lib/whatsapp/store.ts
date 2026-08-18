@@ -783,7 +783,8 @@ export class WhatsAppStore {
     kind: string;
     retryPayload?:
       | { type: "text"; body: string; replyToMessageId?: string }
-      | { type: "buttons"; body: string; buttons: { id: string; title: string }[] };
+      | { type: "buttons"; body: string; buttons: { id: string; title: string }[] }
+      | { type: "link_button"; body: string; displayText: string; url: string };
   }) {
     await db().collection(OUTBOX).doc(input.messageId).set(removeUndefinedValues({
       ...input,
@@ -805,7 +806,8 @@ export class WhatsAppStore {
       failedMessageId: account.lastFailedOutboundId,
       retryPayload: retryPayload as
         | { type: "text"; body: string; replyToMessageId?: string }
-        | { type: "buttons"; body: string; buttons: { id: string; title: string }[] },
+        | { type: "buttons"; body: string; buttons: { id: string; title: string }[] }
+        | { type: "link_button"; body: string; displayText: string; url: string },
       threadId: typeof data.threadId === "string" ? data.threadId : undefined,
       inboundMessageId: typeof data.inboundMessageId === "string" ? data.inboundMessageId : undefined,
     };
