@@ -1,5 +1,8 @@
+import { experimental_transcribe as transcribe } from "ai";
+
 const MAX_VOICE_BYTES = 25 * 1024 * 1024;
 export const MAX_VOICE_SECONDS = 4 * 60;
+const TRANSCRIPTION_MODEL_ID = "openai/gpt-4o-transcribe";
 
 export interface VoiceTranscript {
   text: string;
@@ -27,8 +30,6 @@ export const getOggOpusDurationSeconds = (bytes: ArrayBuffer): number | undefine
 export const transcribeVoiceNote = async (
   bytes: ArrayBuffer,
   mimeType: string,
-  filename = "voice-note.ogg",
-  fetchImpl: typeof fetch = fetch,
 ): Promise<VoiceTranscript> => {
   if (bytes.byteLength > MAX_VOICE_BYTES) {
     throw new Error("Voice note is too large. Please send a note under four minutes.");
@@ -39,34 +40,20 @@ export const transcribeVoiceNote = async (
       throw new Error("Voice note is longer than four minutes.");
     }
   }
-  const apiKey = process.env.OPENAI_API_KEY?.trim();
-  if (!apiKey) throw new Error("OPENAI_API_KEY is not configured");
-
-  const form = new FormData();
-  form.set("model", "gpt-4o-transcribe");
-  form.set("response_format", "json");
-  form.set("file", new Blob([bytes], { type: mimeType }), filename);
-  const response = await fetchImpl("https://api.openai.com/v1/audio/transcriptions", {
-    method: "POST",
-    headers: { Authorization: `Bearer ${apiKey}` },
-    body: form,
-    signal: AbortSignal.timeout(90_000),
+  // Routed through the Vercel AI Gateway like every other model call in this app
+  // (AI_GATEWAY_API_KEY), not a standalone OpenAI key.
+  const result = await transcribe({
+    model: TRANSCRIPTION_MODEL_ID,
+    audio: bytes,
+    abortSignal: AbortSignal.timeout(90_000),
   });
-  if (!response.ok) {
-    throw new Error(`Voice transcription failed (${response.status})`);
-  }
-  const data = (await response.json()) as {
-    text?: string;
-    language?: string;
-    duration?: number;
-  };
-  if (!data.text?.trim()) throw new Error("Voice transcription returned no text");
-  if (data.duration && data.duration > MAX_VOICE_SECONDS) {
+  if (!result.text?.trim()) throw new Error("Voice transcription returned no text");
+  if (result.durationInSeconds && result.durationInSeconds > MAX_VOICE_SECONDS) {
     throw new Error("Voice note is longer than four minutes.");
   }
   return {
-    text: data.text.trim(),
-    language: data.language,
-    durationSeconds: data.duration,
+    text: result.text.trim(),
+    language: result.language,
+    durationSeconds: result.durationInSeconds,
   };
 };

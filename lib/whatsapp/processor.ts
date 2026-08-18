@@ -728,7 +728,7 @@ const prepareInbound = async (
   const transcript = await measureWhatsAppStage(
     message.id,
     "processor.transcribe_voice_note",
-    () => transcribe(media.bytes, media.mimeType, filename),
+    () => transcribe(media.bytes, media.mimeType),
   );
   if (await measureWhatsAppStage(
     message.id,

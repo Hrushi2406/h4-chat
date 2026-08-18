@@ -1011,6 +1011,57 @@ describe("WhatsApp processor", () => {
     );
   });
 
+  it("transcribes a voice note through the injected transcriber and charges once", async () => {
+    const audioInbound = {
+      ...inbound,
+      id: "wamid.voice",
+      type: "audio" as const,
+      originalType: "audio",
+      text: undefined,
+      media: { id: "media-1", isVoice: true },
+    };
+    const store = createStore();
+    store.claimInbound.mockResolvedValue(audioInbound);
+    store.storeMedia.mockResolvedValue({
+      id: audioInbound.id,
+      name: "voice-note.ogg",
+      url: "https://firebasestorage.googleapis.com/voice-note.ogg",
+      contentType: "audio/ogg",
+    });
+    const meta = {
+      ...createMeta(),
+      downloadMedia: vi.fn().mockResolvedValue({
+        bytes: new ArrayBuffer(20),
+        mimeType: "audio/ogg",
+      }),
+    };
+    const transcribe = vi.fn().mockResolvedValue({ text: "Remind me to call mom", language: "en" });
+    const chargeTranscription = vi.fn().mockResolvedValue(undefined);
+    const runConversation = vi.fn().mockResolvedValue({
+      text: "Got it, I’ll remind you",
+      modelId: "deepseek/deepseek-v4-flash",
+      creditsUsed: 2,
+      inputTokens: 20,
+      outputTokens: 10,
+    });
+
+    await processWhatsAppMessage(audioInbound.id, {
+      store: store as unknown as WhatsAppStore,
+      meta: meta as unknown as MetaWhatsAppClient,
+      transcribe,
+      chargeTranscription,
+      runConversation,
+      baseUrl: "https://trysakhi.com",
+    });
+
+    expect(transcribe).toHaveBeenCalledWith(expect.any(ArrayBuffer), "audio/ogg");
+    expect(chargeTranscription).toHaveBeenCalledWith("user-1", audioInbound.id);
+    expect(runConversation.mock.calls[0][0].messages.at(-1)).toEqual({
+      role: "user",
+      content: "Remind me to call mom\n\nUploaded file URLs available in this thread:\n- voice-note.ogg (audio/ogg): https://firebasestorage.googleapis.com/voice-note.ogg",
+    });
+  });
+
   it("titles a thread from the first user message, the way web chat does", async () => {
     const store = createStore();
     const meta = createMeta();
