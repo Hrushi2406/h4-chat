@@ -25,27 +25,6 @@ const iosRowClass =
 
 const token = async () => auth.currentUser?.getIdToken();
 
-function StatusPill({ tone, label }: { tone: "connected" | "paused"; label: string }) {
-  return (
-    <span
-      className={cn(
-        "inline-flex shrink-0 items-center gap-1.5 rounded-full px-2 py-0.5 text-[11px] font-medium",
-        tone === "connected"
-          ? "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400"
-          : "bg-amber-500/10 text-amber-700 dark:text-amber-400",
-      )}
-    >
-      <span
-        className={cn(
-          "size-1.5 rounded-full",
-          tone === "connected" ? "bg-emerald-500" : "bg-amber-500",
-        )}
-      />
-      {label}
-    </span>
-  );
-}
-
 export function WhatsAppSettings() {
   const [connection, setConnection] = useState<ConnectionState>({ connected: false });
   const [link, setLink] = useState<LinkState>();
@@ -171,22 +150,18 @@ export function WhatsAppSettings() {
         <div className="flex items-start gap-3 px-4 py-3">
           <WhatsAppLogo className="mt-0.5 size-8 shrink-0" />
           <div className="min-w-0 flex-1">
-            <div className="flex flex-wrap items-center gap-2">
-              <h2 id="whatsapp-settings-title" className="text-[15px] font-medium">
-                WhatsApp
-              </h2>
-              {connection.connected && (
-                <StatusPill
-                  tone={connection.optedOut ? "paused" : "connected"}
-                  label={connection.optedOut ? "Paused" : "Connected"}
-                />
-              )}
-            </div>
-            <p className="mt-0.5 text-[13px] leading-relaxed text-muted-foreground">
-              Chat with Sakhi from her official number, with the same chats, memories,
-              tools, and credits.
+            <h2 id="whatsapp-settings-title" className="text-[15px] font-medium">
+              WhatsApp
+            </h2>
+            <p className="mt-0.5 text-[13px] text-muted-foreground">
+              Same chats, memories, and credits, on Sakhi’s official number.
             </p>
           </div>
+          {connection.connected && (
+            <span className="shrink-0 self-center text-[13px] text-muted-foreground">
+              {connection.optedOut ? "Paused" : "Connected"}
+            </span>
+          )}
         </div>
 
         {loading ? (
@@ -213,12 +188,7 @@ export function WhatsAppSettings() {
               </div>
             )}
             <div className={iosRowClass}>
-              <div className="min-w-0">
-                <p className="text-[15px]">Disconnect WhatsApp</p>
-                <p className="mt-0.5 text-[13px] text-muted-foreground">
-                  Keeps your account, chats, memories, and credits.
-                </p>
-              </div>
+              <span className="text-[15px]">Disconnect WhatsApp</span>
               <Button
                 type="button"
                 variant="ghost"
