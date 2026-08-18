@@ -220,7 +220,7 @@ const createWhatsAppPresentationTools = (
         }
       : {}),
     present_whatsapp_buttons: tool({
-      description: "Queue one native WhatsApp reply-button message. Use sparingly when the user needs to choose between 2-3 options or when a genuinely ambiguous or risky action needs confirmation. Do not use it as an extra approval step for a clear request. Put the complete question in body and make every id a self-contained reply that will still make sense when received as the user's next message.",
+      description: "Queue one native WhatsApp reply-button message for the final answer, so the answer text and the buttons arrive as a single message instead of two. Use when the user needs to choose between 2-3 options or when a genuinely ambiguous or risky action needs confirmation; do not use it as an extra approval step for a clear request. The final answer text is normally used as the message body automatically (falling back to body here only if the answer is too long to combine), so body only needs to stand alone when it differs from what you'll say in the answer. Make every id a self-contained reply that will still make sense when received as the user's next message.",
       inputSchema: z.object({
         body: z.string().min(1).max(1_024),
         buttons: z.array(z.object({
@@ -234,7 +234,7 @@ const createWhatsAppPresentationTools = (
       },
     }),
     present_whatsapp_link_button: tool({
-      description: "Queue a native WhatsApp button that opens a URL directly, e.g. a Composio connection link, a settings/billing page, or any other link worth sharing. Use this instead of pasting a bare URL in the answer. Only one link button can be queued per turn; use it for the single most important URL and give any other URLs as plain text.",
+      description: "Queue a native WhatsApp button that opens a URL directly, e.g. a Composio connection link, a settings/billing page, or any other link worth sharing, so the answer text and the button arrive as a single message instead of two. Use this instead of pasting a bare URL in the answer. Only one link button can be queued per turn; use it for the single most important URL and give any other URLs as plain text. The final answer text is normally used as the message body automatically (falling back to body here only if the answer is too long to combine).",
       inputSchema: z.object({
         body: z.string().min(1).max(1_024),
         displayText: z.string().min(1).max(20),

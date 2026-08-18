@@ -1277,11 +1277,70 @@ export const processWhatsAppMessage = async (
         },
       }),
     );
-    const deliverAnswer = sendAndRecord(dependencies, message.from, answerText, {
-      threadId,
-      inboundMessageId: message.id,
-      kind: "answer",
-    });
+    // WhatsApp interactive messages (buttons, link buttons) carry their own body text
+    // and can't be attached to a separately-sent plain-text message, so sending the
+    // answer as text and then buttons as a follow-up always reads as two messages.
+    // When the answer fits the interactive body limit, fold it into a single button
+    // message instead; only fall back to two messages when the answer is too long for
+    // an interactive body to hold.
+    const MAX_INTERACTIVE_BODY = 1_024;
+    const fitsInteractiveBody = answerText.length > 0 && answerText.length <= MAX_INTERACTIVE_BODY;
+    const combinedButtons = fitsInteractiveBody ? result.whatsappPresentation?.buttons : undefined;
+    const combinedLinkButton = !combinedButtons && fitsInteractiveBody
+      ? result.whatsappPresentation?.linkButton
+      : undefined;
+    const deliverAnswer = (async () => {
+      if (combinedButtons) {
+        const sent = await measureWhatsAppStage(
+          message.id,
+          "outbound.send_buttons.answer",
+          () => meta.sendButtons(message.from, answerText, combinedButtons.buttons),
+        );
+        await measureWhatsAppStage(
+          message.id,
+          "outbound.persist.answer_buttons",
+          () => store.recordOutbound({
+            messageId: sent.messageId,
+            to: message.from,
+            threadId,
+            inboundMessageId: message.id,
+            kind: "answer_buttons",
+            retryPayload: { type: "buttons", body: answerText, buttons: combinedButtons.buttons },
+          }),
+        );
+        return;
+      }
+      if (combinedLinkButton) {
+        const sent = await measureWhatsAppStage(
+          message.id,
+          "outbound.send_link_button.answer",
+          () => meta.sendLinkButton(message.from, answerText, combinedLinkButton.displayText, combinedLinkButton.url),
+        );
+        await measureWhatsAppStage(
+          message.id,
+          "outbound.persist.answer_link_button",
+          () => store.recordOutbound({
+            messageId: sent.messageId,
+            to: message.from,
+            threadId,
+            inboundMessageId: message.id,
+            kind: "answer_link_button",
+            retryPayload: {
+              type: "link_button",
+              body: answerText,
+              displayText: combinedLinkButton.displayText,
+              url: combinedLinkButton.url,
+            },
+          }),
+        );
+        return;
+      }
+      await sendAndRecord(dependencies, message.from, answerText, {
+        threadId,
+        inboundMessageId: message.id,
+        kind: "answer",
+      });
+    })();
     await Promise.all([persistAssistantMessage, deliverAnswer]);
     await measureWhatsAppStage(
       message.id,
@@ -1296,7 +1355,7 @@ export const processWhatsAppMessage = async (
         new Set(threadUploadedFiles(history).map((file) => file.url)),
       ),
     );
-    if (result.whatsappPresentation?.buttons) {
+    if (result.whatsappPresentation?.buttons && !combinedButtons) {
       const { body, buttons } = result.whatsappPresentation.buttons;
       const sent = await measureWhatsAppStage(
         message.id,
@@ -1316,7 +1375,7 @@ export const processWhatsAppMessage = async (
         }),
       );
     }
-    if (result.whatsappPresentation?.linkButton) {
+    if (result.whatsappPresentation?.linkButton && !combinedLinkButton) {
       const { body, displayText, url } = result.whatsappPresentation.linkButton;
       const sent = await measureWhatsAppStage(
         message.id,

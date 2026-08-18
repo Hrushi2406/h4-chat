@@ -55,6 +55,7 @@ const createMeta = () => ({
   markRead: vi.fn().mockResolvedValue({ success: true }),
   sendText: vi.fn().mockResolvedValue({ messageId: "wamid.outbound" }),
   sendButtons: vi.fn().mockResolvedValue({ messageId: "wamid.buttons" }),
+  sendLinkButton: vi.fn().mockResolvedValue({ messageId: "wamid.link-button" }),
   uploadMedia: vi.fn().mockResolvedValue("media-1"),
   sendMedia: vi.fn().mockResolvedValue({ messageId: "wamid.media" }),
   sendMediaUrl: vi.fn().mockResolvedValue({ messageId: "wamid.media-link" }),
@@ -653,10 +654,84 @@ describe("WhatsApp processor", () => {
     );
     expect(meta.sendButtons).toHaveBeenCalledWith(
       inbound.from,
-      "Which inbox should I check next?",
+      "I made the summary. Choose what I should check next.",
       [
         { id: "Check work inbox", title: "Work" },
         { id: "Check personal inbox", title: "Personal" },
+      ],
+    );
+    expect(meta.sendText).not.toHaveBeenCalled();
+  });
+
+  it("folds the answer into the link button instead of sending it twice", async () => {
+    const store = createStore();
+    const meta = createMeta();
+
+    await processWhatsAppMessage(inbound.id, {
+      store: store as unknown as WhatsAppStore,
+      meta: meta as unknown as MetaWhatsAppClient,
+      runConversation: vi.fn().mockResolvedValue({
+        text: "Connect Gmail to let me check your inbox.",
+        modelId: "deepseek/deepseek-v4-flash",
+        creditsUsed: 1,
+        inputTokens: 10,
+        outputTokens: 8,
+        whatsappPresentation: {
+          linkButton: {
+            body: "Tap below to connect Gmail",
+            displayText: "Connect Gmail",
+            url: "https://connect.composio.dev/link/abc",
+          },
+          media: [],
+        },
+      }),
+      baseUrl: "https://trysakhi.com",
+    });
+
+    expect(meta.sendLinkButton).toHaveBeenCalledWith(
+      inbound.from,
+      "Connect Gmail to let me check your inbox.",
+      "Connect Gmail",
+      "https://connect.composio.dev/link/abc",
+    );
+    expect(meta.sendText).not.toHaveBeenCalled();
+  });
+
+  it("falls back to a separate buttons message when the answer is too long to combine", async () => {
+    const store = createStore();
+    const meta = createMeta();
+    const answer = "A".repeat(1_100);
+
+    await processWhatsAppMessage(inbound.id, {
+      store: store as unknown as WhatsAppStore,
+      meta: meta as unknown as MetaWhatsAppClient,
+      runConversation: vi.fn().mockResolvedValue({
+        text: answer,
+        modelId: "deepseek/deepseek-v4-flash",
+        creditsUsed: 1,
+        inputTokens: 10,
+        outputTokens: 8,
+        whatsappPresentation: {
+          buttons: {
+            body: "Want the rest by email instead?",
+            buttons: [
+              { id: "yes_email", title: "Email it" },
+              { id: "no_thanks", title: "No thanks" },
+            ],
+          },
+          media: [],
+        },
+      }),
+      baseUrl: "https://trysakhi.com",
+    });
+
+    expect(meta.sendText).toHaveBeenCalledWith(inbound.from, answer, inbound.id);
+    expect(meta.sendButtons).toHaveBeenCalledWith(
+      inbound.from,
+      "Want the rest by email instead?",
+      [
+        { id: "yes_email", title: "Email it" },
+        { id: "no_thanks", title: "No thanks" },
       ],
     );
   });
