@@ -6,6 +6,8 @@ export const MODEL_RATE_VERSION = 1;
 export const CREDIT_MULTIPLIER = 2;
 export const FREE_CREDIT_MULTIPLIER = 7;
 export const WELCOME_CREDITS = 1_000;
+export const COMPLIMENTARY_ONE_TIME_CREDITS = 50_000;
+export const DEFAULT_COMPLIMENTARY_GRANT_KEY = "one_time_50k";
 
 export const CREDIT_RECHARGE = {
   creditsPerUnit: 1_000,

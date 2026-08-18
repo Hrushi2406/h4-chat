@@ -62,6 +62,7 @@ export type CreditGrantEntry = {
   id: string;
   type:
     | "welcome_credit_grant"
+    | "complimentary_credit_grant"
     | "paid_activation"
     | "credit_refresh"
     | "credit_revocation"

@@ -418,6 +418,89 @@ export const ensureBillingProfile = async (
   });
 };
 
+export const complimentaryGrantEntryId = (grantKey: string) =>
+  `complimentary_credit_grant_${grantKey}`;
+
+export const grantComplimentaryCredits = async ({
+  userId,
+  credits,
+  grantKey,
+  now = new Date(),
+}: {
+  userId: string;
+  credits: number;
+  grantKey: string;
+  now?: Date;
+}) => {
+  if (!Number.isInteger(credits) || credits <= 0) {
+    throw new Error("Credits must be a positive integer");
+  }
+
+  await ensureBillingProfile(userId, now);
+
+  const db = getDb();
+  const keys = getBillingDateKeys(now);
+  const ref = db.collection(USERS_COLLECTION).doc(userId);
+  const ledgerRef = dailyUsageRef(userId, keys.documentId);
+  const entryId = complimentaryGrantEntryId(grantKey);
+
+  return db.runTransaction(async (transaction) => {
+    const [userSnapshot, ledgerSnapshot] = await Promise.all([
+      transaction.get(ref),
+      transaction.get(ledgerRef),
+    ]);
+    const billing = normalizeBilling(userSnapshot.data()?.billing, now);
+    const existingUsage = normalizeUsageArray(ledgerSnapshot.data()?.usage);
+
+    if (hasLedgerEntry(existingUsage, entryId)) {
+      return {
+        billing,
+        duplicate: true,
+        creditsGranted: 0,
+        grantId: entryId,
+      };
+    }
+
+    const updated: UserBilling = {
+      ...billing,
+      credits: {
+        ...billing.credits,
+        permanentAvailable: billing.credits.permanentAvailable + credits,
+      },
+      updatedAt: Timestamp.fromDate(now),
+    };
+    const entry: CreditGrantEntry = {
+      id: entryId,
+      type: "complimentary_credit_grant",
+      creditsGranted: credits,
+      creditsExpired: 0,
+      netCreditChange: credits,
+      planId: billing.planId,
+      effectiveAt: Timestamp.fromDate(now),
+      processedAt: Timestamp.fromDate(now),
+    };
+
+    transaction.set(ref, { billing: updated }, { merge: true });
+    transaction.set(
+      ledgerRef,
+      buildDailyUsage({
+        existing: ledgerSnapshot.data(),
+        documentId: keys.documentId,
+        dateKey: keys.dateKey,
+        entry,
+        now,
+      }),
+    );
+
+    return {
+      billing: updated,
+      duplicate: false,
+      creditsGranted: credits,
+      grantId: entryId,
+    };
+  });
+};
+
 const isPaidAccessValid = (billing: UserBilling, now: Date) => {
   if (billing.planId === "free") return true;
   if (billing.subscriptionStatus === "frozen") return false;
