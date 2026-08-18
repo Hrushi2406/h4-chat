@@ -13,3 +13,9 @@ The five canonical triage roles are GitHub labels. See `docs/agents/triage-label
 ### Domain docs
 
 Single-context: one root `CONTEXT.md` plus `docs/adr/`. See `docs/agents/domain.md`.
+
+### Deployment
+
+Production is a self-hosted box running PM2 behind a Cloudflare tunnel, not Vercel. Ship with
+`git pull && ./deploy.sh` on that box; never run `pnpm build` there by hand. See
+`docs/agents/deploy.md`.

@@ -9,7 +9,16 @@ import {
   runSakhiConversation,
   type SakhiConversationResult,
 } from "@/lib/services/sakhi-conversation-runner";
-import type { ThreadMessage } from "@/lib/types/thread";
+import {
+  attachmentsToFileParts,
+  getMessageAttachments,
+  type Attachment,
+  type ThreadMessage,
+} from "@/lib/types/thread";
+import {
+  buildFileUrlContext,
+  type UploadedFileRef,
+} from "@/lib/chat/file-url-context";
 import { MetaWhatsAppClient } from "@/lib/whatsapp/meta-client";
 import { normalizeWhatsAppFormatting } from "@/lib/whatsapp/format";
 import { analyzeWhatsAppMedia } from "@/lib/whatsapp/media-analysis";
@@ -62,17 +71,42 @@ export interface WhatsAppProcessorDependencies {
   baseUrl: string;
 }
 
-const toModelMessages = (messages: ThreadMessage[]): ModelMessage[] =>
-  messages.slice(-10).flatMap((message) => {
+const threadUploadedFiles = (messages: ThreadMessage[]): UploadedFileRef[] =>
+  messages.flatMap((message) =>
+    getMessageAttachments(message).flatMap((attachment) =>
+      attachment?.url
+        ? [{
+            url: attachment.url,
+            filename: attachment.name,
+            mediaType: attachment.contentType,
+          }]
+        : [],
+    ),
+  );
+
+const toModelMessages = (messages: ThreadMessage[]): ModelMessage[] => {
+  const window = messages.slice(-10);
+  const modelMessages = window.flatMap((message) => {
     if ((message.metadata as Record<string, unknown> | undefined)?.progress === true) return [];
     if (message.role !== "user" && message.role !== "assistant") return [];
     return [{ role: message.role, content: message.content } as ModelMessage];
   });
+  // Uploads only reach the model as analysis or transcript text, so without the
+  // URL registry a follow-up ("mail me that PDF") has no file to work with.
+  const fileContext = buildFileUrlContext(threadUploadedFiles(window));
+  const last = modelMessages.at(-1);
+  if (!fileContext || !last || typeof last.content !== "string") return modelMessages;
+  return [
+    ...modelMessages.slice(0, -1),
+    { ...last, content: `${last.content}\n\n${fileContext}` } as ModelMessage,
+  ];
+};
 
 const includeCurrentInbound = (
   history: ThreadMessage[],
   message: WhatsAppInboundMessage,
   content: string,
+  attachments: Attachment[],
 ): ThreadMessage[] => {
   const alreadyStored = history.some(
     (candidate) =>
@@ -86,9 +120,13 @@ const includeCurrentInbound = (
       id: `whatsapp-${message.id}`,
       role: "user",
       content,
-      parts: [{ type: "text", text: content }],
+      parts: [
+        { type: "text", text: content },
+        ...attachmentsToFileParts(attachments),
+      ],
       createdAt: message.timestamp,
       updatedAt: message.timestamp.toISOString(),
+      experimental_attachments: attachments,
       metadata: { whatsappMessageId: message.id },
     } as ThreadMessage,
   ];
@@ -157,14 +195,17 @@ const deliverNativeArtifacts = async (
   threadId: string,
   inboundMessageId: string,
   requestedMedia: WhatsAppMediaPresentation[] = [],
+  uploadedUrls: ReadonlySet<string> = new Set(),
 ) => {
   const allowedHosts = new Set([
     "firebasestorage.googleapis.com",
     "storage.googleapis.com",
   ]);
+  // The answer can now quote an uploaded file URL, and echoing it back would
+  // send the user their own file, so only tool-produced URLs become media.
   const textMedia: WhatsAppMediaPresentation[] = [...text.matchAll(/https?:\/\/[^\s)>\]]+/g)]
     .map((match) => match[0].replace(/[.,]+$/, ""))
-    .filter((url, index, all) => all.indexOf(url) === index)
+    .filter((url, index, all) => all.indexOf(url) === index && !uploadedUrls.has(url))
     .map((url) => ({ url }));
   const media: WhatsAppMediaPresentation[] = [...requestedMedia, ...textMedia]
     .filter((item, index, all) => all.findIndex((candidate) => candidate.url === item.url) === index)
@@ -635,6 +676,20 @@ const prepareInbound = async (
     error.name = "AbortError";
     throw error;
   }
+  if (!media.mimeType.startsWith("image/") && message.type !== "audio") {
+    // Documents go to the conversation the way web sends them: the URL travels
+    // in the message and tools read the file. A separate analysis pass also
+    // failed the whole message whenever the model could not open the file,
+    // which is what a password-protected PDF does.
+    return {
+      content: [
+        message.text?.trim(),
+        `[Attached file: ${filename}]`,
+      ].filter(Boolean).join("\n\n"),
+      terminal: false as const,
+      attachments: [attachment],
+    };
+  }
   if (message.type !== "audio") {
     const analyze = dependencies.analyzeMedia ?? analyzeWhatsAppMedia;
     const mediaAnalysis = await measureWhatsAppStage(
@@ -1066,7 +1121,7 @@ export const processWhatsAppMessage = async (
     const storedHistoryOutcome = await historyOutcome;
     if (!storedHistoryOutcome.ok) throw storedHistoryOutcome.error;
     const storedHistory = storedHistoryOutcome.value;
-    const history = includeCurrentInbound(storedHistory, message, prepared.content);
+    const history = includeCurrentInbound(storedHistory, message, prepared.content, prepared.attachments);
     if (isFirstUserMessage(history)) {
       // Fire and forget: the title only affects the web sidebar, so it must never
       // hold up the WhatsApp reply.
@@ -1204,6 +1259,7 @@ export const processWhatsAppMessage = async (
         threadId,
         message.id,
         result.whatsappPresentation?.media,
+        new Set(threadUploadedFiles(history).map((file) => file.url)),
       ),
     );
     if (result.whatsappPresentation?.buttons) {

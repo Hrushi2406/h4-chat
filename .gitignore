@@ -44,3 +44,9 @@ next-env.d.ts
 
 .cursor
 .codex/
+
+# server-local deploy tooling (this box only, not portable)
+/ecosystem.config.js
+/deploy.sh
+/cutover.sh
+/sakhi-app.service.bak

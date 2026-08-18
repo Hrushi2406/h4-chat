@@ -60,6 +60,6 @@ describe("WhatsApp server conversation context", () => {
     expect(mcpStartedBeforeComposioFinished).toBe(true);
     expect(context.system).toContain("Never use em dashes in any WhatsApp message");
     expect(context.system).toContain("Never end a progress update with a period");
-    expect(context.system).toContain("keep replies short, casual, conversational");
+    expect(context.system).toContain("very short, casual, conversational");
   });
 });

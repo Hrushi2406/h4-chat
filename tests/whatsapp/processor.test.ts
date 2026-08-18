@@ -48,6 +48,7 @@ const createStore = () => ({
   getCreditSummary: vi.fn().mockResolvedValue({ available: 900, ratio: 0.9 }),
   isCancellationRequested: vi.fn().mockResolvedValue(false),
   applyGeneratedThreadTitle: vi.fn().mockResolvedValue(undefined),
+  storeMedia: vi.fn().mockResolvedValue(undefined),
 });
 
 const createMeta = () => ({
@@ -202,6 +203,108 @@ describe("WhatsApp processor", () => {
       );
     }
     expect(store.finishInbound).toHaveBeenCalledWith(inbound.id, "completed");
+  });
+
+  it("sends a document straight to the conversation instead of analyzing it first", async () => {
+    const document = {
+      ...inbound,
+      id: "wamid.document",
+      type: "document" as const,
+      originalType: "document",
+      text: "Unlock this pdf and send me as pdf",
+      media: {
+        id: "media-1",
+        mimeType: "application/pdf",
+        filename: "statement.pdf",
+        isVoice: false,
+      },
+    };
+    const store = createStore();
+    store.claimInbound.mockResolvedValue(document);
+    store.storeMedia.mockResolvedValue({
+      id: document.id,
+      name: "statement.pdf",
+      url: "https://firebasestorage.googleapis.com/statement.pdf",
+      contentType: "application/pdf",
+    });
+    const meta = createMeta();
+    const downloadMedia = vi.fn().mockResolvedValue({
+      bytes: new ArrayBuffer(8),
+      mimeType: "application/pdf",
+    });
+    const analyzeMedia = vi.fn();
+    const runConversation = vi.fn().mockResolvedValue({
+      text: "That PDF is locked, send an unlocked copy",
+      modelId: "deepseek/deepseek-v4-flash",
+      creditsUsed: 2,
+      inputTokens: 20,
+      outputTokens: 10,
+    });
+
+    await processWhatsAppMessage(document.id, {
+      store: store as unknown as WhatsAppStore,
+      meta: { ...meta, downloadMedia } as unknown as MetaWhatsAppClient,
+      runConversation,
+      analyzeMedia,
+      baseUrl: "https://trysakhi.com",
+    });
+
+    expect(analyzeMedia).not.toHaveBeenCalled();
+    expect(runConversation.mock.calls[0][0].messages).toEqual([
+      {
+        role: "user",
+        content:
+          "Unlock this pdf and send me as pdf\n\n[Attached file: statement.pdf]\n\nUploaded file URLs available in this thread:\n- statement.pdf (application/pdf): https://firebasestorage.googleapis.com/statement.pdf",
+      },
+    ]);
+  });
+
+  it("gives follow-up turns the uploaded file URLs from earlier messages", async () => {
+    const store = createStore();
+    store.getThreadMessages.mockResolvedValue([
+      {
+        id: "earlier-user-message",
+        role: "user",
+        content: "[Analysis of invoice.pdf]\nTotal is 4,200",
+        parts: [
+          { type: "text", text: "[Analysis of invoice.pdf]\nTotal is 4,200" },
+          {
+            type: "file",
+            mediaType: "application/pdf",
+            filename: "invoice.pdf",
+            url: "https://firebasestorage.googleapis.com/invoice.pdf",
+          },
+        ],
+        metadata: { whatsappMessageId: "wamid.earlier" },
+      },
+      {
+        id: "earlier-assistant-message",
+        role: "assistant",
+        content: "The invoice totals 4,200",
+      },
+    ]);
+    const meta = createMeta();
+    const runConversation = vi.fn().mockResolvedValue({
+      text: "Sent it over",
+      modelId: "deepseek/deepseek-v4-flash",
+      creditsUsed: 2,
+      inputTokens: 20,
+      outputTokens: 10,
+    });
+
+    await processWhatsAppMessage(inbound.id, {
+      store: store as unknown as WhatsAppStore,
+      meta: meta as unknown as MetaWhatsAppClient,
+      runConversation,
+      baseUrl: "https://trysakhi.com",
+    });
+
+    const messages = runConversation.mock.calls[0][0].messages;
+    expect(messages).toHaveLength(3);
+    expect(messages[2]).toEqual({
+      role: "user",
+      content: `${inbound.text}\n\nUploaded file URLs available in this thread:\n- invoice.pdf (application/pdf): https://firebasestorage.googleapis.com/invoice.pdf`,
+    });
   });
 
   it("starts the durable account update while the user message is still being stored", async () => {
