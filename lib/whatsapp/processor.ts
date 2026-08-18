@@ -1139,13 +1139,46 @@ export const processWhatsAppMessage = async (
     const runner = dependencies.runConversation ?? runSakhiConversation;
     const controller = new AbortController();
     activeControllers.set(message.from, controller);
-    const typingRefresh = setInterval(() => {
+    // WhatsApp's typing indicator is dismissed after 25s or as soon as any message is
+    // sent, and re-triggering it too often for the same conversation reads as spam to
+    // Meta's delivery pipeline. A fixed-interval timer alongside an immediate restart
+    // after every progress update used to fire both within seconds of each other; this
+    // shared schedule tracks the last time typing was actually (re)triggered from either
+    // source so refreshes stay spaced ~20s apart instead of stacking.
+    const TYPING_REFRESH_MS = 20_000;
+    let typingRefreshStopped = false;
+    let lastTypingTriggerAt = Date.now();
+    let typingRefreshTimer: ReturnType<typeof setTimeout> | undefined;
+    const scheduleTypingRefresh = () => {
+      if (typingRefreshStopped) return;
+      const delay = Math.max(0, TYPING_REFRESH_MS - (Date.now() - lastTypingTriggerAt));
+      typingRefreshTimer = setTimeout(() => {
+        void measureWhatsAppStage(
+          message.id,
+          "processor.mark_read_and_typing.refresh",
+          () => meta.markRead(message.id, true),
+        )
+          .catch(() => undefined)
+          .finally(() => {
+            lastTypingTriggerAt = Date.now();
+            scheduleTypingRefresh();
+          });
+      }, delay);
+    };
+    scheduleTypingRefresh();
+    const restartTypingAfterSend = () => {
+      lastTypingTriggerAt = Date.now();
       void measureWhatsAppStage(
         message.id,
-        "processor.mark_read_and_typing.refresh",
+        "processor.mark_read_and_typing.after_progress",
         () => meta.markRead(message.id, true),
-      ).catch(() => undefined);
-    }, 15_000);
+      ).catch((error) => {
+        console.error("Non-fatal WhatsApp typing restart failure", {
+          messageId: message.id,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      });
+    };
     let cancellationCheckRunning = false;
     const cancellationRefresh = setInterval(() => {
       if (cancellationCheckRunning) return;
@@ -1179,18 +1212,7 @@ export const processWhatsAppMessage = async (
               inboundMessageId: message.id,
               kind: "ai_progress",
               replyToInbound: false,
-              afterSend: () => {
-                void measureWhatsAppStage(
-                  message.id,
-                  "processor.mark_read_and_typing.after_progress",
-                  () => meta.markRead(message.id, true),
-                ).catch((error) => {
-                  console.error("Non-fatal WhatsApp typing restart failure", {
-                    messageId: message.id,
-                    error: error instanceof Error ? error.message : String(error),
-                  });
-                });
-              },
+              afterSend: restartTypingAfterSend,
             });
           },
           signal: controller.signal,
@@ -1209,7 +1231,8 @@ export const processWhatsAppMessage = async (
       if (!conversation.ok) throw conversation.error;
       result = conversation.value;
     } finally {
-      clearInterval(typingRefresh);
+      typingRefreshStopped = true;
+      clearTimeout(typingRefreshTimer);
       clearInterval(cancellationRefresh);
       activeControllers.delete(message.from);
     }
