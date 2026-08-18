@@ -234,13 +234,16 @@ const createWhatsAppPresentationTools = (
       },
     }),
     present_whatsapp_link_button: tool({
-      description: "Queue a native WhatsApp button that opens a URL directly, such as a Composio or app connection/authorization link. Use this instead of pasting the bare URL in the answer whenever a connection or secure link is being shared. Only one link button can be queued per turn.",
+      description: "Queue a native WhatsApp button that opens a URL directly, e.g. a Composio connection link, a settings/billing page, or any other link worth sharing. Use this instead of pasting a bare URL in the answer. Only one link button can be queued per turn; use it for the single most important URL and give any other URLs as plain text.",
       inputSchema: z.object({
         body: z.string().min(1).max(1_024),
         displayText: z.string().min(1).max(20),
         url: z.string().url().startsWith("https://"),
       }),
       execute: async ({ body, displayText, url }) => {
+        if (presentation.linkButton) {
+          return { queued: false, error: "A link button was already queued this turn; share this URL as plain text instead" };
+        }
         presentation.linkButton = { body, displayText, url };
         return { queued: true };
       },
