@@ -1,7 +1,12 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { processWhatsAppMessage } from "@/lib/whatsapp/processor";
 import type { MetaWhatsAppClient } from "@/lib/whatsapp/meta-client";
 import type { WhatsAppStore } from "@/lib/whatsapp/store";
+import { generateChatTitleFromFirstMessage } from "@/lib/services/chat-title-server-service";
+
+vi.mock("@/lib/services/chat-title-server-service", () => ({
+  generateChatTitleFromFirstMessage: vi.fn().mockResolvedValue("Plan My Day"),
+}));
 
 const inbound = {
   id: "wamid.inbound",
@@ -13,46 +18,122 @@ const inbound = {
   text: "Plan my day",
 };
 
+const account = {
+  phoneNumber: inbound.from,
+  userId: "user-1",
+  consent: "accepted" as const,
+  optedOut: false,
+  blocked: false,
+  modelId: "deepseek/deepseek-v4-flash",
+  pendingMessageIds: [],
+  requiresWebLink: false,
+  welcomeCreditsGranted: true,
+};
+
 const createStore = () => ({
   claimInbound: vi.fn().mockResolvedValue(inbound),
-  claimPhoneWork: vi.fn().mockResolvedValue(true),
+  claimPhoneWork: vi.fn().mockResolvedValue(account),
   releasePhoneWork: vi.fn().mockResolvedValue(undefined),
-  getAccount: vi.fn().mockResolvedValue({
-    phoneNumber: inbound.from,
-    userId: "user-1",
-    consent: "accepted",
-    optedOut: false,
-    blocked: false,
-    modelId: "deepseek/deepseek-v4-flash",
-    pendingMessageIds: [],
-    welcomeCreditsGranted: true,
-  }),
+  completePhoneWork: vi.fn().mockResolvedValue(undefined),
+  getAccount: vi.fn().mockResolvedValue(account),
   createThread: vi.fn().mockResolvedValue("thread-1"),
-  appendThreadMessage: vi.fn().mockResolvedValue(undefined),
-  appendProgress: vi.fn().mockResolvedValue(undefined),
+  appendThreadMessage: vi.fn().mockResolvedValue([
+    { id: "user-message", role: "user", content: inbound.text },
+  ]),
   updateAccount: vi.fn().mockResolvedValue(undefined),
   cancelQueuedWork: vi.fn().mockResolvedValue(0),
-  getThreadMessages: vi.fn().mockResolvedValue([{ id: "user-message", role: "user", content: inbound.text, parts: [{ type: "text", text: inbound.text }], updatedAt: inbound.timestamp.toISOString() }]),
+  getThreadMessages: vi.fn().mockResolvedValue([]),
   finishInbound: vi.fn().mockResolvedValue(undefined),
   recordOutbound: vi.fn().mockResolvedValue(undefined),
   getCreditSummary: vi.fn().mockResolvedValue({ available: 900, ratio: 0.9 }),
   isCancellationRequested: vi.fn().mockResolvedValue(false),
+  applyGeneratedThreadTitle: vi.fn().mockResolvedValue(undefined),
 });
 
 const createMeta = () => ({
   markRead: vi.fn().mockResolvedValue({ success: true }),
   sendText: vi.fn().mockResolvedValue({ messageId: "wamid.outbound" }),
   sendButtons: vi.fn().mockResolvedValue({ messageId: "wamid.buttons" }),
+  uploadMedia: vi.fn().mockResolvedValue("media-1"),
+  sendMedia: vi.fn().mockResolvedValue({ messageId: "wamid.media" }),
+  sendMediaUrl: vi.fn().mockResolvedValue({ messageId: "wamid.media-link" }),
 });
 
 describe("WhatsApp processor", () => {
-  beforeEach(() => vi.clearAllMocks());
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.spyOn(console, "info").mockImplementation(() => undefined);
+  });
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+  });
+
+  it("starts read and typing before the phone work claim can delay processing", async () => {
+    const store = createStore();
+    let releasePhoneClaim: ((value: typeof account) => void) | undefined;
+    store.claimPhoneWork.mockImplementation(() => new Promise((resolve) => {
+      releasePhoneClaim = resolve;
+    }));
+    const meta = createMeta();
+    const processing = processWhatsAppMessage(inbound.id, {
+      store: store as unknown as WhatsAppStore,
+      meta: meta as unknown as MetaWhatsAppClient,
+      runConversation: vi.fn().mockResolvedValue({
+        text: "Here’s a focused plan.",
+        modelId: "deepseek/deepseek-v4-flash",
+        creditsUsed: 2,
+        inputTokens: 20,
+        outputTokens: 10,
+      }),
+      baseUrl: "https://trysakhi.com",
+    });
+
+    await vi.waitFor(() => expect(store.claimPhoneWork).toHaveBeenCalledTimes(1));
+    expect(meta.markRead).toHaveBeenCalledWith(inbound.id, true);
+
+    releasePhoneClaim?.(account);
+    await processing;
+  });
+
+  it("uses work claimed by the webhook without repeating either claim", async () => {
+    const store = createStore();
+    const meta = createMeta();
+
+    await processWhatsAppMessage(inbound.id, {
+      store: store as unknown as WhatsAppStore,
+      meta: meta as unknown as MetaWhatsAppClient,
+      runConversation: vi.fn().mockResolvedValue({
+        text: "Done",
+        modelId: "deepseek/deepseek-v4-flash",
+        creditsUsed: 1,
+        inputTokens: 10,
+        outputTokens: 3,
+      }),
+      baseUrl: "https://trysakhi.com",
+    }, { message: inbound, account });
+
+    expect(store.claimInbound).not.toHaveBeenCalled();
+    expect(store.claimPhoneWork).not.toHaveBeenCalled();
+    expect(meta.markRead).not.toHaveBeenCalledWith(inbound.id, true);
+    expect(meta.sendText).toHaveBeenCalledWith(inbound.from, "Done", inbound.id);
+  });
 
   it("marks text read, persists both sides, and delivers the Sakhi answer", async () => {
     const store = createStore();
     const meta = createMeta();
     const runConversation = vi.fn().mockResolvedValue({
       text: "Here’s a focused plan.",
+      parts: [
+        {
+          type: "tool-GMAIL_FETCH_EMAILS",
+          toolCallId: "call-gmail",
+          state: "output-available",
+          input: { query: "newer_than:1d" },
+          output: { messages: [] },
+        },
+        { type: "text", text: "Here’s a focused plan." },
+      ],
       modelId: "deepseek/deepseek-v4-flash",
       creditsUsed: 2,
       inputTokens: 20,
@@ -63,7 +144,6 @@ describe("WhatsApp processor", () => {
       store: store as unknown as WhatsAppStore,
       meta: meta as unknown as MetaWhatsAppClient,
       runConversation,
-      approvalStore: { getPending: vi.fn().mockResolvedValue(undefined) },
       baseUrl: "https://trysakhi.com",
       now: () => inbound.timestamp,
     });
@@ -81,10 +161,401 @@ describe("WhatsApp processor", () => {
       "thread-1",
       "assistant",
       "Here’s a focused plan.",
-      expect.any(Object),
+      expect.objectContaining({
+        parts: [
+          expect.objectContaining({
+            type: "tool-GMAIL_FETCH_EMAILS",
+            state: "output-available",
+          }),
+          { type: "text", text: "Here’s a focused plan." },
+        ],
+      }),
     );
     expect(meta.sendText).toHaveBeenCalledWith(inbound.from, "Here’s a focused plan.", inbound.id);
+    expect(store.getAccount).not.toHaveBeenCalled();
+    expect(store.getThreadMessages).toHaveBeenCalledExactlyOnceWith("thread-1");
+    expect(console.info).toHaveBeenCalledWith(
+      "[whatsapp-pipeline-timing]",
+      expect.objectContaining({
+        event: "stage.completed",
+        messageId: inbound.id,
+        stage: "processor.claim_phone_and_load_account",
+        durationMs: expect.any(Number),
+      }),
+    );
+    for (const stage of [
+      "processor.check_cancellation_after_generation",
+      "processor.format_answer",
+      "processor.persist_assistant_message",
+      "processor.get_credit_summary",
+      "processor.finish_inbound.completed",
+      "processor.complete_phone_work",
+    ]) {
+      expect(console.info).toHaveBeenCalledWith(
+        "[whatsapp-pipeline-timing]",
+        expect.objectContaining({
+          event: "stage.completed",
+          messageId: inbound.id,
+          stage,
+          durationMs: expect.any(Number),
+        }),
+      );
+    }
     expect(store.finishInbound).toHaveBeenCalledWith(inbound.id, "completed");
+  });
+
+  it("starts the durable account update while the user message is still being stored", async () => {
+    const store = createStore();
+    let releaseUserMessage: (() => void) | undefined;
+    store.appendThreadMessage.mockImplementationOnce(
+      () => new Promise<unknown[]>((resolve) => {
+        releaseUserMessage = () => resolve([
+          { id: "user-message", role: "user", content: inbound.text },
+        ]);
+      }),
+    );
+    const meta = createMeta();
+    const runConversation = vi.fn().mockResolvedValue({
+      text: "Here’s a focused plan.",
+      modelId: "deepseek/deepseek-v4-flash",
+      creditsUsed: 2,
+      inputTokens: 20,
+      outputTokens: 10,
+    });
+    const processing = processWhatsAppMessage(inbound.id, {
+      store: store as unknown as WhatsAppStore,
+      meta: meta as unknown as MetaWhatsAppClient,
+      runConversation,
+      baseUrl: "https://trysakhi.com",
+    });
+
+    await vi.waitFor(() => expect(store.appendThreadMessage).toHaveBeenCalledTimes(1));
+    expect(store.updateAccount).toHaveBeenCalledTimes(1);
+    await vi.waitFor(() => expect(runConversation).toHaveBeenCalledTimes(1));
+    expect(runConversation).toHaveBeenCalledWith(expect.objectContaining({
+      messages: [expect.objectContaining({ role: "user", content: inbound.text })],
+    }));
+    expect(meta.sendText).not.toHaveBeenCalled();
+    releaseUserMessage?.();
+    await processing;
+    expect(meta.sendText).toHaveBeenCalledWith(
+      inbound.from,
+      "Here’s a focused plan.",
+      inbound.id,
+    );
+  });
+
+  it("starts final delivery before assistant persistence finishes", async () => {
+    const store = createStore();
+    let releaseAssistantMessage: (() => void) | undefined;
+    store.appendThreadMessage
+      .mockResolvedValueOnce([{ id: "user-message", role: "user", content: inbound.text }])
+      .mockImplementationOnce(() => new Promise<unknown[]>((resolve) => {
+        releaseAssistantMessage = () => resolve([
+          { id: "assistant-message", role: "assistant", content: "Done" },
+        ]);
+      }));
+    const meta = createMeta();
+    const processing = processWhatsAppMessage(inbound.id, {
+      store: store as unknown as WhatsAppStore,
+      meta: meta as unknown as MetaWhatsAppClient,
+      runConversation: vi.fn().mockResolvedValue({
+        text: "Done",
+        modelId: "deepseek/deepseek-v4-flash",
+        creditsUsed: 1,
+        inputTokens: 10,
+        outputTokens: 3,
+      }),
+      baseUrl: "https://trysakhi.com",
+    });
+
+    await vi.waitFor(() => expect(store.appendThreadMessage).toHaveBeenCalledTimes(2));
+    const sentBeforePersistenceFinished = meta.sendText.mock.calls.length === 1;
+    releaseAssistantMessage?.();
+    await processing;
+
+    expect(sentBeforePersistenceFinished).toBe(true);
+  });
+
+  it("starts non-visible completion work concurrently after delivery", async () => {
+    const store = createStore();
+    let releaseCreditSummary: (() => void) | undefined;
+    store.getCreditSummary.mockImplementation(() => new Promise((resolve) => {
+      releaseCreditSummary = () => resolve({ available: 900, ratio: 0.9 });
+    }));
+    const meta = createMeta();
+    const processing = processWhatsAppMessage(inbound.id, {
+      store: store as unknown as WhatsAppStore,
+      meta: meta as unknown as MetaWhatsAppClient,
+      runConversation: vi.fn().mockResolvedValue({
+        text: "Done",
+        modelId: "deepseek/deepseek-v4-flash",
+        creditsUsed: 1,
+        inputTokens: 10,
+        outputTokens: 3,
+      }),
+      baseUrl: "https://trysakhi.com",
+    });
+
+    await vi.waitFor(() => expect(store.getCreditSummary).toHaveBeenCalledTimes(1));
+    const completionStartedBeforeCreditSummaryFinished =
+      store.completePhoneWork.mock.calls.length === 1 &&
+      store.finishInbound.mock.calls.length === 1;
+    releaseCreditSummary?.();
+    await processing;
+
+    expect(completionStartedBeforeCreditSummaryFinished).toBe(true);
+  });
+
+  it("prefetches active-thread history while checking cancellation", async () => {
+    const store = createStore();
+    store.claimPhoneWork.mockResolvedValue({
+      ...account,
+      activeThreadId: "thread-1",
+      lastConversationAt: new Date("2026-08-17T09:59:00.000Z"),
+    });
+    let releaseCancellation: ((cancelled: boolean) => void) | undefined;
+    store.isCancellationRequested.mockImplementationOnce(
+      () => new Promise<boolean>((resolve) => {
+        releaseCancellation = resolve;
+      }),
+    );
+    const processing = processWhatsAppMessage(inbound.id, {
+      store: store as unknown as WhatsAppStore,
+      meta: createMeta() as unknown as MetaWhatsAppClient,
+      runConversation: vi.fn().mockResolvedValue({
+        text: "Here’s a focused plan.",
+        modelId: "deepseek/deepseek-v4-flash",
+        creditsUsed: 2,
+        inputTokens: 20,
+        outputTokens: 10,
+      }),
+      baseUrl: "https://trysakhi.com",
+      now: () => inbound.timestamp,
+    });
+
+    await vi.waitFor(() => expect(store.isCancellationRequested).toHaveBeenCalledTimes(1));
+    expect(store.getThreadMessages).toHaveBeenCalledExactlyOnceWith("thread-1");
+    releaseCancellation?.(false);
+    await processing;
+  });
+
+  it("converts web Markdown bold to WhatsApp bold before storing and sending", async () => {
+    const store = createStore();
+    const meta = createMeta();
+
+    await processWhatsAppMessage(inbound.id, {
+      store: store as unknown as WhatsAppStore,
+      meta: meta as unknown as MetaWhatsAppClient,
+      runConversation: vi.fn().mockResolvedValue({
+        text: 'Done — check for "**Your Saturday Email Summary**".',
+        modelId: "deepseek/deepseek-v4-flash",
+        creditsUsed: 2,
+        inputTokens: 20,
+        outputTokens: 10,
+      }),
+      baseUrl: "https://trysakhi.com",
+    });
+
+    const expected = 'Done, check for "*Your Saturday Email Summary*".';
+    expect(store.appendThreadMessage).toHaveBeenNthCalledWith(
+      2,
+      "thread-1",
+      "assistant",
+      expected,
+      expect.any(Object),
+    );
+    expect(meta.sendText).toHaveBeenCalledWith(inbound.from, expected, inbound.id);
+  });
+
+  it("sends only the model-authored answer, never hardcoded tool progress", async () => {
+    const store = createStore();
+    const meta = createMeta();
+    const runConversation = vi.fn().mockResolvedValue({
+      text: "You have three unread emails. The newest is from Alex.",
+      modelId: "deepseek/deepseek-v4-flash",
+      creditsUsed: 2,
+      inputTokens: 20,
+      outputTokens: 10,
+    });
+
+    await processWhatsAppMessage(inbound.id, {
+      store: store as unknown as WhatsAppStore,
+      meta: meta as unknown as MetaWhatsAppClient,
+      runConversation: runConversation as never,
+      baseUrl: "https://trysakhi.com",
+    });
+
+    expect(meta.sendText).toHaveBeenCalledTimes(1);
+    expect(meta.sendText).toHaveBeenCalledWith(
+      inbound.from,
+      "You have three unread emails. The newest is from Alex.",
+      inbound.id,
+    );
+    expect(runConversation).toHaveBeenCalledWith(
+      expect.not.objectContaining({ onProgress: expect.anything() }),
+    );
+  });
+
+  it("sends model-authored progress during noticeable tool work", async () => {
+    const store = createStore();
+    const meta = createMeta();
+    const runConversation = vi.fn().mockImplementation(async (input: {
+      sendWhatsAppUpdate?: (message: string) => Promise<void>;
+    }) => {
+      await input.sendWhatsAppUpdate?.("I’m checking your unread emails now.");
+      return {
+        text: "You have three unread emails. The newest is from Alex.",
+        modelId: "deepseek/deepseek-v4-flash",
+        creditsUsed: 2,
+        inputTokens: 20,
+        outputTokens: 10,
+      };
+    });
+
+    await processWhatsAppMessage(inbound.id, {
+      store: store as unknown as WhatsAppStore,
+      meta: meta as unknown as MetaWhatsAppClient,
+      runConversation: runConversation as never,
+      baseUrl: "https://trysakhi.com",
+    });
+
+    expect(meta.sendText).toHaveBeenNthCalledWith(
+      1,
+      inbound.from,
+      "I’m checking your unread emails now.",
+      undefined,
+    );
+    expect(meta.sendText).toHaveBeenNthCalledWith(
+      2,
+      inbound.from,
+      "You have three unread emails. The newest is from Alex.",
+      inbound.id,
+    );
+    expect(meta.markRead).toHaveBeenCalledTimes(2);
+    expect(meta.markRead.mock.invocationCallOrder[1]).toBeLessThan(
+      store.recordOutbound.mock.invocationCallOrder[0],
+    );
+  });
+
+  it("persists progress without an undefined reply ID so a sent update is not retried", async () => {
+    const store = createStore();
+    store.recordOutbound.mockImplementation(async (record: {
+      retryPayload?: { replyToMessageId?: string };
+    }) => {
+      if (
+        record.retryPayload &&
+        "replyToMessageId" in record.retryPayload &&
+        record.retryPayload.replyToMessageId === undefined
+      ) {
+        throw new Error("Firestore does not support undefined values");
+      }
+    });
+    const meta = createMeta();
+    const runConversation = vi.fn().mockImplementation(async (input: {
+      sendWhatsAppUpdate?: (message: string) => Promise<void>;
+    }) => {
+      try {
+        await input.sendWhatsAppUpdate?.("Checking your inbox for today's emails 📬");
+      } catch {
+        await input.sendWhatsAppUpdate?.("Checking your inbox for today's emails 📬");
+      }
+      return {
+        text: "There are no new emails today.",
+        modelId: "deepseek/deepseek-v4-flash",
+        creditsUsed: 2,
+        inputTokens: 20,
+        outputTokens: 10,
+      };
+    });
+
+    await processWhatsAppMessage(inbound.id, {
+      store: store as unknown as WhatsAppStore,
+      meta: meta as unknown as MetaWhatsAppClient,
+      runConversation: runConversation as never,
+      baseUrl: "https://trysakhi.com",
+    });
+
+    expect(meta.sendText).toHaveBeenCalledTimes(2);
+    expect(meta.sendText).toHaveBeenNthCalledWith(
+      1,
+      inbound.from,
+      "Checking your inbox for today's emails 📬",
+      undefined,
+    );
+    expect(meta.sendText).toHaveBeenNthCalledWith(
+      2,
+      inbound.from,
+      "There are no new emails today.",
+      inbound.id,
+    );
+  });
+
+  it("delivers the model-authored WhatsApp buttons and media", async () => {
+    const store = createStore();
+    const meta = createMeta();
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(
+      new Uint8Array([1, 2, 3]),
+      { headers: { "content-type": "image/png", "content-length": "3" } },
+    )));
+
+    await processWhatsAppMessage(inbound.id, {
+      store: store as unknown as WhatsAppStore,
+      meta: meta as unknown as MetaWhatsAppClient,
+      runConversation: vi.fn().mockResolvedValue({
+        text: "I made the summary. Choose what I should check next.",
+        modelId: "deepseek/deepseek-v4-flash",
+        creditsUsed: 2,
+        inputTokens: 20,
+        outputTokens: 10,
+        whatsappPresentation: {
+          buttons: {
+            body: "Which inbox should I check next?",
+            buttons: [
+              { id: "Check work inbox", title: "Work" },
+              { id: "Check personal inbox", title: "Personal" },
+            ],
+          },
+          media: [{
+            url: "https://storage.googleapis.com/sakhi/report.png",
+            kind: "image",
+            caption: "Your email summary",
+            filename: "summary.png",
+          }, {
+            url: "https://images.example.com/generated.png",
+            kind: "image",
+            caption: "A generated option",
+          }],
+        },
+      }),
+      baseUrl: "https://trysakhi.com",
+    });
+
+    expect(meta.uploadMedia).toHaveBeenCalledWith(
+      expect.any(ArrayBuffer),
+      "image/png",
+      "summary.png",
+    );
+    expect(meta.sendMedia).toHaveBeenCalledWith(
+      inbound.from,
+      "image",
+      "media-1",
+      { caption: "Your email summary", filename: "summary.png" },
+    );
+    expect(meta.sendMediaUrl).toHaveBeenCalledWith(
+      inbound.from,
+      "image",
+      "https://images.example.com/generated.png",
+      { caption: "A generated option" },
+    );
+    expect(meta.sendButtons).toHaveBeenCalledWith(
+      inbound.from,
+      "Which inbox should I check next?",
+      [
+        { id: "Check work inbox", title: "Work" },
+        { id: "Check personal inbox", title: "Personal" },
+      ],
+    );
   });
 
   it("delivers a long answer completely across ordered WhatsApp messages", async () => {
@@ -102,7 +573,6 @@ describe("WhatsApp processor", () => {
         inputTokens: 20,
         outputTokens: 2_000,
       }),
-      approvalStore: { getPending: vi.fn().mockResolvedValue(undefined) },
       baseUrl: "https://trysakhi.com",
     });
 
@@ -126,7 +596,6 @@ describe("WhatsApp processor", () => {
         inputTokens: 10,
         outputTokens: 8,
       }),
-      approvalStore: { getPending: vi.fn().mockResolvedValue(undefined) },
       baseUrl: "https://trysakhi.com",
     });
 
@@ -140,7 +609,7 @@ describe("WhatsApp processor", () => {
 
   it("asks an unknown sender for consent without invoking the model", async () => {
     const store = createStore();
-    store.getAccount.mockResolvedValue({
+    store.claimPhoneWork.mockResolvedValue({
       phoneNumber: inbound.from,
       consent: "pending",
       optedOut: false,
@@ -156,7 +625,6 @@ describe("WhatsApp processor", () => {
       store: store as unknown as WhatsAppStore,
       meta: meta as unknown as MetaWhatsAppClient,
       runConversation,
-      approvalStore: { getPending: vi.fn().mockResolvedValue(undefined) },
       baseUrl: "https://trysakhi.com",
     });
 
@@ -170,7 +638,7 @@ describe("WhatsApp processor", () => {
 
   it("does not repeat a recent consent prompt", async () => {
     const store = createStore();
-    store.getAccount.mockResolvedValue({
+    store.claimPhoneWork.mockResolvedValue({
       phoneNumber: inbound.from,
       consent: "pending",
       consentPromptedAt: new Date("2026-08-17T09:55:00.000Z"),
@@ -196,7 +664,7 @@ describe("WhatsApp processor", () => {
 
   it("requires a fresh web link after a web-side disconnect", async () => {
     const store = createStore();
-    store.getAccount.mockResolvedValue({
+    store.claimPhoneWork.mockResolvedValue({
       phoneNumber: inbound.from,
       consent: "pending",
       optedOut: true,
@@ -225,7 +693,7 @@ describe("WhatsApp processor", () => {
 
   it("stays silent after the first cooldown notice", async () => {
     const store = createStore();
-    store.getAccount.mockResolvedValue({
+    store.claimPhoneWork.mockResolvedValue({
       phoneNumber: inbound.from,
       userId: "user-1",
       consent: "accepted",
@@ -255,7 +723,7 @@ describe("WhatsApp processor", () => {
 
   it("offers a failed delivery retry only once", async () => {
     const store = createStore();
-    store.getAccount.mockResolvedValue({
+    store.claimPhoneWork.mockResolvedValue({
       phoneNumber: inbound.from,
       userId: "user-1",
       consent: "accepted",
@@ -277,7 +745,6 @@ describe("WhatsApp processor", () => {
         text: "Done.", modelId: "deepseek/deepseek-v4-flash", creditsUsed: 1,
         inputTokens: 1, outputTokens: 1,
       }),
-      approvalStore: { getPending: vi.fn().mockResolvedValue(undefined) },
       baseUrl: "https://trysakhi.com",
     });
 
@@ -299,7 +766,6 @@ describe("WhatsApp processor", () => {
       store: store as unknown as WhatsAppStore,
       meta: meta as unknown as MetaWhatsAppClient,
       runConversation,
-      approvalStore: { getPending: vi.fn().mockResolvedValue(undefined) },
       baseUrl: "https://trysakhi.com",
     });
 
@@ -332,94 +798,6 @@ describe("WhatsApp processor", () => {
     );
   });
 
-  it("renders durable Confirm and Cancel controls while an action is pending", async () => {
-    const store = createStore();
-    const meta = createMeta();
-    await processWhatsAppMessage(inbound.id, {
-      store: store as unknown as WhatsAppStore,
-      meta: meta as unknown as MetaWhatsAppClient,
-      runConversation: vi.fn().mockResolvedValue({
-        text: "I’m ready to send the email to alex@example.com.",
-        modelId: "deepseek/deepseek-v4-flash",
-        creditsUsed: 1,
-        inputTokens: 10,
-        outputTokens: 10,
-      }),
-      approvalStore: { getPending: vi.fn().mockResolvedValue({
-        toolName: "gmail_send_email",
-        exactInput: { to: "alex@example.com", body: "Hello" },
-      }) },
-      baseUrl: "https://trysakhi.com",
-    });
-
-    expect(meta.sendText).toHaveBeenCalledWith(
-      inbound.from,
-      expect.stringContaining("alex@example.com"),
-      inbound.id,
-    );
-    expect(meta.sendButtons).toHaveBeenCalledWith(
-      inbound.from,
-      expect.stringContaining("complete exact gmail_send_email"),
-      [{ id: "confirm_action", title: "Confirm" }, { id: "cancel_action", title: "Cancel" }],
-    );
-  });
-
-  it("executes the stored exact action when Confirm is tapped", async () => {
-    const store = createStore();
-    store.claimInbound.mockResolvedValue({
-      ...inbound,
-      type: "interactive",
-      originalType: "interactive",
-      text: "confirm_action",
-    });
-    store.getAccount.mockResolvedValue({
-      phoneNumber: inbound.from,
-      userId: "user-1",
-      consent: "accepted",
-      optedOut: false,
-      blocked: false,
-      modelId: "deepseek/deepseek-v4-flash",
-      activeThreadId: "thread-1",
-      lastConversationAt: inbound.timestamp,
-      pendingMessageIds: [],
-      welcomeCreditsGranted: true,
-    });
-    const exactInput = {
-      to: "alex@example.com",
-      subject: "Final plan",
-      body: "This exact body must not be regenerated.",
-    };
-    const approvalStore = {
-      getPending: vi.fn().mockResolvedValue(undefined),
-      claimPending: vi.fn().mockResolvedValue({
-        toolName: "gmail_send_email",
-        exactInput,
-      }),
-    };
-    const runConversation = vi.fn().mockResolvedValue({
-      text: "Email sent.",
-      modelId: "deepseek/deepseek-v4-flash",
-      creditsUsed: 1,
-      inputTokens: 10,
-      outputTokens: 4,
-    });
-
-    await processWhatsAppMessage(inbound.id, {
-      store: store as unknown as WhatsAppStore,
-      meta: createMeta() as unknown as MetaWhatsAppClient,
-      runConversation,
-      approvalStore,
-      baseUrl: "https://trysakhi.com",
-    });
-
-    expect(approvalStore.claimPending).toHaveBeenCalledWith("user-1", "thread-1");
-    expect(runConversation).toHaveBeenCalledWith(
-      expect.objectContaining({
-        approvedAction: { toolName: "gmail_send_email", exactInput },
-      }),
-    );
-  });
-
   it("rejects non-WhatsApp audio before transcription so four-minute enforcement cannot be bypassed", async () => {
     const audioInbound = {
       ...inbound,
@@ -444,7 +822,6 @@ describe("WhatsApp processor", () => {
       store: store as unknown as WhatsAppStore,
       meta: meta as unknown as MetaWhatsAppClient,
       transcribe,
-      approvalStore: { getPending: vi.fn().mockResolvedValue(undefined) },
       baseUrl: "https://trysakhi.com",
     });
 
@@ -454,5 +831,58 @@ describe("WhatsApp processor", () => {
       "failed",
       expect.stringContaining("Ogg/Opus"),
     );
+  });
+
+  it("titles a thread from the first user message, the way web chat does", async () => {
+    const store = createStore();
+    const meta = createMeta();
+    vi.mocked(generateChatTitleFromFirstMessage).mockResolvedValue("Plan My Day");
+
+    await processWhatsAppMessage(inbound.id, {
+      store: store as unknown as WhatsAppStore,
+      meta: meta as unknown as MetaWhatsAppClient,
+      runConversation: vi.fn().mockResolvedValue({
+        text: "Here’s a focused plan.",
+        modelId: "deepseek/deepseek-v4-flash",
+        creditsUsed: 2,
+        inputTokens: 20,
+        outputTokens: 10,
+      }),
+      baseUrl: "https://trysakhi.com",
+      now: () => inbound.timestamp,
+    });
+
+    expect(generateChatTitleFromFirstMessage).toHaveBeenCalledWith(inbound.text);
+    await vi.waitFor(() =>
+      expect(store.applyGeneratedThreadTitle).toHaveBeenCalledWith(
+        "thread-1",
+        "Plan My Day",
+      ),
+    );
+  });
+
+  it("leaves the title alone once the thread already has a user message", async () => {
+    const store = createStore();
+    store.getThreadMessages.mockResolvedValue([
+      { id: "earlier", role: "user", content: "Hi", metadata: {} },
+    ]);
+    const meta = createMeta();
+
+    await processWhatsAppMessage(inbound.id, {
+      store: store as unknown as WhatsAppStore,
+      meta: meta as unknown as MetaWhatsAppClient,
+      runConversation: vi.fn().mockResolvedValue({
+        text: "Here’s a focused plan.",
+        modelId: "deepseek/deepseek-v4-flash",
+        creditsUsed: 2,
+        inputTokens: 20,
+        outputTokens: 10,
+      }),
+      baseUrl: "https://trysakhi.com",
+      now: () => inbound.timestamp,
+    });
+
+    expect(generateChatTitleFromFirstMessage).not.toHaveBeenCalled();
+    expect(store.applyGeneratedThreadTitle).not.toHaveBeenCalled();
   });
 });

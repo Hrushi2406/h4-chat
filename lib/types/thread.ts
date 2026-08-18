@@ -47,6 +47,9 @@ export interface Thread {
   shareId?: string;
   scheduledTaskId?: string;
   scheduledTaskRunId?: string;
+  // Set when the thread was started from a channel other than the web app, so
+  // the sidebar can mark where the conversation came from.
+  originChannel?: "whatsapp";
   // Composio Tool Router session id, written server-side by the chat route so
   // multi-turn messages reuse one session instead of recreating it each turn.
   composioSessionId?: string;

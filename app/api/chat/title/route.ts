@@ -1,6 +1,4 @@
-import { generateText } from "ai";
-import { getDefaultModel } from "@/lib/available-models";
-import { normalizeGeneratedChatTitle, truncateTitleSource } from "@/lib/chat-title";
+import { generateChatTitleFromFirstMessage } from "@/lib/services/chat-title-server-service";
 import { getAdminFirestore } from "@/lib/clients/firebase-admin";
 import { verifyFirebaseIdToken } from "@/lib/firebase-auth-server";
 
@@ -45,15 +43,7 @@ export async function POST(req: Request) {
       return Response.json({ title: thread.title, skipped: true });
     }
 
-    const source = truncateTitleSource(firstMessage);
-    const result = await generateText({
-      model: getDefaultModel().id,
-      system:
-        "You generate concise chat sidebar titles. Return only the title, with no quotes or extra text.",
-      prompt: `Generate a concise title for this chat based only on the first user message.\n\nRules:\n- 2 to 6 words\n- Clearly describe the topic or user intent\n- No quotes\n- No emojis\n- No trailing punctuation\n- Not a full sentence\n- Return only the title\n\nFirst user message:\n${source}`,
-    });
-
-    const title = normalizeGeneratedChatTitle(result.text, source);
+    const title = await generateChatTitleFromFirstMessage(firstMessage);
     await db.runTransaction(async (transaction) => {
       const latest = await transaction.get(threadRef);
       const latestData = latest.data();

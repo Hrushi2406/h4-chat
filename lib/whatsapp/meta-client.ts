@@ -172,4 +172,21 @@ export class MetaWhatsAppClient {
       },
     });
   }
+
+  sendMediaUrl(
+    to: string,
+    kind: "image" | "document" | "audio",
+    url: string,
+    options: { caption?: string; filename?: string } = {},
+  ) {
+    return this.send({
+      to,
+      type: kind,
+      [kind]: {
+        link: url,
+        ...(options.caption ? { caption: options.caption.slice(0, 1_024) } : {}),
+        ...(kind === "document" && options.filename ? { filename: options.filename } : {}),
+      },
+    });
+  }
 }

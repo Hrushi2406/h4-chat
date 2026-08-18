@@ -27,9 +27,13 @@ export const eraseWhatsAppDataForUser = async (input: {
   const outboxGroups = await Promise.all(
     phones.map((phone) => db.collection("whatsappOutbox").where("to", "==", phone).get()),
   );
-  const [linkIntents, pendingActions, composioIntents, mergedSources, rechargeNotifications, creditDeficits, billingDeductions] = await Promise.all([
+  const outboxStatusGroups = await Promise.all(
+    phones.map((phone) =>
+      db.collection("whatsappOutboxStatusEvents").where("recipientId", "==", phone).get()
+    ),
+  );
+  const [linkIntents, composioIntents, mergedSources, rechargeNotifications, creditDeficits, billingDeductions] = await Promise.all([
     db.collection("whatsappLinkIntents").where("userId", "==", input.userId).get(),
-    db.collection("whatsappPendingActions").where("userId", "==", input.userId).get(),
     db.collection("composioAuthIntents").where("userId", "==", input.userId).get(),
     db.collection("users").where("mergedInto", "==", input.userId).get(),
     db.collection("whatsappRechargeNotifications").where("userId", "==", input.userId).get(),
@@ -41,8 +45,8 @@ export const eraseWhatsAppDataForUser = async (input: {
     ...threads,
     ...inboxGroups.flatMap((snapshot) => snapshot.docs),
     ...outboxGroups.flatMap((snapshot) => snapshot.docs),
+    ...outboxStatusGroups.flatMap((snapshot) => snapshot.docs),
     ...linkIntents.docs,
-    ...pendingActions.docs,
     ...rechargeNotifications.docs,
     ...creditDeficits.docs,
     ...billingDeductions.docs,

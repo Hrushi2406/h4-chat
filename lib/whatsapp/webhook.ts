@@ -1,14 +1,20 @@
 import { parseMetaWebhook } from "@/lib/whatsapp/payload";
 import { verifyMetaSignature } from "@/lib/whatsapp/signature";
-import type { WhatsAppStore } from "@/lib/whatsapp/store";
+import type {
+  WhatsAppClaimedWork,
+  WhatsAppInboundAcceptance,
+  WhatsAppStore,
+} from "@/lib/whatsapp/store";
+import { measureWhatsAppStage } from "@/lib/whatsapp/timing";
 
 interface WebhookDependencies {
   verifyToken: string;
   appSecret: string;
   phoneNumberId: string;
   store: Pick<WhatsAppStore, "acceptInbound" | "recordStatus">;
+  acknowledge?: (messageId: string) => Promise<unknown>;
   schedule: (callback: () => void | Promise<void>) => void;
-  process: (messageId: string) => Promise<void>;
+  process: (messageId: string, work?: WhatsAppClaimedWork) => Promise<void>;
 }
 
 export const createWhatsAppWebhookHandlers = (dependencies: WebhookDependencies) => ({
@@ -34,17 +40,46 @@ export const createWhatsAppWebhookHandlers = (dependencies: WebhookDependencies)
       return Response.json({ received: false, error: "Invalid JSON" }, { status: 400 });
     }
     const parsed = parseMetaWebhook(payload);
-    const acceptedIds: string[] = [];
+    const acceptedWork: Array<{ messageId: string; work?: WhatsAppClaimedWork }> = [];
     for (const message of parsed.messages) {
       if (message.phoneNumberId !== dependencies.phoneNumberId) continue;
-      if (await dependencies.store.acceptInbound(message)) acceptedIds.push(message.id);
+      void measureWhatsAppStage(
+        message.id,
+        "webhook.mark_read_and_typing",
+        async () => dependencies.acknowledge?.(message.id),
+      ).catch((error) => {
+        console.error("Non-fatal WhatsApp read receipt failure", {
+          messageId: message.id,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      });
+      const acceptance = await measureWhatsAppStage(
+        message.id,
+        "webhook.accept_inbound",
+        () => dependencies.store.acceptInbound(message),
+      ) as WhatsAppInboundAcceptance | boolean;
+      const accepted = typeof acceptance === "boolean" ? acceptance : acceptance.accepted;
+      const work = typeof acceptance === "boolean" ? undefined : acceptance.work;
+      if (accepted && (work || typeof acceptance === "boolean")) {
+        acceptedWork.push({ messageId: message.id, work });
+      }
     }
-    await Promise.all(parsed.statuses.map((status) => dependencies.store.recordStatus(status)));
-    if (acceptedIds.length > 0) {
+    await Promise.all(parsed.statuses.map((status) => measureWhatsAppStage(
+      status.messageId,
+      `webhook.record_status.${status.status}`,
+      () => dependencies.store.recordStatus(status),
+    )));
+    if (acceptedWork.length > 0) {
       dependencies.schedule(async () => {
-        for (const messageId of acceptedIds) {
+        for (const { messageId, work } of acceptedWork) {
           try {
-            await dependencies.process(messageId);
+            await measureWhatsAppStage(
+              messageId,
+              "webhook.process_inbound",
+              () => work
+                ? dependencies.process(messageId, work)
+                : dependencies.process(messageId),
+            );
           } catch (error) {
             console.error("Unhandled WhatsApp background processing error", {
               messageId,

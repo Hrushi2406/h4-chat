@@ -32,9 +32,11 @@ export const createServerConversationContext = async (input: {
   channelMessageId?: string;
   user: Partial<IUser>;
 }) => {
-  const [helpers, mcpServers, composioTools] = await Promise.all([
+  const [helpers, mcpContext, composioTools] = await Promise.all([
     helperServerService.getAvailableHelpers(input.userId).catch(() => []),
-    getUserMcpServersFromFirestore({ userId: input.userId }).catch(() => []),
+    getUserMcpServersFromFirestore({ userId: input.userId })
+      .catch(() => [])
+      .then((mcpServers) => createMcpToolContext(input.userId, mcpServers)),
     isComposioConfigured()
       ? getComposioSessionTools(input.userId, {
           callbackUrl: `${input.baseUrl}/api/composio/callback`,
@@ -52,7 +54,6 @@ export const createServerConversationContext = async (input: {
         })
       : undefined,
   ]);
-  const mcpContext = await createMcpToolContext(input.userId, mcpServers);
   const helpersBySlug = new Map(helpers.map((helper) => [helper.slug, helper]));
   const tools = {
     get_scheduled_tasks: tool({
@@ -146,16 +147,42 @@ export const createServerConversationContext = async (input: {
     ? []
     : (input.user.memories ?? []).map((memory) => `- [${memory.id}] ${memory.content}`);
   const helperLines = helpers.map((helper) => `- ${helper.slug}: ${helper.whenToUse}`);
-  const system = `You are Sakhi, a trusted AI friend who helps people get things done. Answer directly and naturally, with concise formatting suitable for ${input.channel}.
-Never perform irreversible or consequential external actions without showing the exact action and receiving explicit confirmation. Drafting is not permission to send. Never claim an action succeeded unless its tool result proves it.
-When a tool returns requiresConfirmation, show its exactInput (including the exact recipient/destination and content), ask the user to use Confirm or Cancel, and stop. When the user replies confirm_action, call the same tool once with exactly the same arguments. Never alter confirmed arguments.
+  const actionPolicy = input.channel === "whatsapp"
+    ? `Use tools directly when the request is clear. Send messages and replies without another confirmation; ask only for missing recipient or content.
+
+WhatsApp engagement tool:
+- You have a tool named WHATSAPP_SEND_PROGRESS_UPDATE.
+- For any WhatsApp request that requires checking, searching, reading, summarizing, drafting, sending, or using any connected app/tool, your first action MUST be to call WHATSAPP_SEND_PROGRESS_UPDATE with a short status update.
+- Call WHATSAPP_SEND_PROGRESS_UPDATE before calling Gmail, calendar, drive, docs, search, Composio, MCP, or any other task tool.
+- Do not call WHATSAPP_SEND_PROGRESS_UPDATE for casual greetings, small talk, or quick direct answers.
+- For multi-stage work, send up to three updates: one when gathering information, one when processing or summarizing it, and one when acting on the result by sending, creating, or updating something.
+- Use each stage only once. Never send two updates for the same stage or rephrase a status already sent.
+- Send another update only when a genuinely new stage begins. Simple one-stage tasks should still send only one update.
+- Do not wait until the final answer to update the user on task requests.
+- Keep every progress update specific to the user's request and easy to understand.
+- Make progress updates casual, conversational, and natural, like a quick message from a friend. Keep them very short.
+- Never use em dashes in any WhatsApp message. Use a short sentence or a comma instead.
+- Never end a progress update with a period. This is strict. End without punctuation or use a natural emoji when appropriate.
+- Say what you are checking in plain user language, not what internal tool you are using.
+- Never mention internal tool names, APIs, Composio, schemas, system prompts, or implementation details.
+- Never expose reasoning. Do not say “I need to”, “the model”, or “we need to generate”.
+- Good multi-stage sequence: “Pulling your Saturday emails now”, then “Found 7 emails, summarizing them now”, then “Summary’s ready, sending it now”
+
+Use present_whatsapp_buttons sparingly for a genuine 2-3 option choice, unresolved ambiguity, or useful confirmation, not as a mandatory approval for a clear request. Use present_whatsapp_media for images, documents, or audio URLs returned by tools when native delivery helps. Report the real result conversationally, do not repeat progress updates in the final answer, and never claim success unless the tool proves it.`
+    : "Get explicit confirmation before irreversible external actions. Never claim success unless the tool proves it.";
+  const formattingPolicy = input.channel === "whatsapp"
+    ? "Write like a natural WhatsApp chat: keep replies short, casual, conversational, and easy to scan. Use short paragraphs, line breaks, simple bullets, and *bold* sparingly. Never use em dashes. Do not use Markdown headings, tables, fenced code blocks, or [label](url) links; paste URLs directly."
+    : `Use concise formatting suitable for ${input.channel}.`;
+  const system = `You are Sakhi, a trusted AI friend who helps people get things done. Answer directly and naturally.
+${actionPolicy}
 Use connected-app and MCP tools when relevant. If authorization is needed, return the provided secure connection link and explain that the pending task can continue afterward.
 Use automation tools for repeated schedules. Automations created on WhatsApp notify on WhatsApp by default. Use memory tools silently for durable facts. Use a Helper only by an exact listed slug.
 ${input.user.name ? `User name: ${input.user.name}` : ""}
 ${input.user.occupation ? `Occupation: ${input.user.occupation}` : ""}
 ${input.user.userPreferences ? `Preferences: ${input.user.userPreferences}` : ""}
 ${memoryLines.length ? `Memories:\n${memoryLines.join("\n")}` : ""}
-${helperLines.length ? `Available Helpers:\n${helperLines.join("\n")}` : ""}`;
+${helperLines.length ? `Available Helpers:\n${helperLines.join("\n")}` : ""}
+${formattingPolicy}`;
 
   return { tools, system, mcpClients: mcpContext?.clients ?? [] };
 };

@@ -18,6 +18,7 @@ export interface WhatsAppInboundMessage {
   id: string;
   from: string;
   phoneNumberId: string;
+  receivedAt?: Date;
   profileName?: string;
   timestamp: Date;
   type: WhatsAppInboundType;
@@ -68,16 +69,19 @@ export interface WhatsAppAccountState {
   welcomeCreditsGranted: boolean;
 }
 
-export type WhatsAppProgressKind =
-  | "accepted"
-  | "connecting"
-  | "working"
-  | "confirmation"
-  | "completed"
-  | "failed"
-  | "cancelled";
+export interface WhatsAppButtonPresentation {
+  body: string;
+  buttons: { id: string; title: string }[];
+}
 
-export interface WhatsAppProgressEvent {
-  kind: WhatsAppProgressKind;
-  label: string;
+export interface WhatsAppMediaPresentation {
+  url: string;
+  kind?: "image" | "document" | "audio";
+  caption?: string;
+  filename?: string;
+}
+
+export interface WhatsAppPresentation {
+  buttons?: WhatsAppButtonPresentation;
+  media: WhatsAppMediaPresentation[];
 }

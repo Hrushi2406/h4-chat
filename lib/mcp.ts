@@ -81,7 +81,7 @@ export const createMcpToolContext = async (
   const tools: ToolSet = {};
   const servers: McpToolContext["servers"] = [];
 
-  for (const config of configs) {
+  const initialized = await Promise.all(configs.map(async (config) => {
     try {
       const client = await createMCPClient({
         clientName: "h4-chat",
@@ -98,18 +98,27 @@ export const createMcpToolContext = async (
       });
       const serverTools = (await client.tools()) as unknown as ToolSet;
       const namespacedTools = namespaceTools(config.id, config.name, serverTools);
-
-      Object.assign(tools, namespacedTools);
-      clients.push(client);
-      servers.push({
+      return {
+        client,
+        tools: namespacedTools,
+        server: {
         id: config.id,
         name: config.name ?? config.id,
         instructions: client.instructions,
         toolNames: Object.keys(namespacedTools),
-      });
+        },
+      };
     } catch (error) {
       console.error(`Failed to load MCP server (${config.id}):`, error);
+      return undefined;
     }
+  }));
+
+  for (const result of initialized) {
+    if (!result) continue;
+    Object.assign(tools, result.tools);
+    clients.push(result.client);
+    servers.push(result.server);
   }
 
   if (Object.keys(tools).length === 0) {

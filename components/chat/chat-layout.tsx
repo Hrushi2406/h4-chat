@@ -40,6 +40,7 @@ import {
   ChevronDown,
 } from "lucide-react";
 import Link from "next/link";
+import { WhatsAppGlyph } from "@/lib/brand-logos";
 import { useRouter, usePathname } from "next/navigation";
 import { useStarredThreads, useThreads } from "@/lib/hooks/thread/use-threads";
 import { useThreadActions } from "@/lib/hooks/thread/use-thread-actions";
@@ -582,6 +583,7 @@ const ThreadItem = ({
   const isScheduledTaskThread = Boolean(
     thread.scheduledTaskId || thread.scheduledTaskRunId,
   );
+  const isWhatsAppThread = thread.originChannel === "whatsapp";
 
   const [isEditing, setIsEditing] = useState(false);
   const [editTitle, setEditTitle] = useState("");
@@ -657,11 +659,21 @@ const ThreadItem = ({
             >
               <div className="flex items-center gap-2 flex-1 min-w-0">
                 <h3 className="text-sm truncate text-left">{thread.title}</h3>
-                {isScheduledTaskThread ? (
-                  <Clock
-                    className="ml-auto h-3.5 w-3.5 shrink-0 text-sidebar-automation-icon"
-                    aria-label="Automation thread"
-                  />
+                {isWhatsAppThread || isScheduledTaskThread ? (
+                  <span className="ml-auto flex shrink-0 items-center gap-1">
+                    {isWhatsAppThread ? (
+                      <>
+                        <WhatsAppGlyph className="h-3.5 w-3.5 shrink-0 text-muted-foreground/70" />
+                        <span className="sr-only">Started on WhatsApp</span>
+                      </>
+                    ) : null}
+                    {isScheduledTaskThread ? (
+                      <Clock
+                        className="h-3.5 w-3.5 shrink-0 text-sidebar-automation-icon"
+                        aria-label="Automation thread"
+                      />
+                    ) : null}
+                  </span>
                 ) : null}
               </div>
             </SidebarMenuButton>

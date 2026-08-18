@@ -9,21 +9,24 @@ import {
 } from "@/lib/billing/server";
 import { BILLING_PLANS } from "@/lib/billing/config";
 import { generateDefaultUser } from "@/lib/types/user";
-import type { Attachment, ThreadMessage } from "@/lib/types/thread";
+import {
+  serializeThreadMessageForFirestore,
+  type Attachment,
+  type ThreadMessage,
+} from "@/lib/types/thread";
 import type {
   WhatsAppAccountState,
   WhatsAppDeliveryStatus,
   WhatsAppInboundMessage,
-  WhatsAppProgressEvent,
 } from "@/lib/whatsapp/types";
 import {
   isRetryableMetaFailure,
-  shouldApplyDeliveryStatus,
 } from "@/lib/whatsapp/policy";
 
 const ACCOUNTS = "whatsappAccounts";
 const INBOX = "whatsappInbox";
 const OUTBOX = "whatsappOutbox";
+const OUTBOX_STATUS_EVENTS = "whatsappOutboxStatusEvents";
 const LINKS = "whatsappLinkIntents";
 const THREADS = "threads";
 const CONSENT_VERSION = "2026-08-17";
@@ -137,34 +140,82 @@ const normalizeAccount = (
   welcomeCreditsGranted: value?.welcomeCreditsGranted === true,
 });
 
+export interface WhatsAppClaimedWork {
+  message: WhatsAppInboundMessage;
+  account?: WhatsAppAccountState;
+}
+
+export interface WhatsAppInboundAcceptance {
+  accepted: boolean;
+  work?: WhatsAppClaimedWork;
+}
+
 export class WhatsAppStore {
-  async acceptInbound(message: WhatsAppInboundMessage): Promise<boolean> {
+  async acceptInbound(message: WhatsAppInboundMessage): Promise<WhatsAppInboundAcceptance> {
     const database = db();
     const phone = normalizePhone(message.from);
     const inboxRef = database.collection(INBOX).doc(message.id);
     const accountRef = database.collection(ACCOUNTS).doc(phone);
-    const matchingUsers = await database
-      .collection("users")
-      .where("phoneNumber", "==", phone)
-      .limit(2)
-      .get();
-    const unambiguousUserId = matchingUsers.size === 1 ? matchingUsers.docs[0].id : undefined;
     const now = new Date();
     return database.runTransaction(async (transaction) => {
       const [existing, accountSnapshot] = await Promise.all([
         transaction.get(inboxRef),
         transaction.get(accountRef),
       ]);
-      if (existing.exists) return false;
+      if (existing.exists) return { accepted: false };
+      const existingAccount = accountSnapshot.data();
+      const matchingUsers = existingAccount?.userId
+        ? undefined
+        : await database
+            .collection("users")
+            .where("phoneNumber", "==", phone)
+            .limit(2)
+            .get();
+      const unambiguousUserId = matchingUsers?.size === 1
+        ? matchingUsers.docs[0].id
+        : undefined;
+      const account = normalizeAccount(phone, existingAccount);
+      const activeLeaseIsFresh = Boolean(
+        account.activeMessageId &&
+        account.activeMessageClaimedAt &&
+        now.getTime() - account.activeMessageClaimedAt.getTime() < PROCESSING_LEASE_MS,
+      );
+      const queued = Boolean(
+        account.activeMessageId &&
+        account.activeMessageId !== message.id &&
+        activeLeaseIsFresh,
+      );
+      const claimedAt = queued ? undefined : now;
+      const pendingMessageIds = queued
+        ? account.pendingMessageIds.includes(message.id)
+          ? account.pendingMessageIds
+          : [...account.pendingMessageIds, message.id]
+        : account.pendingMessageIds.filter((id) => id !== message.id);
       transaction.create(inboxRef, removeUndefinedValues({
         ...message,
         timestamp: Timestamp.fromDate(message.timestamp),
-        status: "accepted",
-        attempts: 0,
+        status: queued ? "accepted" : "processing",
+        attempts: queued ? 0 : 1,
+        processingStartedAt: claimedAt ? Timestamp.fromDate(claimedAt) : null,
         receivedAt: Timestamp.fromDate(now),
         updatedAt: Timestamp.fromDate(now),
       }));
-      const existingAccount = accountSnapshot.data();
+      if (
+        !queued &&
+        account.activeMessageId &&
+        account.activeMessageId !== message.id
+      ) {
+        transaction.set(
+          database.collection(INBOX).doc(account.activeMessageId),
+          {
+            status: "failed",
+            error: "Phone work lease expired before completion",
+            completedAt: Timestamp.now(),
+            updatedAt: Timestamp.now(),
+          },
+          { merge: true },
+        );
+      }
       const windowStartedAt = asDate(existingAccount?.inboundWindowStartedAt);
       const insideRateWindow = Boolean(
         windowStartedAt &&
@@ -177,7 +228,7 @@ export class WhatsAppStore {
       const cooldownIsActive = Boolean(
         existingCooldownUntil && existingCooldownUntil.getTime() > now.getTime(),
       );
-      transaction.set(accountRef, {
+      const accountUpdates = {
         phoneNumber: phone,
         profileName: message.profileName ?? existingAccount?.profileName ?? null,
         lastInboundAt: Timestamp.fromDate(message.timestamp),
@@ -187,6 +238,9 @@ export class WhatsAppStore {
           ? existingAccount?.inboundWindowStartedAt
           : Timestamp.fromDate(message.timestamp),
         inboundWindowCount,
+        activeMessageId: queued ? account.activeMessageId : message.id,
+        activeMessageClaimedAt: claimedAt ? Timestamp.fromDate(claimedAt) : account.activeMessageClaimedAt,
+        pendingMessageIds,
         ...(inboundWindowCount > 20 && !cooldownIsActive
           ? {
               cooldownUntil: Timestamp.fromMillis(now.getTime() + 5 * 60 * 1_000),
@@ -205,70 +259,82 @@ export class WhatsAppStore {
               welcomeCreditsGranted: Boolean(unambiguousUserId),
             }
           : {}),
-      }, { merge: true });
-      return true;
+      };
+      transaction.set(accountRef, accountUpdates, { merge: true });
+      return {
+        accepted: true,
+        work: {
+          message: { ...message, receivedAt: now },
+          ...(queued
+            ? {}
+            : {
+                account: normalizeAccount(phone, {
+                  ...existingAccount,
+                  ...accountUpdates,
+                }),
+              }),
+        },
+      };
     });
   }
 
   async recordStatus(status: WhatsAppDeliveryStatus) {
     const database = db();
     const ref = database.collection(OUTBOX).doc(status.messageId);
-    await database.runTransaction(async (transaction) => {
-      const snapshot = await transaction.get(ref);
-      const existing = snapshot.data() ?? {};
-      const history = Array.isArray(existing.statusHistory)
-        ? existing.statusHistory.slice(-19)
-        : [];
-      const entry = removeUndefinedValues({
+    const timestamp = Timestamp.fromDate(status.timestamp);
+    const eventId = `${encodeURIComponent(status.messageId)}:${status.timestamp.getTime()}:${status.status}`;
+    const eventWrite = database.collection(OUTBOX_STATUS_EVENTS).doc(eventId).set(
+      removeUndefinedValues({
+        messageId: status.messageId,
+        recipientId: normalizePhone(status.recipientId),
         status: status.status,
-        timestamp: Timestamp.fromDate(status.timestamp),
+        timestamp,
         errors: status.errors ?? [],
-      });
-      const applyCurrent = shouldApplyDeliveryStatus(
+        recordedAt: Timestamp.now(),
+      }),
+      { merge: true },
+    );
+    const statusField = `status${status.status[0].toUpperCase()}${status.status.slice(1)}At`;
+
+    if (status.status !== "failed") {
+      await Promise.all([
+        eventWrite,
+        ref.set(
+          {
+            recipientId: normalizePhone(status.recipientId),
+            [statusField]: timestamp,
+            updatedAt: Timestamp.now(),
+          },
+          { merge: true },
+        ),
+      ]);
+      return;
+    }
+
+    const snapshot = await ref.get();
+    const existing = snapshot.data() ?? {};
+    const retryable = isRetryableMetaFailure(status.errors);
+    await Promise.all([
+      eventWrite,
+      ref.set(
         {
-          status: typeof existing.status === "string" ? existing.status : undefined,
-          timestamp: asDate(existing.statusAt),
-        },
-        status,
-      );
-      const lastHistory = history.at(-1) as Record<string, unknown> | undefined;
-      const duplicateHistory = Boolean(
-        lastHistory?.status === status.status &&
-        asDate(lastHistory?.timestamp)?.getTime() === status.timestamp.getTime() &&
-        JSON.stringify(lastHistory?.errors ?? []) === JSON.stringify(status.errors ?? []),
-      );
-      transaction.set(
-        ref,
-        {
-          recipientId: status.recipientId,
-          statusHistory: duplicateHistory ? history : [...history, entry],
-          ...(applyCurrent
-            ? {
-                status: status.status,
-                statusAt: Timestamp.fromDate(status.timestamp),
-                errors: status.errors ?? [],
-                retryable: status.status === "failed"
-                  ? isRetryableMetaFailure(status.errors)
-                  : false,
-              }
-            : {}),
+          recipientId: normalizePhone(status.recipientId),
+          status: "failed",
+          statusAt: timestamp,
+          statusFailedAt: timestamp,
+          errors: status.errors ?? [],
+          retryable,
           updatedAt: Timestamp.now(),
         },
         { merge: true },
-      );
-      if (
-        applyCurrent &&
-        status.status === "failed" &&
-        isRetryableMetaFailure(status.errors) &&
-        existing.retryPayload
-      ) {
-        transaction.set(
-          database.collection(ACCOUNTS).doc(normalizePhone(status.recipientId)),
-          { lastFailedOutboundId: status.messageId, updatedAt: Timestamp.now() },
-          { merge: true },
-        );
-      }
-    });
+      ),
+      ...(retryable && existing.retryPayload
+        ? [database.collection(ACCOUNTS).doc(normalizePhone(status.recipientId)).set(
+            { lastFailedOutboundId: status.messageId, updatedAt: Timestamp.now() },
+            { merge: true },
+          )]
+        : []),
+    ]);
   }
 
   async claimInbound(messageId: string): Promise<WhatsAppInboundMessage | undefined> {
@@ -295,6 +361,7 @@ export class WhatsAppStore {
         id: messageId,
         from: String(data.from),
         phoneNumberId: String(data.phoneNumberId),
+        receivedAt: asDate(data.receivedAt),
         profileName: typeof data.profileName === "string" ? data.profileName : undefined,
         timestamp: asDate(data.timestamp) ?? new Date(),
         type: data.type,
@@ -350,7 +417,10 @@ export class WhatsAppStore {
     return normalizeAccount(phone, snapshot.data());
   }
 
-  async claimPhoneWork(phoneNumber: string, messageId: string): Promise<boolean> {
+  async claimPhoneWork(
+    phoneNumber: string,
+    messageId: string,
+  ): Promise<WhatsAppAccountState | undefined> {
     const database = db();
     const ref = database.collection(ACCOUNTS).doc(normalizePhone(phoneNumber));
     const inboxRef = database.collection(INBOX).doc(messageId);
@@ -383,7 +453,7 @@ export class WhatsAppStore {
           },
           { merge: true },
         );
-        return false;
+        return;
       }
       if (account.activeMessageId && account.activeMessageId !== messageId) {
         transaction.set(
@@ -397,17 +467,24 @@ export class WhatsAppStore {
           { merge: true },
         );
       }
+      const claimedAt = new Date();
+      const pendingMessageIds = account.pendingMessageIds.filter((id) => id !== messageId);
       transaction.set(
         ref,
         {
           activeMessageId: messageId,
-          activeMessageClaimedAt: Timestamp.now(),
-          pendingMessageIds: account.pendingMessageIds.filter((id) => id !== messageId),
+          activeMessageClaimedAt: Timestamp.fromDate(claimedAt),
+          pendingMessageIds,
           updatedAt: Timestamp.now(),
         },
         { merge: true },
       );
-      return true;
+      return {
+        ...account,
+        activeMessageId: messageId,
+        activeMessageClaimedAt: claimedAt,
+        pendingMessageIds,
+      };
     });
   }
 
@@ -425,6 +502,29 @@ export class WhatsAppStore {
           activeMessageId: next ?? null,
           activeMessageClaimedAt: next ? Timestamp.now() : null,
           pendingMessageIds: remaining,
+          updatedAt: Timestamp.now(),
+        },
+        { merge: true },
+      );
+      return next;
+    });
+  }
+
+  async completePhoneWork(phoneNumber: string, messageId: string): Promise<string | undefined> {
+    const database = db();
+    const ref = database.collection(ACCOUNTS).doc(normalizePhone(phoneNumber));
+    return database.runTransaction(async (transaction) => {
+      const snapshot = await transaction.get(ref);
+      const account = normalizeAccount(normalizePhone(phoneNumber), snapshot.data());
+      if (account.activeMessageId !== messageId) return;
+      const [next, ...remaining] = account.pendingMessageIds;
+      transaction.set(
+        ref,
+        {
+          activeMessageId: next ?? null,
+          activeMessageClaimedAt: next ? Timestamp.now() : null,
+          pendingMessageIds: remaining,
+          lastUnprocessedMessageId: null,
           updatedAt: Timestamp.now(),
         },
         { merge: true },
@@ -573,6 +673,21 @@ export class WhatsAppStore {
     return id;
   }
 
+  /**
+   * Replaces the placeholder thread title with a generated one. Leaves titles the
+   * user renamed by hand, or already generated, untouched.
+   */
+  async applyGeneratedThreadTitle(threadId: string, title: string) {
+    const database = db();
+    const ref = database.collection(THREADS).doc(threadId);
+    await database.runTransaction(async (transaction) => {
+      const snapshot = await transaction.get(ref);
+      if (!snapshot.exists) return;
+      if (snapshot.data()?.titleSource !== "fallback") return;
+      transaction.update(ref, { title, titleSource: "generated" });
+    });
+  }
+
   async getThreadMessages(threadId: string): Promise<ThreadMessage[]> {
     const snapshot = await db().collection(THREADS).doc(threadId).get();
     const messages = snapshot.data()?.messages;
@@ -605,12 +720,16 @@ export class WhatsAppStore {
     threadId: string,
     role: "user" | "assistant",
     content: string,
-    options: { attachments?: Attachment[]; metadata?: Record<string, unknown> } = {},
+    options: {
+      attachments?: Attachment[];
+      metadata?: Record<string, unknown>;
+      parts?: ThreadMessage["parts"];
+    } = {},
   ) {
     const database = db();
     const ref = database.collection(THREADS).doc(threadId);
     const now = new Date();
-    await database.runTransaction(async (transaction) => {
+    return database.runTransaction(async (transaction) => {
       const snapshot = await transaction.get(ref);
       if (!snapshot.exists) throw new Error("WhatsApp Thread does not exist");
       const existing = Array.isArray(snapshot.data()?.messages)
@@ -625,39 +744,34 @@ export class WhatsAppStore {
             candidate.role === "user" &&
             (candidate.metadata as Record<string, unknown> | undefined)?.whatsappMessageId === whatsappMessageId,
         )
-      ) return;
-      const message = removeUndefinedValues({
+      ) return existing as ThreadMessage[];
+      const message = serializeThreadMessageForFirestore(removeUndefinedValues({
         id: randomUUID(),
         role,
         content,
-        parts: [
-          { type: "text", text: content },
-          ...(options.attachments ?? []).map((file) => ({
-            type: "file",
-            mediaType: file.contentType ?? "application/octet-stream",
-            filename: file.name,
-            url: file.url,
-          })),
-        ],
-        createdAt: Timestamp.fromDate(now),
+        parts: options.parts ?? [
+            { type: "text", text: content },
+            ...(options.attachments ?? []).map((file) => ({
+              type: "file" as const,
+              mediaType: file.contentType ?? "application/octet-stream",
+              filename: file.name,
+              url: file.url,
+            })),
+          ],
+        createdAt: now,
         updatedAt: now.toISOString(),
         experimental_attachments: options.attachments ?? [],
         metadata: options.metadata ?? {},
         channel: "whatsapp",
-      });
+      } as ThreadMessage));
+      const messages = [...existing, message] as ThreadMessage[];
       transaction.update(ref, {
-        messages: [...existing, message],
+        messages,
         messageCount: existing.length + 1,
         lastMessagePreview: content.slice(0, 160),
         updatedAt: Timestamp.fromDate(now),
       });
-    });
-  }
-
-  async appendProgress(threadId: string, event: WhatsAppProgressEvent) {
-    if (event.kind === "accepted" || event.label.length === 0) return;
-    await this.appendThreadMessage(threadId, "assistant", event.label, {
-      metadata: { progress: true, progressKind: event.kind },
+      return messages;
     });
   }
 
@@ -671,12 +785,12 @@ export class WhatsAppStore {
       | { type: "text"; body: string; replyToMessageId?: string }
       | { type: "buttons"; body: string; buttons: { id: string; title: string }[] };
   }) {
-    await db().collection(OUTBOX).doc(input.messageId).set({
+    await db().collection(OUTBOX).doc(input.messageId).set(removeUndefinedValues({
       ...input,
-      status: "accepted",
+      acceptedAt: Timestamp.now(),
       createdAt: Timestamp.now(),
       updatedAt: Timestamp.now(),
-    });
+    }), { merge: true });
   }
 
   async getRetryableOutbound(phoneNumber: string) {

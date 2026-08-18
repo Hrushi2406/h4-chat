@@ -20,7 +20,9 @@ This checklist is for the Sakhi-owned Meta WhatsApp Cloud API number. Never past
 - Merge a WhatsApp-first account into a web account; verify Threads, memories, recharge credits, and a single welcome balance.
 - Exercise `/new`, the four-hour rollover boundary, `/model`, `/credits`, `/cancel`, `/support`, and Retry.
 - Send supported image, PDF/document, and English/Hindi/Hinglish/Marathi voice samples. Reject an Ogg/Opus note over four minutes and unsupported media without an AI charge.
-- Run a Connected App task that needs authorization, one that needs explicit confirmation, and an email send that shows progress and a terminal state.
+- Run a Connected App task that needs authorization and an email send that executes directly and reports the result in the model-authored reply.
+- Confirm noticeable tool work is held until the same model run sends a concrete progress update, then executes exactly once, avoids generic/repeated updates, and returns the final answer.
+- Trigger a genuine 2-3 option choice and confirm the model-authored reply buttons return self-contained responses; generate an image/file and confirm native media delivery plus the fallback URL.
 - Create an automation from WhatsApp and confirm notification defaults on; create/edit one on web and confirm the switch defaults off.
 - Validate scheduled completion delivery inside the 24-hour service window and no delivery outside it.
 - Force duplicate inbound events, duplicate/out-of-order status callbacks, a Meta timeout, a model failure, and an outbound failure.

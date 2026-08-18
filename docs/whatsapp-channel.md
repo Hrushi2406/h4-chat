@@ -36,16 +36,17 @@ The first release is tested privately and then made available to everyone. It do
 
 ## Sakhi capabilities on WhatsApp
 
-- The channel uses the same billing, model policy, recent context, memories, Helpers, Connected Apps, tool execution, and confirmation rules as the web.
+- The channel uses the same billing, model policy, recent context, memories, Helpers, Connected Apps, and tool execution as the web.
 - A WhatsApp-only user can authorize a Connected App from a short-lived secure link without first creating separate web credentials. After authorization, Sakhi resumes the pending task.
-- Consequential actions use explicit **Confirm** and **Cancel** controls. Sending a WhatsApp message through the separate Connected App requires the exact recipient and message to be shown before confirmation.
+- When a WhatsApp request clearly asks Sakhi to send or change something, Sakhi executes the relevant tool directly. It asks only when required details such as the recipient or message are missing and reports the real result conversationally.
+- Sakhi can use model-authored native reply buttons for useful 2-3 option choices or genuine confirmation, and can deliver tool-returned images, documents, and audio as native WhatsApp media with the URL retained as a fallback.
 - The existing outbound WhatsApp Connected App remains separate from this inbound Sakhi channel.
 
 ## Long-running work and delivery UX
 
 - Sakhi marks inbound messages read and shows a typing indicator.
-- Long work emits durable, useful progress states such as “Connecting Gmail,” “Drafting email,” confirmation prompts, and “Email sent.” Fast or duplicate states are suppressed.
-- The final answer and important progress events are stored in the Thread as well as sent to WhatsApp.
+- During noticeable Connected App or MCP work, Sakhi sends short, concrete progress updates authored inside the same model tool loop. External operations are held until `send_whatsapp_update` delivers the model-written update, then execute immediately. Updates are deduplicated and capped; there is no second generation call or hardcoded status-message map.
+- The model-authored final answer is stored in the Thread and sent to WhatsApp.
 - Delivery records Meta message IDs and status callbacks. Duplicate inbound webhook deliveries are ignored. Retryable outbound failures expose a **Retry** action; permanent failures are recorded clearly.
 - Per-number cooldowns, opt-out state, and an administrative block flag protect the service from abuse.
 
@@ -76,6 +77,7 @@ The first release is tested privately and then made available to everyone. It do
 - WhatsApp must not use QStash. This v1 accepts best-effort background execution within Vercel rather than adding a durable job system.
 - External calls are bounded by timeouts. The processing record makes partial state visible and safe to retry manually.
 - Server-side Firestore transactions protect claims, account merge operations, credit charges, sequential per-number processing, and message persistence.
+- Meta delivery callbacks are stored as append-only `whatsappOutboxStatusEvents` records. Successful status timestamps merge independently into the outbox record so simultaneous sent, delivered, and read callbacks do not contend on one transaction.
 - Extract a reusable server conversation runner rather than calling the browser-oriented streaming `/api/chat` route.
 - Required configuration includes `WHATSAPP_VERIFY_TOKEN`, `WHATSAPP_APP_SECRET`, `WHATSAPP_ACCESS_TOKEN`, `WHATSAPP_PHONE_NUMBER_ID`, and the existing OpenAI and Firebase server credentials.
 
@@ -93,6 +95,6 @@ The first release is tested privately and then made available to everyone. It do
 - Signed Meta webhook end-to-end tests use fakes only at external boundaries.
 - Companion tests cover account linking/merge and scheduled-task notification defaults.
 - Unit tests cover signature verification, payload parsing, deduplication, consent, session rollover, credit/transcription charging, and status handling.
-- Integration tests cover inbound text/media/voice, progress and confirmation, Connected App resume, recharge retry, and automation notification behavior.
+- Integration tests cover inbound text/media/voice, direct tool execution, Connected App resume, recharge retry, and automation notification behavior.
 - Browser validation covers Settings connection/merge/disconnect and scheduled-task notification controls.
 - Production launch requires Meta test-number validation, updated privacy/consent text, monitoring, operational runbooks, and an explicit launch checklist.

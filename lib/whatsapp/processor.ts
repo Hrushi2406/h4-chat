@@ -2,28 +2,37 @@ import "server-only";
 
 import type { ModelMessage } from "ai";
 import { BillingAccessError } from "@/lib/billing/server";
+import { generateChatTitleFromFirstMessage } from "@/lib/services/chat-title-server-service";
 import {
   describeConversationError,
+  prefetchSakhiConversationAccess,
   runSakhiConversation,
   type SakhiConversationResult,
 } from "@/lib/services/sakhi-conversation-runner";
 import type { ThreadMessage } from "@/lib/types/thread";
 import { MetaWhatsAppClient } from "@/lib/whatsapp/meta-client";
+import { normalizeWhatsAppFormatting } from "@/lib/whatsapp/format";
 import { analyzeWhatsAppMedia } from "@/lib/whatsapp/media-analysis";
 import { hashWhatsAppLinkToken, parseWhatsAppLinkCommand } from "@/lib/whatsapp/link";
 import {
   normalizeWhatsAppCommand,
   shouldStartNewThread,
 } from "@/lib/whatsapp/policy";
-import { WhatsAppStore } from "@/lib/whatsapp/store";
+import {
+  WhatsAppStore,
+  type WhatsAppClaimedWork,
+} from "@/lib/whatsapp/store";
+import {
+  measureWhatsAppStage,
+  measureWhatsAppStageSync,
+} from "@/lib/whatsapp/timing";
 import { transcribeVoiceNote } from "@/lib/whatsapp/transcription";
 import { chargeWhatsAppTranscription } from "@/lib/whatsapp/transcription-billing";
 import type {
   WhatsAppAccountState,
   WhatsAppInboundMessage,
-  WhatsAppProgressEvent,
+  WhatsAppMediaPresentation,
 } from "@/lib/whatsapp/types";
-import { WhatsAppToolApprovalStore } from "@/lib/whatsapp/tool-approval";
 
 const UNSUPPORTED =
   "I can currently understand text, images, PDFs, documents, and voice notes up to 4 minutes. Please resend this in one of those formats.";
@@ -48,8 +57,7 @@ export interface WhatsAppProcessorDependencies {
   transcribe?: typeof transcribeVoiceNote;
   chargeTranscription?: typeof chargeWhatsAppTranscription;
   analyzeMedia?: typeof analyzeWhatsAppMedia;
-  approvalStore?: Pick<WhatsAppToolApprovalStore, "getPending"> &
-    Partial<Pick<WhatsAppToolApprovalStore, "claimPending">>;
+  generateTitle?: typeof generateChatTitleFromFirstMessage;
   now?: () => Date;
   baseUrl: string;
 }
@@ -61,11 +69,51 @@ const toModelMessages = (messages: ThreadMessage[]): ModelMessage[] =>
     return [{ role: message.role, content: message.content } as ModelMessage];
   });
 
+const includeCurrentInbound = (
+  history: ThreadMessage[],
+  message: WhatsAppInboundMessage,
+  content: string,
+): ThreadMessage[] => {
+  const alreadyStored = history.some(
+    (candidate) =>
+      (candidate.metadata as Record<string, unknown> | undefined)?.whatsappMessageId ===
+      message.id,
+  );
+  if (alreadyStored) return history;
+  return [
+    ...history,
+    {
+      id: `whatsapp-${message.id}`,
+      role: "user",
+      content,
+      parts: [{ type: "text", text: content }],
+      createdAt: message.timestamp,
+      updatedAt: message.timestamp.toISOString(),
+      metadata: { whatsappMessageId: message.id },
+    } as ThreadMessage,
+  ];
+};
+
+const withFinalAnswerText = (
+  parts: ThreadMessage["parts"] | undefined,
+  answerText: string,
+): ThreadMessage["parts"] => {
+  if (!parts?.length) return [{ type: "text", text: answerText }];
+  const withoutText = parts.filter((part) => part.type !== "text");
+  return [...withoutText, { type: "text", text: answerText }];
+};
+
 const sendAndRecord = async (
   dependencies: WhatsAppProcessorDependencies,
   to: string,
   body: string,
-  context: { threadId?: string; inboundMessageId?: string; kind: string },
+  context: {
+    threadId?: string;
+    inboundMessageId?: string;
+    kind: string;
+    replyToInbound?: boolean;
+    afterSend?: () => void;
+  },
 ) => {
   const chunks = body.length > 0
     ? Array.from({ length: Math.ceil(body.length / 3_900) }, (_, index) =>
@@ -73,16 +121,32 @@ const sendAndRecord = async (
       )
     : [""];
   for (const [index, chunk] of chunks.entries()) {
-    const replyToMessageId = index === 0 ? context.inboundMessageId : undefined;
-    const result = await dependencies.meta.sendText(to, chunk, replyToMessageId);
-    await dependencies.store.recordOutbound({
-      messageId: result.messageId,
-      to,
-      threadId: context.threadId,
-      inboundMessageId: context.inboundMessageId,
-      kind: context.kind,
-      retryPayload: { type: "text", body: chunk, replyToMessageId },
-    });
+    const replyToMessageId =
+      index === 0 && context.replyToInbound !== false
+        ? context.inboundMessageId
+        : undefined;
+    const result = await measureWhatsAppStage(
+      context.inboundMessageId,
+      `outbound.send_text.${context.kind}`,
+      () => dependencies.meta.sendText(to, chunk, replyToMessageId),
+    );
+    context.afterSend?.();
+    await measureWhatsAppStage(
+      context.inboundMessageId,
+      `outbound.persist.${context.kind}`,
+      () => dependencies.store.recordOutbound({
+        messageId: result.messageId,
+        to,
+        threadId: context.threadId,
+        inboundMessageId: context.inboundMessageId,
+        kind: context.kind,
+        retryPayload: {
+          type: "text",
+          body: chunk,
+          ...(replyToMessageId ? { replyToMessageId } : {}),
+        },
+      }),
+    );
   }
 };
 
@@ -92,48 +156,88 @@ const deliverNativeArtifacts = async (
   text: string,
   threadId: string,
   inboundMessageId: string,
+  requestedMedia: WhatsAppMediaPresentation[] = [],
 ) => {
   const allowedHosts = new Set([
     "firebasestorage.googleapis.com",
     "storage.googleapis.com",
   ]);
-  const urls = [...text.matchAll(/https?:\/\/[^\s)>\]]+/g)]
+  const textMedia: WhatsAppMediaPresentation[] = [...text.matchAll(/https?:\/\/[^\s)>\]]+/g)]
     .map((match) => match[0].replace(/[.,]+$/, ""))
     .filter((url, index, all) => all.indexOf(url) === index)
+    .map((url) => ({ url }));
+  const media: WhatsAppMediaPresentation[] = [...requestedMedia, ...textMedia]
+    .filter((item, index, all) => all.findIndex((candidate) => candidate.url === item.url) === index)
     .slice(0, 3);
-  for (const url of urls) {
+  for (const [index, item] of media.entries()) {
     try {
-      const parsed = new URL(url);
-      if (parsed.protocol !== "https:" || !allowedHosts.has(parsed.hostname)) continue;
-      const response = await fetch(url, {
-        redirect: "error",
-        signal: AbortSignal.timeout(15_000),
-      });
+      const parsed = new URL(item.url);
+      if (parsed.protocol !== "https:") continue;
+      if (!allowedHosts.has(parsed.hostname)) {
+        if (!item.kind) continue;
+        const sent = await measureWhatsAppStage(
+          inboundMessageId,
+          `outbound.send_media_url.${index + 1}.${item.kind}`,
+          () => dependencies.meta.sendMediaUrl(to, item.kind!, item.url, {
+            ...(item.kind !== "audio" && item.caption ? { caption: item.caption } : {}),
+            ...(item.filename ? { filename: item.filename } : {}),
+          }),
+        );
+        await measureWhatsAppStage(
+          inboundMessageId,
+          `outbound.persist_media.${index + 1}.${item.kind}`,
+          () => dependencies.store.recordOutbound({
+            messageId: sent.messageId,
+            to,
+            threadId,
+            inboundMessageId,
+            kind: `answer_${item.kind}`,
+          }),
+        );
+        continue;
+      }
+      const response = await measureWhatsAppStage(
+        inboundMessageId,
+        `outbound.open_artifact.${index + 1}`,
+        () => fetch(item.url, {
+          redirect: "error",
+          signal: AbortSignal.timeout(15_000),
+        }),
+      );
       if (!response.ok) continue;
       const mimeType = response.headers.get("content-type")?.split(";")[0] ?? "";
       const kind = mimeType.startsWith("image/")
         ? "image"
         : mimeType === "application/pdf" || mimeType.startsWith("text/")
           ? "document"
+          : mimeType.startsWith("audio/")
+            ? "audio"
           : undefined;
       if (!kind) continue;
       const declaredLength = Number(response.headers.get("content-length") ?? 0);
       if (declaredLength > MAX_MEDIA_BYTES || !response.body) continue;
-      const reader = response.body.getReader();
-      const chunks: Uint8Array[] = [];
-      let total = 0;
-      let exceeded = false;
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        total += value.byteLength;
-        if (total > MAX_MEDIA_BYTES) {
-          exceeded = true;
-          await reader.cancel();
-          break;
+      const { chunks, total, exceeded } = await measureWhatsAppStage(
+        inboundMessageId,
+        `outbound.read_artifact.${index + 1}`,
+        async () => {
+          const reader = response.body!.getReader();
+          const chunks: Uint8Array[] = [];
+          let total = 0;
+          let exceeded = false;
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            total += value.byteLength;
+            if (total > MAX_MEDIA_BYTES) {
+              exceeded = true;
+              await reader.cancel();
+              break;
+            }
+            chunks.push(value);
+          }
+          return { chunks, total, exceeded };
         }
-        chunks.push(value);
-      }
+      );
       if (exceeded) continue;
       const combined = new Uint8Array(total);
       let offset = 0;
@@ -142,70 +246,38 @@ const deliverNativeArtifacts = async (
         offset += chunk.byteLength;
       }
       const bytes = combined.buffer;
-      const filename = new URL(url).pathname.split("/").pop() || (kind === "image" ? "sakhi-image" : "sakhi-file");
-      const mediaId = await dependencies.meta.uploadMedia(bytes, mimeType, filename);
-      const sent = await dependencies.meta.sendMedia(to, kind, mediaId, { filename });
-      await dependencies.store.recordOutbound({
-        messageId: sent.messageId,
-        to,
-        threadId,
+      const fallbackFilename =
+        parsed.pathname.split("/").pop() ||
+        (kind === "image" ? "sakhi-image" : "sakhi-file");
+      const filename = item.filename ?? fallbackFilename;
+      const mediaId = await measureWhatsAppStage(
         inboundMessageId,
-        kind: `answer_${kind}`,
-      });
+        `outbound.upload_artifact.${index + 1}.${kind}`,
+        () => dependencies.meta.uploadMedia(bytes, mimeType, filename),
+      );
+      const sent = await measureWhatsAppStage(
+        inboundMessageId,
+        `outbound.send_media.${index + 1}.${kind}`,
+        () => dependencies.meta.sendMedia(to, kind, mediaId, {
+          ...(kind !== "audio" && item.caption ? { caption: item.caption } : {}),
+          filename,
+        }),
+      );
+      await measureWhatsAppStage(
+        inboundMessageId,
+        `outbound.persist_media.${index + 1}.${kind}`,
+        () => dependencies.store.recordOutbound({
+          messageId: sent.messageId,
+          to,
+          threadId,
+          inboundMessageId,
+          kind: `answer_${kind}`,
+        }),
+      );
     } catch {
       // The text response already contains the secure link, which is the fallback.
     }
   }
-};
-
-const sendConversationAnswer = async (
-  dependencies: WhatsAppProcessorDependencies,
-  to: string,
-  text: string,
-  threadId: string,
-  inboundMessageId: string,
-  userId: string,
-) => {
-  const pendingAction = await (
-    dependencies.approvalStore ?? new WhatsAppToolApprovalStore()
-  ).getPending(
-    userId,
-    threadId,
-  );
-  if (!pendingAction) {
-    await sendAndRecord(dependencies, to, text, {
-      threadId,
-      inboundMessageId,
-      kind: "answer",
-    });
-    return;
-  }
-  let confirmationText = text;
-  let buttons = [
-    { id: "confirm_action", title: "Confirm" },
-    { id: "cancel_action", title: "Cancel" },
-  ];
-  const exactDetails = `Exact action awaiting confirmation\n\nTool: ${pendingAction.toolName}\nDetails:\n${JSON.stringify(pendingAction.exactInput, null, 2)}`;
-  if (exactDetails.length > 64_000) {
-    confirmationText = "This action is too large to display completely on WhatsApp, so it cannot be confirmed safely.";
-    buttons = [{ id: "cancel_action", title: "Cancel" }];
-  } else {
-    await sendAndRecord(dependencies, to, exactDetails, {
-      threadId,
-      inboundMessageId,
-      kind: "confirmation_details",
-    });
-    confirmationText = `Confirm the complete exact ${pendingAction.toolName} action shown above?`;
-  }
-  const result = await dependencies.meta.sendButtons(to, confirmationText, buttons);
-  await dependencies.store.recordOutbound({
-    messageId: result.messageId,
-    to,
-    threadId,
-    inboundMessageId,
-    kind: "confirmation",
-    retryPayload: { type: "buttons", body: confirmationText, buttons },
-  });
 };
 
 const chooseThread = async (
@@ -224,6 +296,23 @@ const chooseThread = async (
   return account.activeThreadId;
 };
 
+const isFirstUserMessage = (history: ThreadMessage[]) =>
+  history.filter((entry) => entry.role === "user").length === 1;
+
+/**
+ * Names a thread from its first user message, the same way the web chat does, so
+ * WhatsApp conversations don't sit in the sidebar as "WhatsApp chat <date>".
+ */
+const titleThreadFromFirstMessage = async (
+  dependencies: WhatsAppProcessorDependencies,
+  threadId: string,
+  firstMessage: string,
+) => {
+  const generate = dependencies.generateTitle ?? generateChatTitleFromFirstMessage;
+  const title = await generate(firstMessage);
+  await dependencies.store.applyGeneratedThreadTitle(threadId, title);
+};
+
 const handleCommand = async (
   message: WhatsAppInboundMessage,
   account: WhatsAppAccountState,
@@ -237,7 +326,11 @@ const handleCommand = async (
 
   const linkToken = parseWhatsAppLinkCommand(message.text);
   if (linkToken) {
-    const result = await store.consumeLinkIntent(message.from, hashWhatsAppLinkToken(linkToken));
+    const result = await measureWhatsAppStage(
+      message.id,
+      "command.consume_link_intent",
+      () => store.consumeLinkIntent(message.from, hashWhatsAppLinkToken(linkToken)),
+    );
     const response =
       result.status === "connected" || result.status === "merged"
         ? result.status === "merged"
@@ -257,7 +350,11 @@ const handleCommand = async (
     const modelId = message.text === "model_sakhi_1_pro"
       ? "deepseek/deepseek-v4-pro"
       : "deepseek/deepseek-v4-flash";
-    await store.updateAccount(message.from, { modelId });
+    await measureWhatsAppStage(
+      message.id,
+      "command.update_model",
+      () => store.updateAccount(message.from, { modelId }),
+    );
     await sendAndRecord(
       dependencies,
       message.from,
@@ -267,29 +364,19 @@ const handleCommand = async (
     return true;
   }
 
-  if (message.text === "cancel_action") {
-    if (account.userId && account.activeThreadId) {
-      await new WhatsAppToolApprovalStore().cancel(
-        account.userId,
-        account.activeThreadId,
-      );
-    }
-    await sendAndRecord(dependencies, message.from, "Action cancelled. Nothing was sent or changed.", {
-      inboundMessageId: message.id,
-      kind: "confirmation_cancelled",
-    });
-    return true;
-  }
-
   if (!command) return false;
 
   if (command === "stop" || command === "exit") {
-    await store.updateAccount(message.from, {
-      optedOut: true,
-      consent: command === "exit" && account.consent !== "accepted" ? "declined" : account.consent,
-      activeMessageId: null,
-      pendingMessageIds: [],
-    });
+    await measureWhatsAppStage(
+      message.id,
+      "command.update_opt_out",
+      () => store.updateAccount(message.from, {
+        optedOut: true,
+        consent: command === "exit" && account.consent !== "accepted" ? "declined" : account.consent,
+        activeMessageId: null,
+        pendingMessageIds: [],
+      }),
+    );
     await sendAndRecord(dependencies, message.from, "You’re opted out of Sakhi WhatsApp messages. Send START whenever you want to return.", {
       inboundMessageId: message.id,
       kind: "opt_out",
@@ -298,8 +385,12 @@ const handleCommand = async (
   }
 
   if (command === "start") {
-    await store.updateAccount(message.from, { optedOut: false });
-    await sendAndRecord(dependencies, message.from, "Welcome back. Send a message whenever you’re ready — your existing Sakhi account and credits are unchanged.", {
+    await measureWhatsAppStage(
+      message.id,
+      "command.update_opt_in",
+      () => store.updateAccount(message.from, { optedOut: false }),
+    );
+    await sendAndRecord(dependencies, message.from, "Welcome back. Send a message whenever you’re ready, your existing Sakhi account and credits are unchanged.", {
       inboundMessageId: message.id,
       kind: "opt_in",
     });
@@ -309,7 +400,11 @@ const handleCommand = async (
   if (account.optedOut) return true;
 
   if (command === "continue" && account.consent !== "accepted" && !account.requiresWebLink) {
-    await store.acceptConsent(message.from, message.profileName);
+    await measureWhatsAppStage(
+      message.id,
+      "command.accept_consent",
+      () => store.acceptConsent(message.from, message.profileName),
+    );
     await sendAndRecord(dependencies, message.from, "Your free Sakhi Account is ready with welcome credits. Send me anything, or tap New chat to start fresh.", {
       inboundMessageId: message.id,
       kind: "welcome",
@@ -320,7 +415,11 @@ const handleCommand = async (
   if (!account.userId || account.consent !== "accepted") return false;
 
   if (command === "new") {
-    const threadId = await store.createThread(account.userId, message.from);
+    const threadId = await measureWhatsAppStage(
+      message.id,
+      "command.create_thread",
+      () => store.createThread(account.userId!, message.from),
+    );
     await sendAndRecord(dependencies, message.from, "New chat started. What would you like to do?", {
       threadId,
       inboundMessageId: message.id,
@@ -329,7 +428,11 @@ const handleCommand = async (
     return true;
   }
   if (command === "cancel") {
-    await store.updateAccount(message.from, { cancellationRequestedAt: new Date() });
+    await measureWhatsAppStage(
+      message.id,
+      "command.request_cancellation",
+      () => store.updateAccount(message.from, { cancellationRequestedAt: new Date() }),
+    );
     await sendAndRecord(dependencies, message.from, "I’ve requested cancellation. Any queued messages will wait until you send them again.", {
       threadId: account.activeThreadId,
       inboundMessageId: message.id,
@@ -338,7 +441,11 @@ const handleCommand = async (
     return true;
   }
   if (command === "credits") {
-    const credits = await store.getCredits(account.userId);
+    const credits = await measureWhatsAppStage(
+      message.id,
+      "command.get_credits",
+      () => store.getCredits(account.userId!),
+    );
     await sendAndRecord(dependencies, message.from, `You have ${credits.toLocaleString("en-IN")} Sakhi credits. Manage credits: ${baseUrl}/settings?tab=billing`, {
       inboundMessageId: message.id,
       kind: "credits",
@@ -358,20 +465,28 @@ const handleCommand = async (
     return true;
   }
   if (command === "model") {
-    const result = await dependencies.meta.sendButtons(
-      message.from,
-      `Current model: ${account.modelId.endsWith("pro") ? "Sakhi 1 Pro" : "Sakhi 1"}. Choose a model:`,
-      [
-        { id: "model_sakhi_1", title: "Sakhi 1" },
-        { id: "model_sakhi_1_pro", title: "Sakhi 1 Pro" },
-      ],
+    const result = await measureWhatsAppStage(
+      message.id,
+      "outbound.send_buttons.model_menu",
+      () => dependencies.meta.sendButtons(
+        message.from,
+        `Current model: ${account.modelId.endsWith("pro") ? "Sakhi 1 Pro" : "Sakhi 1"}. Choose a model:`,
+        [
+          { id: "model_sakhi_1", title: "Sakhi 1" },
+          { id: "model_sakhi_1_pro", title: "Sakhi 1 Pro" },
+        ],
+      ),
     );
-    await store.recordOutbound({
-      messageId: result.messageId,
-      to: message.from,
-      inboundMessageId: message.id,
-      kind: "model_menu",
-    });
+    await measureWhatsAppStage(
+      message.id,
+      "outbound.persist.model_menu",
+      () => store.recordOutbound({
+        messageId: result.messageId,
+        to: message.from,
+        inboundMessageId: message.id,
+        kind: "model_menu",
+      }),
+    );
     return true;
   }
   if (command === "support") {
@@ -384,7 +499,11 @@ const handleCommand = async (
   }
   if (command === "retry") {
     const retryId = account.lastUnprocessedMessageId;
-    if (!retryId || !(await store.resetInboundForRetry(retryId))) {
+    if (!retryId || !(await measureWhatsAppStage(
+      message.id,
+      "command.reset_inbound_for_retry",
+      () => store.resetInboundForRetry(retryId),
+    ))) {
       await sendAndRecord(dependencies, message.from, "There isn’t a failed message available to retry.", {
         inboundMessageId: message.id,
         kind: "retry_empty",
@@ -395,11 +514,19 @@ const handleCommand = async (
       inboundMessageId: message.id,
       kind: "retry",
     });
-    await processWhatsAppMessage(retryId, dependencies);
+    await measureWhatsAppStage(
+      message.id,
+      "command.process_retry",
+      () => processWhatsAppMessage(retryId, dependencies),
+    );
     return true;
   }
   if (command === "retry_delivery") {
-    const outbound = await store.getRetryableOutbound(message.from);
+    const outbound = await measureWhatsAppStage(
+      message.id,
+      "command.get_retryable_outbound",
+      () => store.getRetryableOutbound(message.from),
+    );
     if (!outbound) {
       await sendAndRecord(dependencies, message.from, "There isn’t a retryable delivery available.", {
         inboundMessageId: message.id,
@@ -407,29 +534,41 @@ const handleCommand = async (
       });
       return true;
     }
-    const sent = outbound.retryPayload.type === "text"
-      ? await dependencies.meta.sendText(
-          message.from,
-          outbound.retryPayload.body,
-          outbound.retryPayload.replyToMessageId,
-        )
-      : await dependencies.meta.sendButtons(
-          message.from,
-          outbound.retryPayload.body,
-          outbound.retryPayload.buttons,
-        );
-    await store.recordOutbound({
-      messageId: sent.messageId,
-      to: message.from,
-      threadId: outbound.threadId,
-      inboundMessageId: outbound.inboundMessageId,
-      kind: "delivery_retry",
-      retryPayload: outbound.retryPayload,
-    });
-    await store.updateAccount(message.from, {
-      lastFailedOutboundId: null,
-      deliveryRetryOfferedFor: null,
-    });
+    const sent = await measureWhatsAppStage(
+      message.id,
+      "outbound.retry_delivery",
+      () => outbound.retryPayload.type === "text"
+        ? dependencies.meta.sendText(
+            message.from,
+            outbound.retryPayload.body,
+            outbound.retryPayload.replyToMessageId,
+          )
+        : dependencies.meta.sendButtons(
+            message.from,
+            outbound.retryPayload.body,
+            outbound.retryPayload.buttons,
+          ),
+    );
+    await measureWhatsAppStage(
+      message.id,
+      "outbound.persist.delivery_retry",
+      () => store.recordOutbound({
+        messageId: sent.messageId,
+        to: message.from,
+        threadId: outbound.threadId,
+        inboundMessageId: outbound.inboundMessageId,
+        kind: "delivery_retry",
+        retryPayload: outbound.retryPayload,
+      }),
+    );
+    await measureWhatsAppStage(
+      message.id,
+      "command.clear_delivery_failure",
+      () => store.updateAccount(message.from, {
+        lastFailedOutboundId: null,
+        deliveryRetryOfferedFor: null,
+      }),
+    );
     return true;
   }
   return false;
@@ -447,8 +586,16 @@ const prepareInbound = async (
   if (!message.media) {
     return { content: message.text?.trim() || "", terminal: false as const, attachments: [] };
   }
-  const media = await dependencies.meta.downloadMedia(message.media.id);
-  if (await shouldCancel()) {
+  const media = await measureWhatsAppStage(
+    message.id,
+    "processor.download_inbound_media",
+    () => dependencies.meta.downloadMedia(message.media!.id),
+  );
+  if (await measureWhatsAppStage(
+    message.id,
+    "processor.check_cancellation_after_media_download",
+    shouldCancel,
+  )) {
     const error = new Error("Cancelled");
     error.name = "AbortError";
     throw error;
@@ -468,27 +615,39 @@ const prepareInbound = async (
   }
   const extension = media.mimeType.split("/")[1]?.split(";")[0] || "bin";
   const filename = message.media.filename || `${message.type}-${message.id}.${extension}`;
-  const attachment = await dependencies.store.storeMedia({
-    userId: account.userId!,
-    messageId: message.id,
-    bytes: media.bytes,
-    mimeType: media.mimeType,
-    filename,
-  });
-  if (await shouldCancel()) {
+  const attachment = await measureWhatsAppStage(
+    message.id,
+    "processor.persist_inbound_media",
+    () => dependencies.store.storeMedia({
+      userId: account.userId!,
+      messageId: message.id,
+      bytes: media.bytes,
+      mimeType: media.mimeType,
+      filename,
+    }),
+  );
+  if (await measureWhatsAppStage(
+    message.id,
+    "processor.check_cancellation_after_media_persist",
+    shouldCancel,
+  )) {
     const error = new Error("Cancelled");
     error.name = "AbortError";
     throw error;
   }
   if (message.type !== "audio") {
     const analyze = dependencies.analyzeMedia ?? analyzeWhatsAppMedia;
-    const mediaAnalysis = await analyze({
-      userId: account.userId!,
-      attachment,
-      messageId: message.id,
-      caption: message.text?.trim(),
-      shouldCancel,
-    });
+    const mediaAnalysis = await measureWhatsAppStage(
+      message.id,
+      "processor.analyze_inbound_media",
+      () => analyze({
+        userId: account.userId!,
+        attachment,
+        messageId: message.id,
+        caption: message.text?.trim(),
+        shouldCancel,
+      }),
+    );
     return {
       content: [
         message.text?.trim(),
@@ -500,15 +659,27 @@ const prepareInbound = async (
     };
   }
   const transcribe = dependencies.transcribe ?? transcribeVoiceNote;
-  const transcript = await transcribe(media.bytes, media.mimeType, filename);
-  if (await shouldCancel()) {
+  const transcript = await measureWhatsAppStage(
+    message.id,
+    "processor.transcribe_voice_note",
+    () => transcribe(media.bytes, media.mimeType, filename),
+  );
+  if (await measureWhatsAppStage(
+    message.id,
+    "processor.check_cancellation_after_transcription",
+    shouldCancel,
+  )) {
     const error = new Error("Cancelled");
     error.name = "AbortError";
     throw error;
   }
-  await (dependencies.chargeTranscription ?? chargeWhatsAppTranscription)(
-    account.userId!,
+  await measureWhatsAppStage(
     message.id,
+    "processor.charge_transcription",
+    () => (dependencies.chargeTranscription ?? chargeWhatsAppTranscription)(
+      account.userId!,
+      message.id,
+    ),
   );
   return {
     content: transcript.text,
@@ -521,17 +692,33 @@ const prepareInbound = async (
 export const processWhatsAppMessage = async (
   messageId: string,
   dependencies: WhatsAppProcessorDependencies,
+  preclaimedWork?: WhatsAppClaimedWork,
 ): Promise<void> => {
   const { store, meta } = dependencies;
-  const message = await store.claimInbound(messageId);
+  const message = preclaimedWork?.message ?? await measureWhatsAppStage(
+      messageId,
+      "processor.claim_inbound",
+      () => store.claimInbound(messageId),
+    );
   if (!message) return;
   const immediateCommand = normalizeWhatsAppCommand(
     message.text,
     message.type === "interactive" ? "interactive" : "text",
   );
+  if (!preclaimedWork) {
+    void measureWhatsAppStage(
+      message.id,
+      "processor.mark_read_and_typing.initial",
+      () => meta.markRead(message.id, true),
+    ).catch(() => undefined);
+  }
   if (immediateCommand === "stop" || immediateCommand === "exit") {
     if (immediateCommand === "exit") {
-      const currentAccount = await store.getAccount(message.from);
+      const currentAccount = await measureWhatsAppStage(
+        message.id,
+        "processor.load_account_for_exit",
+        () => store.getAccount(message.from),
+      );
       if (currentAccount.consent === "accepted") {
         await sendAndRecord(
           dependencies,
@@ -539,28 +726,55 @@ export const processWhatsAppMessage = async (
           "You’re already connected to Sakhi. Nothing changed.",
           { inboundMessageId: message.id, kind: "stale_consent_exit" },
         );
-        await store.finishInbound(message.id, "completed");
+        await measureWhatsAppStage(
+          message.id,
+          "processor.finish_inbound.stale_exit",
+          () => store.finishInbound(message.id, "completed"),
+        );
+        if (preclaimedWork?.account) {
+          await measureWhatsAppStage(
+            message.id,
+            "processor.release_phone_work.immediate",
+            () => store.releasePhoneWork(message.from, message.id),
+          );
+        }
         return;
       }
     }
     activeControllers.get(message.from)?.abort();
-    await store.updateAccount(message.from, {
-      optedOut: true,
-      ...(immediateCommand === "exit" ? { consent: "declined" } : {}),
-    });
-    await store.cancelQueuedWork(message.from, { releaseActive: true });
+    await measureWhatsAppStage(
+      message.id,
+      "processor.update_immediate_opt_out",
+      () => store.updateAccount(message.from, {
+        optedOut: true,
+        ...(immediateCommand === "exit" ? { consent: "declined" } : {}),
+      }),
+    );
+    await measureWhatsAppStage(
+      message.id,
+      "processor.cancel_queued_work.opt_out",
+      () => store.cancelQueuedWork(message.from, { releaseActive: true }),
+    );
     await sendAndRecord(
       dependencies,
       message.from,
       "You’re opted out of Sakhi WhatsApp messages. Send START whenever you want to return.",
       { inboundMessageId: message.id, kind: "opt_out" },
     );
-    await store.finishInbound(message.id, "completed");
+    await measureWhatsAppStage(
+      message.id,
+      "processor.finish_inbound.opt_out",
+      () => store.finishInbound(message.id, "completed"),
+    );
     return;
   }
   if (immediateCommand === "cancel") {
     activeControllers.get(message.from)?.abort();
-    await store.cancelQueuedWork(message.from);
+    await measureWhatsAppStage(
+      message.id,
+      "processor.cancel_queued_work.cancel",
+      () => store.cancelQueuedWork(message.from),
+    );
     await sendAndRecord(
       dependencies,
       message.from,
@@ -569,18 +783,39 @@ export const processWhatsAppMessage = async (
         : "There isn’t an active task to cancel.",
       { inboundMessageId: message.id, kind: "cancel" },
     );
-    await store.finishInbound(message.id, "completed");
+    await measureWhatsAppStage(
+      message.id,
+      "processor.finish_inbound.cancel_command",
+      () => store.finishInbound(message.id, "completed"),
+    );
+    if (preclaimedWork?.account) {
+      await measureWhatsAppStage(
+        message.id,
+        "processor.release_phone_work.immediate",
+        () => store.releasePhoneWork(message.from, message.id),
+      );
+    }
     return;
   }
-  const claimedPhone = await store.claimPhoneWork(message.from, message.id);
-  if (!claimedPhone) return;
+  const account = preclaimedWork
+    ? preclaimedWork.account
+    : await measureWhatsAppStage(
+        message.id,
+        "processor.claim_phone_and_load_account",
+        () => store.claimPhoneWork(message.from, message.id),
+      );
+  if (!account) return;
 
   let nextMessageId: string | undefined;
+  let phoneWorkReleased = false;
   try {
     await (async () => {
-    const account = await store.getAccount(message.from);
     if (account.blocked) {
-      await store.finishInbound(message.id, "completed");
+      await measureWhatsAppStage(
+        message.id,
+        "processor.finish_inbound.blocked",
+        () => store.finishInbound(message.id, "completed"),
+      );
       return;
     }
     if (account.cooldownUntil && account.cooldownUntil.getTime() > Date.now()) {
@@ -591,9 +826,17 @@ export const processWhatsAppMessage = async (
           "Too many messages came in at once. Sakhi is paused for 5 minutes. I’ll be ready after that.",
           { inboundMessageId: message.id, kind: "cooldown" },
         );
-        await store.updateAccount(message.from, { cooldownNotifiedAt: new Date() });
+        await measureWhatsAppStage(
+          message.id,
+          "processor.mark_cooldown_notified",
+          () => store.updateAccount(message.from, { cooldownNotifiedAt: new Date() }),
+        );
       }
-      await store.finishInbound(message.id, "completed");
+      await measureWhatsAppStage(
+        message.id,
+        "processor.finish_inbound.cooldown",
+        () => store.finishInbound(message.id, "completed"),
+      );
       return;
     }
     if (
@@ -601,30 +844,58 @@ export const processWhatsAppMessage = async (
       account.deliveryRetryOfferedFor !== account.lastFailedOutboundId &&
       immediateCommand !== "retry_delivery"
     ) {
-      const retryable = await store.getRetryableOutbound(message.from);
+      const retryable = await measureWhatsAppStage(
+        message.id,
+        "processor.get_retryable_outbound",
+        () => store.getRetryableOutbound(message.from),
+      );
       if (retryable) {
-        const notice = await meta.sendButtons(
-          message.from,
-          "A previous WhatsApp reply could not be delivered. You can retry that delivery without rerunning the Sakhi task.",
-          [{ id: "retry_delivery", title: "Retry delivery" }],
+        const notice = await measureWhatsAppStage(
+          message.id,
+          "outbound.send_buttons.delivery_retry_offer",
+          () => meta.sendButtons(
+            message.from,
+            "A previous WhatsApp reply could not be delivered. You can retry that delivery without rerunning the Sakhi task.",
+            [{ id: "retry_delivery", title: "Retry delivery" }],
+          ),
         );
-        await store.recordOutbound({
-          messageId: notice.messageId,
-          to: message.from,
-          inboundMessageId: message.id,
-          kind: "delivery_retry_offer",
-        });
-        await store.updateAccount(message.from, {
-          deliveryRetryOfferedFor: account.lastFailedOutboundId,
-        });
+        await measureWhatsAppStage(
+          message.id,
+          "outbound.persist.delivery_retry_offer",
+          () => store.recordOutbound({
+            messageId: notice.messageId,
+            to: message.from,
+            inboundMessageId: message.id,
+            kind: "delivery_retry_offer",
+          }),
+        );
+        await measureWhatsAppStage(
+          message.id,
+          "processor.mark_delivery_retry_offered",
+          () => store.updateAccount(message.from, {
+            deliveryRetryOfferedFor: account.lastFailedOutboundId,
+          }),
+        );
       }
     }
-    if (await handleCommand(message, account, dependencies)) {
-      await store.finishInbound(message.id, "completed");
+    if (await measureWhatsAppStage(
+      message.id,
+      "processor.handle_command",
+      () => handleCommand(message, account, dependencies),
+    )) {
+      await measureWhatsAppStage(
+        message.id,
+        "processor.finish_inbound.command",
+        () => store.finishInbound(message.id, "completed"),
+      );
       return;
     }
     if (account.optedOut && !account.requiresWebLink) {
-      await store.finishInbound(message.id, "completed");
+      await measureWhatsAppStage(
+        message.id,
+        "processor.finish_inbound.opted_out",
+        () => store.finishInbound(message.id, "completed"),
+      );
       return;
     }
     if (!account.userId || account.consent !== "accepted") {
@@ -633,7 +904,11 @@ export const processWhatsAppMessage = async (
         account.consentPromptedAt &&
         now.getTime() - account.consentPromptedAt.getTime() < 15 * 60 * 1_000
       ) {
-        await store.finishInbound(message.id, "completed");
+        await measureWhatsAppStage(
+          message.id,
+          "processor.finish_inbound.consent_recently_prompted",
+          () => store.finishInbound(message.id, "completed"),
+        );
         return;
       }
       if (account.requiresWebLink) {
@@ -643,113 +918,179 @@ export const processWhatsAppMessage = async (
           `Reconnect WhatsApp from Sakhi Settings to protect your account: ${dependencies.baseUrl}/settings`,
           { inboundMessageId: message.id, kind: "reconnect_required" },
         );
-        await store.updateAccount(message.from, { consentPromptedAt: now });
-        await store.finishInbound(message.id, "completed");
+        await measureWhatsAppStage(
+          message.id,
+          "processor.mark_reconnect_prompted",
+          () => store.updateAccount(message.from, { consentPromptedAt: now }),
+        );
+        await measureWhatsAppStage(
+          message.id,
+          "processor.finish_inbound.reconnect_required",
+          () => store.finishInbound(message.id, "completed"),
+        );
         return;
       }
-      const result = await meta.sendButtons(message.from, CONSENT, [
-        { id: "continue", title: "Continue" },
-        { id: "exit", title: "Exit" },
-      ]);
-      await store.recordOutbound({
-        messageId: result.messageId,
-        to: message.from,
-        inboundMessageId: message.id,
-        kind: "consent",
-      });
-      await store.updateAccount(message.from, { consentPromptedAt: now });
-      await store.finishInbound(message.id, "completed");
+      const result = await measureWhatsAppStage(
+        message.id,
+        "outbound.send_buttons.consent",
+        () => meta.sendButtons(message.from, CONSENT, [
+          { id: "continue", title: "Continue" },
+          { id: "exit", title: "Exit" },
+        ]),
+      );
+      await measureWhatsAppStage(
+        message.id,
+        "outbound.persist.consent",
+        () => store.recordOutbound({
+          messageId: result.messageId,
+          to: message.from,
+          inboundMessageId: message.id,
+          kind: "consent",
+        }),
+      );
+      await measureWhatsAppStage(
+        message.id,
+        "processor.mark_consent_prompted",
+        () => store.updateAccount(message.from, { consentPromptedAt: now }),
+      );
+      await measureWhatsAppStage(
+        message.id,
+        "processor.finish_inbound.consent",
+        () => store.finishInbound(message.id, "completed"),
+      );
       return;
     }
 
-    await meta.markRead(message.id, true);
     const now = dependencies.now?.() ?? new Date();
     const shouldCancel = () => store.isCancellationRequested(
       message.from,
       message.id,
       message.timestamp,
     );
-    if (await shouldCancel()) {
+    const reusableThreadId =
+      account.activeThreadId &&
+      !shouldStartNewThread(account.lastConversationAt, now)
+        ? account.activeThreadId
+        : undefined;
+    const prefetchedAccess = dependencies.runConversation
+      ? undefined
+      : prefetchSakhiConversationAccess({
+          userId: account.userId,
+          modelId: account.modelId,
+          channelMessageId: message.id,
+        });
+    void prefetchedAccess?.catch(() => undefined);
+    const prefetchedHistoryOutcome = reusableThreadId
+      ? measureWhatsAppStage(
+          message.id,
+          "processor.load_history_for_generation",
+          () => store.getThreadMessages(reusableThreadId),
+        ).then(
+          (value) => ({ ok: true as const, value }),
+          (error: unknown) => ({ ok: false as const, error }),
+        )
+      : undefined;
+    if (await measureWhatsAppStage(
+      message.id,
+      "processor.check_cancellation",
+      shouldCancel,
+    )) {
       const error = new Error("Cancelled");
       error.name = "AbortError";
       throw error;
     }
-    const threadId = await chooseThread(store, account, false, now);
-    const prepared = await prepareInbound(message, account, dependencies, shouldCancel);
+    const threadId = await measureWhatsAppStage(
+      message.id,
+      "processor.resolve_thread",
+      () => chooseThread(store, account, false, now),
+    );
+    const prepared = await measureWhatsAppStage(
+      message.id,
+      "processor.prepare_inbound",
+      () => prepareInbound(message, account, dependencies, shouldCancel),
+    );
     if (prepared.terminal) {
       await sendAndRecord(dependencies, message.from, prepared.content, {
         threadId,
         inboundMessageId: message.id,
         kind: "unsupported",
       });
-      await store.finishInbound(message.id, "completed");
+      await measureWhatsAppStage(
+        message.id,
+        "processor.finish_inbound.unsupported",
+        () => store.finishInbound(message.id, "completed"),
+      );
       return;
     }
-    await store.appendThreadMessage(threadId, "user", prepared.content, {
-      attachments: prepared.attachments,
-      metadata: {
-        whatsappMessageId: message.id,
-        ...(prepared.transcript
-          ? { transcriptLanguage: prepared.transcript.language, transcriptionCreditsUsed: 1 }
-          : {}),
-        ...(prepared.mediaAnalysis
-          ? {
-              mediaAnalysisCreditsUsed: prepared.mediaAnalysis.creditsUsed,
-              mediaAnalysisInputTokens: prepared.mediaAnalysis.inputTokens,
-              mediaAnalysisOutputTokens: prepared.mediaAnalysis.outputTokens,
-            }
-          : {}),
-      },
-    });
-    await store.updateAccount(message.from, {
-      activeThreadId: threadId,
-      lastConversationAt: now,
-      lastUnprocessedMessageId: message.id,
-    });
-
-    let lastProgressAt = 0;
-    const onProgress = async (event: WhatsAppProgressEvent) => {
-      if (event.kind === "accepted" || event.label === "Done") return;
-      const timestamp = Date.now();
-      if (
-        timestamp - lastProgressAt < 3_000 &&
-        !["completed", "confirmation", "failed", "cancelled"].includes(event.kind)
-      ) return;
-      lastProgressAt = timestamp;
-      await Promise.allSettled([
-        store.appendProgress(threadId, event),
-        sendAndRecord(dependencies, message.from, event.label, {
-          threadId,
-          inboundMessageId: message.id,
-          kind: "progress",
-        }),
-        meta.markRead(message.id, true),
-      ]);
-    };
-    const history = await store.getThreadMessages(threadId);
-    let approvedAction: { toolName: string; exactInput: unknown } | undefined;
-    if (message.type === "interactive" && message.text === "confirm_action") {
-      const approvalStore = dependencies.approvalStore ?? new WhatsAppToolApprovalStore();
-      approvedAction = approvalStore.claimPending
-        ? await approvalStore.claimPending(account.userId, threadId)
-        : undefined;
-      if (!approvedAction) {
-        await sendAndRecord(
-          dependencies,
-          message.from,
-          "That confirmation has expired. Ask me to prepare the action again.",
-          { threadId, inboundMessageId: message.id, kind: "confirmation_expired" },
-        );
-        await store.finishInbound(message.id, "completed");
-        return;
-      }
+    const storeUserMessage = measureWhatsAppStage(
+      message.id,
+      "processor.persist_user_message",
+      () => store.appendThreadMessage(threadId, "user", prepared.content, {
+        attachments: prepared.attachments,
+        metadata: {
+          whatsappMessageId: message.id,
+          ...(prepared.transcript
+            ? { transcriptLanguage: prepared.transcript.language, transcriptionCreditsUsed: 1 }
+            : {}),
+          ...(prepared.mediaAnalysis
+            ? {
+                mediaAnalysisCreditsUsed: prepared.mediaAnalysis.creditsUsed,
+                mediaAnalysisInputTokens: prepared.mediaAnalysis.inputTokens,
+                mediaAnalysisOutputTokens: prepared.mediaAnalysis.outputTokens,
+              }
+            : {}),
+        },
+      }),
+    );
+    const updateAccount = measureWhatsAppStage(
+      message.id,
+      "processor.update_account",
+      () => store.updateAccount(message.from, {
+        activeThreadId: threadId,
+        lastConversationAt: now,
+        lastUnprocessedMessageId: message.id,
+      }),
+    );
+    const persistenceOutcome = Promise.all([storeUserMessage, updateAccount]).then(
+      () => ({ ok: true as const }),
+      (error: unknown) => ({ ok: false as const, error }),
+    );
+    const historyOutcome = prefetchedHistoryOutcome ?? measureWhatsAppStage(
+      message.id,
+      "processor.load_history_for_generation",
+      () => store.getThreadMessages(threadId),
+    ).then(
+      (value) => ({ ok: true as const, value }),
+      (error: unknown) => ({ ok: false as const, error }),
+    );
+    const storedHistoryOutcome = await historyOutcome;
+    if (!storedHistoryOutcome.ok) throw storedHistoryOutcome.error;
+    const storedHistory = storedHistoryOutcome.value;
+    const history = includeCurrentInbound(storedHistory, message, prepared.content);
+    if (isFirstUserMessage(history)) {
+      // Fire and forget: the title only affects the web sidebar, so it must never
+      // hold up the WhatsApp reply.
+      void measureWhatsAppStage(
+        message.id,
+        "processor.generate_thread_title",
+        () => titleThreadFromFirstMessage(dependencies, threadId, prepared.content),
+      ).catch((error) => {
+        console.error("Non-fatal WhatsApp title generation failure", {
+          messageId: message.id,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      });
     }
     const runner = dependencies.runConversation ?? runSakhiConversation;
     const controller = new AbortController();
     activeControllers.set(message.from, controller);
     const typingRefresh = setInterval(() => {
-      void meta.markRead(message.id, true).catch(() => undefined);
-    }, 20_000);
+      void measureWhatsAppStage(
+        message.id,
+        "processor.mark_read_and_typing.refresh",
+        () => meta.markRead(message.id, true),
+      ).catch(() => undefined);
+    }, 15_000);
     let cancellationCheckRunning = false;
     const cancellationRefresh = setInterval(() => {
       if (cancellationCheckRunning) return;
@@ -765,54 +1106,132 @@ export const processWhatsAppMessage = async (
     }, 2_000);
     let result: SakhiConversationResult;
     try {
-      result = await runner({
-        userId: account.userId,
-        threadId,
-        modelId: account.modelId,
-        messages: toModelMessages(history),
-        channel: "whatsapp",
-        channelMessageId: message.id,
-        onProgress,
-        shouldCancel,
-        signal: controller.signal,
-        baseUrl: dependencies.baseUrl,
-        approvedAction,
-      });
+      const conversationOutcome = measureWhatsAppStage(
+        message.id,
+        "processor.run_conversation",
+        () => runner({
+          userId: account.userId!,
+          threadId,
+          modelId: account.modelId,
+          messages: toModelMessages(history),
+          channel: "whatsapp",
+          channelMessageId: message.id,
+          channelReceivedAt: message.receivedAt,
+          shouldCancel,
+          sendWhatsAppUpdate: async (update) => {
+            await sendAndRecord(dependencies, message.from, update, {
+              threadId,
+              inboundMessageId: message.id,
+              kind: "ai_progress",
+              replyToInbound: false,
+              afterSend: () => {
+                void measureWhatsAppStage(
+                  message.id,
+                  "processor.mark_read_and_typing.after_progress",
+                  () => meta.markRead(message.id, true),
+                ).catch((error) => {
+                  console.error("Non-fatal WhatsApp typing restart failure", {
+                    messageId: message.id,
+                    error: error instanceof Error ? error.message : String(error),
+                  });
+                });
+              },
+            });
+          },
+          signal: controller.signal,
+          baseUrl: dependencies.baseUrl,
+          prefetchedAccess,
+        }),
+      ).then(
+        (value) => ({ ok: true as const, value }),
+        (error: unknown) => ({ ok: false as const, error }),
+      );
+      const [conversation, persistence] = await Promise.all([
+        conversationOutcome,
+        persistenceOutcome,
+      ]);
+      if (!persistence.ok) throw persistence.error;
+      if (!conversation.ok) throw conversation.error;
+      result = conversation.value;
     } finally {
       clearInterval(typingRefresh);
       clearInterval(cancellationRefresh);
       activeControllers.delete(message.from);
     }
-    if (await shouldCancel()) {
+    if (await measureWhatsAppStage(
+      message.id,
+      "processor.check_cancellation_after_generation",
+      shouldCancel,
+    )) {
       const error = new Error("Cancelled");
       error.name = "AbortError";
       throw error;
     }
-    await store.appendThreadMessage(threadId, "assistant", result.text, {
-      metadata: {
-        model: result.modelId,
-        creditsUsed: result.creditsUsed,
-        inputTokens: result.inputTokens,
-        outputTokens: result.outputTokens,
-      },
+    const answerText = measureWhatsAppStageSync(
+      message.id,
+      "processor.format_answer",
+      () => normalizeWhatsAppFormatting(result.text),
+    );
+    const persistAssistantMessage = measureWhatsAppStage(
+      message.id,
+      "processor.persist_assistant_message",
+      () => store.appendThreadMessage(threadId, "assistant", answerText, {
+        parts: withFinalAnswerText(result.parts, answerText),
+        metadata: {
+          model: result.modelId,
+          creditsUsed: result.creditsUsed,
+          inputTokens: result.inputTokens,
+          outputTokens: result.outputTokens,
+          ...(result.whatsappPresentation
+            ? { whatsappPresentation: result.whatsappPresentation }
+            : {}),
+        },
+      }),
+    );
+    const deliverAnswer = sendAndRecord(dependencies, message.from, answerText, {
+      threadId,
+      inboundMessageId: message.id,
+      kind: "answer",
     });
-    await sendConversationAnswer(
-      dependencies,
-      message.from,
-      result.text,
-      threadId,
+    await Promise.all([persistAssistantMessage, deliverAnswer]);
+    await measureWhatsAppStage(
       message.id,
-      account.userId,
+      "processor.deliver_native_artifacts",
+      () => deliverNativeArtifacts(
+        dependencies,
+        message.from,
+        answerText,
+        threadId,
+        message.id,
+        result.whatsappPresentation?.media,
+      ),
     );
-    await deliverNativeArtifacts(
-      dependencies,
-      message.from,
-      result.text,
-      threadId,
+    if (result.whatsappPresentation?.buttons) {
+      const { body, buttons } = result.whatsappPresentation.buttons;
+      const sent = await measureWhatsAppStage(
+        message.id,
+        "outbound.send_buttons.answer",
+        () => meta.sendButtons(message.from, body, buttons),
+      );
+      await measureWhatsAppStage(
+        message.id,
+        "outbound.persist.answer_buttons",
+        () => store.recordOutbound({
+          messageId: sent.messageId,
+          to: message.from,
+          threadId,
+          inboundMessageId: message.id,
+          kind: "answer_buttons",
+          retryPayload: { type: "buttons", body, buttons },
+        }),
+      );
+    }
+    const creditWarning = measureWhatsAppStage(
       message.id,
-    );
-    const creditSummary = await store.getCreditSummary(account.userId);
-    if (creditSummary.ratio <= 0.2) {
+      "processor.get_credit_summary",
+      () => store.getCreditSummary(account.userId!),
+    ).then(async (creditSummary) => {
+      if (creditSummary.ratio > 0.2) return;
       await sendAndRecord(
         dependencies,
         message.from,
@@ -821,20 +1240,45 @@ export const processWhatsAppMessage = async (
           : `You have ${creditSummary.available.toLocaleString("en-IN")} Sakhi credits left.`,
         { threadId, inboundMessageId: message.id, kind: "credit_warning" },
       );
-    }
-    await store.updateAccount(message.from, { lastUnprocessedMessageId: null });
-    await store.finishInbound(message.id, "completed");
+    }).catch((error) => {
+      console.error("Non-fatal WhatsApp credit summary failure", {
+        messageId: message.id,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    });
+    const finishInbound = measureWhatsAppStage(
+      message.id,
+      "processor.finish_inbound.completed",
+      () => store.finishInbound(message.id, "completed"),
+    );
+    const completePhoneWork = measureWhatsAppStage(
+      message.id,
+      "processor.complete_phone_work",
+      () => store.completePhoneWork(message.from, message.id),
+    ).then((next) => {
+      phoneWorkReleased = true;
+      nextMessageId = next;
+    });
+    await Promise.all([creditWarning, finishInbound, completePhoneWork]);
     })();
   } catch (error) {
     activeControllers.delete(message.from);
     const description = describeConversationError(error);
     const cancelled = error instanceof Error && error.name === "AbortError";
-    await store.finishInbound(
+    await measureWhatsAppStage(
       message.id,
-      cancelled ? "cancelled" : "failed",
-      error instanceof Error ? error.message : String(error),
+      `processor.finish_inbound.${cancelled ? "cancelled" : "failed"}`,
+      () => store.finishInbound(
+        message.id,
+        cancelled ? "cancelled" : "failed",
+        error instanceof Error ? error.message : String(error),
+      ),
     );
-    await store.updateAccount(message.from, { lastUnprocessedMessageId: message.id });
+    await measureWhatsAppStage(
+      message.id,
+      "processor.remember_unprocessed_message",
+      () => store.updateAccount(message.from, { lastUnprocessedMessageId: message.id }),
+    );
     try {
       const buttons = error instanceof BillingAccessError && error.code === "INSUFFICIENT_CREDITS"
         ? [
@@ -846,14 +1290,22 @@ export const processWhatsAppMessage = async (
             { id: "retry", title: "Retry" },
             { id: "new", title: "New chat" },
           ];
-      const result = await meta.sendButtons(message.from, description, buttons);
-      await store.recordOutbound({
-        messageId: result.messageId,
-        to: message.from,
-        inboundMessageId: message.id,
-        kind: "error",
-        retryPayload: { type: "buttons", body: description, buttons },
-      });
+      const result = await measureWhatsAppStage(
+        message.id,
+        "outbound.send_buttons.error",
+        () => meta.sendButtons(message.from, description, buttons),
+      );
+      await measureWhatsAppStage(
+        message.id,
+        "outbound.persist.error",
+        () => store.recordOutbound({
+          messageId: result.messageId,
+          to: message.from,
+          inboundMessageId: message.id,
+          kind: "error",
+          retryPayload: { type: "buttons", body: description, buttons },
+        }),
+      );
     } catch (sendError) {
       console.error("Failed to send WhatsApp processing error", {
         messageId: message.id,
@@ -861,10 +1313,21 @@ export const processWhatsAppMessage = async (
       });
     }
   } finally {
-    nextMessageId = await store.releasePhoneWork(message.from, message.id);
+    if (!phoneWorkReleased) {
+      nextMessageId = await measureWhatsAppStage(
+        message.id,
+        "processor.release_phone_work",
+        () => store.releasePhoneWork(message.from, message.id),
+      );
+    }
   }
 
-  if (nextMessageId) {
-    await processWhatsAppMessage(nextMessageId, dependencies);
+  const queuedMessageId = nextMessageId;
+  if (queuedMessageId) {
+    await measureWhatsAppStage(
+      message.id,
+      "processor.process_next_queued_message",
+      () => processWhatsAppMessage(queuedMessageId, dependencies),
+    );
   }
 };

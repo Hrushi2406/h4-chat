@@ -22,8 +22,13 @@ const handlers = () => {
     appSecret: config.appSecret,
     phoneNumberId: config.phoneNumberId,
     store,
+    acknowledge: (messageId) => meta.markRead(messageId, true),
     schedule: after,
-    process: (messageId) => processWhatsAppMessage(messageId, { store, meta, baseUrl }),
+    process: (messageId, work) => processWhatsAppMessage(
+      messageId,
+      { store, meta, baseUrl },
+      work,
+    ),
   });
 };
 
