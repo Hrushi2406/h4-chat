@@ -22,7 +22,7 @@ export async function POST(req: Request) {
     await receiver.verify({
       signature: req.headers.get("upstash-signature") ?? "",
       body: bodyText,
-      url: req.url,
+      url: `${getBaseUrl(req)}/api/scheduled-tasks/execute`,
       clockTolerance: 60,
     });
 
