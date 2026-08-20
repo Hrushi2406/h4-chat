@@ -24,7 +24,7 @@ export function WelcomeCreditsModal() {
     const isLegacyUser = userQuery.data.billing === undefined;
     if (!isNewSignup && !isLegacyUser) return;
 
-    // The client already uses the same 1,000-credit default for a missing
+    // The client already uses the same welcome-credit default for a missing
     // billing profile, so show the celebration immediately. Provisioning and
     // refreshing the server-owned profile must not delay the animation.
     if (auth.currentUser?.uid === uid) setOpen(true);

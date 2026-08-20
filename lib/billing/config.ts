@@ -5,7 +5,7 @@ export const CREDIT_FORMULA_VERSION = 1;
 export const MODEL_RATE_VERSION = 1;
 export const CREDIT_MULTIPLIER = 2;
 export const FREE_CREDIT_MULTIPLIER = 7;
-export const WELCOME_CREDITS = 1_000;
+export const WELCOME_CREDITS = 500;
 
 export const CREDIT_RECHARGE = {
   creditsPerUnit: 1_000,
