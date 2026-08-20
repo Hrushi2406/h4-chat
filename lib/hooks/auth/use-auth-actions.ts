@@ -11,6 +11,23 @@ import { handleError } from "@/lib/utils";
 import { toast } from "sonner";
 import userService from "@/lib/services/user-service";
 import { markWelcomeCreditsPending } from "@/lib/billing/welcome-credits-flag";
+import {
+  clearPendingReferralCode,
+  getPendingReferralCode,
+} from "@/lib/referral/pending";
+import referralService from "@/lib/services/referral-service";
+
+const applyPendingReferralForNewUser = async () => {
+  const referralCode = getPendingReferralCode();
+  if (!referralCode) return;
+
+  try {
+    await referralService.redeem(referralCode);
+    clearPendingReferralCode();
+  } catch (error) {
+    console.error("Unable to apply referral:", error);
+  }
+};
 
 export const useAuthActions = () => {
   const queryClient = useQueryClient();
@@ -34,7 +51,10 @@ export const useAuthActions = () => {
           cred.user.uid,
           cred.user,
         );
-        if (isNewUser) markWelcomeCreditsPending(cred.user.uid);
+        if (isNewUser) {
+          markWelcomeCreditsPending(cred.user.uid);
+          await applyPendingReferralForNewUser();
+        }
       }
 
       return cred.user.uid;
@@ -54,7 +74,14 @@ export const useAuthActions = () => {
         password,
       );
 
-      await userService.syncAuthenticatedUser(cred.user.uid, cred.user);
+      const isNewUser = await userService.syncAuthenticatedUser(
+        cred.user.uid,
+        cred.user,
+      );
+      if (isNewUser) {
+        markWelcomeCreditsPending(cred.user.uid);
+        await applyPendingReferralForNewUser();
+      }
       return cred.user.uid;
     },
     onSuccess: (uid) => {

@@ -67,7 +67,8 @@ export type CreditGrantEntry = {
     | "credit_revocation"
     | "recharge_credit_grant"
     | "recharge_credit_refund"
-    | "recharge_credit_dispute";
+    | "recharge_credit_dispute"
+    | "referral_credit_grant";
   creditsGranted: number;
   creditsExpired: number;
   netCreditChange: number;

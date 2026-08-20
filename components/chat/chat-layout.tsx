@@ -38,6 +38,7 @@ import {
   BookOpen,
   Star,
   ChevronDown,
+  Gift,
 } from "lucide-react";
 import Link from "next/link";
 import { useRouter, usePathname } from "next/navigation";
@@ -141,6 +142,13 @@ const ThreadSidebar = () => {
     }
   };
 
+  const handleReferralClick = () => {
+    router.push("/settings?tab=referral");
+    if (isMobile) {
+      setOpenMobile(false);
+    }
+  };
+
   const handleDeleteThread = (threadId: string, threadTitle: string) => {
     setThreadToDelete({ id: threadId, title: threadTitle });
     setDeleteDialogOpen(true);
@@ -233,6 +241,16 @@ const ThreadSidebar = () => {
               >
                 <Clock className="h-4 w-4" />
                 <span>Automations</span>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+            <SidebarMenuItem>
+              <SidebarMenuButton
+                tooltip="Referral"
+                onClick={handleReferralClick}
+                className="cursor-pointer gap-2.5"
+              >
+                <Gift className="h-4 w-4" />
+                <span>Referral</span>
               </SidebarMenuButton>
             </SidebarMenuItem>
           </SidebarMenu>

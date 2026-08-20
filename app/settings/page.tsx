@@ -55,13 +55,14 @@ import {
   type IMemory,
 } from "@/lib/types/user";
 import { BillingSettings } from "@/components/billing/billing-settings";
+import { ReferralSettings } from "@/components/referral/referral-settings";
 
 const settingsCardClass = "rounded-3xl border bg-card text-card-foreground shadow-xs";
 const settingsPanelClass = "rounded-3xl border bg-card p-4 text-card-foreground shadow-xs";
 const settingsControlClass = "rounded-full shadow-xs";
 const settingsBtnClass = "rounded-full";
 
-const SETTINGS_TABS = ["account", "billing", "mcp", "memories"] as const;
+const SETTINGS_TABS = ["account", "billing", "referral", "mcp", "memories"] as const;
 type SettingsTab = (typeof SETTINGS_TABS)[number];
 
 const isSettingsTab = (value: string): value is SettingsTab =>
@@ -133,6 +134,12 @@ function SettingsPageInner() {
               Billing
             </TabsTrigger>
             <TabsTrigger
+              value="referral"
+              className={cn(settingsBtnClass, "h-8 shrink-0 px-4")}
+            >
+              Referral
+            </TabsTrigger>
+            <TabsTrigger
               value="mcp"
               className={cn(settingsBtnClass, "h-8 shrink-0 px-4")}
             >
@@ -168,6 +175,13 @@ function SettingsPageInner() {
           <Card className={settingsCardClass}>
             <CardContent>
               <BillingSettings />
+            </CardContent>
+          </Card>
+        </TabsContent>
+        <TabsContent value="referral">
+          <Card className={settingsCardClass}>
+            <CardContent>
+              <ReferralSettings />
             </CardContent>
           </Card>
         </TabsContent>

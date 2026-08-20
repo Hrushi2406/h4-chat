@@ -6,6 +6,14 @@ export interface IMemory {
   updatedAt: string;
 }
 
+export type UserReferral = {
+  code?: string;
+  referredBy?: string;
+  referredAt?: string;
+  successfulReferrals: number;
+  creditsEarned: number;
+};
+
 export interface IUser {
   uid: string;
   email: string;
@@ -20,6 +28,7 @@ export interface IUser {
   composioSessionId?: string;
   composioSessionUpdatedAt?: string;
   billing?: UserBilling;
+  referral?: UserReferral;
 }
 
 export const MAX_USER_MEMORIES = 40;

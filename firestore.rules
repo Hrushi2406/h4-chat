@@ -76,8 +76,9 @@ service cloud.firestore {
     // lib/services/user-service.ts (sakhi + sakhi-admin), thread-service.ts
     // (writes users/{uid}.updatedAt alongside a new thread).
     //
-    // Client writes are limited to profile-ish fields; billing, uid and
-    // createdAt are server-owned (lib/billing/server.ts uses the Admin SDK,
+    // Client writes are limited to profile-ish fields; billing, referral, uid and
+    // createdAt are server-owned (lib/billing/server.ts and
+    // lib/services/referral-server-service.ts use the Admin SDK,
     // which bypasses these rules entirely). isStarred/starredAt/chatCount/
     // hasChats are admin/derived fields written from the admin panel.
     // ---------------------------------------------------------------------
@@ -361,8 +362,8 @@ service cloud.firestore {
 
     // ---------------------------------------------------------------------
     // Everything else (composioAuthIntents, users/*/mcpServers,
-    // users/*/creditUsage, etc.) is written and read exclusively through
-    // the Admin SDK on the server, which never goes through these rules —
+    // users/*/creditUsage, referralCodes, etc.) is written and read exclusively
+    // through the Admin SDK on the server, which never goes through these rules —
     // so direct client access is denied by default here.
     // ---------------------------------------------------------------------
 
